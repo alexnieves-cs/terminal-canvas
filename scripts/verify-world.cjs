@@ -1498,7 +1498,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     /return roster\.peers\.filter\(\(p\) => p\.live\)\.map/.test(pub) && /panelId: p\.presence\.currentPanelId \?\? null/.test(pub) && /mode: p\.presence\.mode/.test(pub) &&
       SEL.peerFollowTarget({ panelId: 'a' }, ['a']) === 'a' && SEL.peerFollowTarget({ panelId: 'a' }, ['b']) === null && SEL.peerFollowTarget({ panelId: null }, ['a']) === null && SEL.peerFollowTarget(undefined, ['a']) === null)
   ok('world.peers.2 the room tells teammates where you are and what you look at — mode \'world\' while it is up, and the robot you picked as your current panel — with no new presence field (the mode string already crosses, and verify:presence pins the payload\'s keys)',
-    /mode: annotating \? 'annotate' : merged \? 'merged' : worldOn \? 'world' : chrome\.centerView/.test(canvasSrc) && /focusedId: worldOn && worldPicked !== null \? worldPicked : focusedId/.test(canvasSrc))
+    // M507. The presence report moved with the task lens; Canvas still calls it.
+    (() => { const lensSrc = /= useTaskLens\(\{/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/useTaskLens.ts'), 'utf8') : ''
+      return /mode: annotating \? 'annotate' : merged \? 'merged' : worldOn \? 'world' : chrome\.centerView/.test(lensSrc) && /focusedId: worldOn && worldPicked !== null \? worldPicked : focusedId/.test(lensSrc) })())
   ok('world.peers.3 the teammates looking at an agent wear their initials in its pill, in their own colour; the strip rings those in the room and follows on a press, glides on each move, and lets go when they leave the roster',
     /const watchers = ctx\.peers\.filter\(\(p\) => p\.panelId === agentId\)/.test(card) && /className="world-pill__peers"/.test(card) &&
       /if \(followed === undefined\) \{ setFollowing\(null\); return \}/.test(peersSrc) && /if \(target !== null\) camera\.current\?\.focus\(target\)/.test(peersSrc) && /data-in-room=\{p\.mode === 'world'/.test(peersSrc) && !THREE_DOOR_RE.test(peersSrc))
@@ -1740,7 +1742,12 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   ok('world.facts.12 Canvas names the branch from a terminal\'s ACTIVE worktree outcome or a chat\'s task lane (the handoff hook\'s records, never the palette\'s lazy list), and the rail and the room share one teammate-name resolution',
     /status\?\.kind === 'running' && status\.worktree\?\.kind === 'active' \? status\.worktree\.branch : undefined/.test(canvasSrc) && /laneOfPath\(panel\.chat\.cwd, lanes\)\?\.branch/.test(canvasSrc) &&
-      /const lane = taskLaneOf\(item\.id\); return lane === undefined/.test(canvasSrc) && (canvasSrc.match(/^\s+teammateNameOf,$/gm) ?? []).length === 2)
+      /const lane = taskLaneOf\(item\.id\); return lane === undefined/.test(canvasSrc) &&
+      // M505. The rail's half moved with the navigator's models: one use in
+      // each file, and Canvas hands the hook the SAME resolution.
+      (canvasSrc.match(/^\s+teammateNameOf,$/gm) ?? []).length === 1 &&
+      (readFileSync(join(root, 'src/renderer/canvas/useNavigatorModels.ts'), 'utf8').match(/^\s+teammateNameOf,$/gm) ?? []).length === 1 &&
+      /= useNavigatorModels\(\{[^}]*\bteammateNameOf\b/.test(canvasSrc))
   let n = 0
   const off = CTX.subscribeWorldContext(() => n++)
   const base = { tasks: [], approvals: [], handoffs: [], peers: [] }
@@ -1782,11 +1789,13 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     `click=${onClick.length} dbl=${onDouble.length}`)
   const store = src('world-context-store.ts'), pub = src('useWorldContextPublisher.ts')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  // M507. canJumpAnywhere moved with the main-owned rows; Canvas still calls them.
+  const rowsSrc = /= useMainRows\(\{/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/useMainRows.ts'), 'utf8') : ''
   ok('world.open.4 canOpen is on the room\'s door interface and Canvas answers it with jumpAnywhere\'s own two cases (a panel on this canvas, or in another workspace) — and open itself refuses an id it cannot land, BEFORE the room closes (jumpAnywhere drops one silently)',
     /\n {2}canOpen\(agentId: string\): boolean\n/.test(store) && /canOpen: \(agentId\) => canJump\(agentId\)/.test(pub) && /if \(!canJump\(agentId\)\) return\n\s*closeWorld\(\)/.test(pub) &&
       /canJump: canJumpAnywhere,/.test(canvasSrc) &&
-      /const canJumpAnywhere = useCallback\(\(panelId: string\): boolean =>\n\s*displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\) \|\| workspaceRows\.some\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc) &&
-      /displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\)\) \{ jumpToAttention\(panelId\); return \}/.test(canvasSrc) && /workspaceRows\.find\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc))
+      /const canJumpAnywhere = useCallback\(\(panelId: string\): boolean =>\n\s*displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\) \|\| workspaceRows\.some\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(rowsSrc) &&
+      /displayPanelsRef\.current\.some\(\(p\) => p\.rect\.id === panelId\)\) \{ jumpToAttention\(panelId\); return \}/.test(canvasSrc + rowsSrc) && /workspaceRows\.find\(\(w\) => !w\.active && w\.panelIds\.includes\(panelId\)\)/.test(canvasSrc + rowsSrc))
   const card = src('WorldCard.tsx') + src('WorldCardBody.tsx')
   ok('world.open.5 the card\'s Open is on the PICKED robot\'s card only, never in the past room, never for an agent with no panel, never twice on a waiting card (its request has one) — the shared act styling inside the one pointer-taking group — and the request\'s own Open hides for an agent with no panel too',
     /const openable = openableFrom\(agentId, past, actions\)/.test(card) && /const openHere = picked && !waiting && openable/.test(card) &&

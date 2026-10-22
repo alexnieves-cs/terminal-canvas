@@ -192,9 +192,17 @@ function connect(port, tok, opts = {}) {
       const { readFileSync } = require('node:fs')
       const canvas = readFileSync(join(__dirname, '..', 'src/renderer/canvas/Canvas.tsx'), 'utf8')
       const layer = readFileSync(join(__dirname, '..', 'src/renderer/shared-canvas/SharedPlaceholderLayer.tsx'), 'utf8')
+      // M502. relayNameFor left Canvas.tsx with the creation verbs; the canvas
+      // still reads the roster and hands THAT map to the hook that names.
+      const creation = readFileSync(join(__dirname, '..', 'src/renderer/canvas/useCreationVerbs.ts'), 'utf8')
       ok('relay.names.2 every relay panel on the canvas is handed the roster\'s names, from the same hook the shared placeholders use',
-        /const rosterNames = useRosterNames\(activeWorkspaceId\)/.test(canvas) && /relayNameOf\(rosterNames, userId\)/.test(canvas) &&
-        /<RelayNode[\s\S]{0,200}nameOf=\{relayNameFor\}/.test(canvas) && /useRosterNames\(props\.workspaceId\)/.test(layer))
+        /const rosterNames = useRosterNames\(activeWorkspaceId\)/.test(canvas) && /relayNameOf\(rosterNames, userId\)/.test(creation) &&
+        /\brelayNameFor\b[^}]*\} = useCreationVerbs\(\{[^}]*\brosterNames\b/.test(canvas) &&
+        // M507. The panel render moved to PanelNode.tsx; Canvas hands it relayNameFor.
+        /renderPanelNode\(panel, \{[^}]*\brelayNameFor\b/.test(readFileSync(join(__dirname, '..', 'src/renderer/canvas/WorldLayers.tsx'), 'utf8')) &&
+        // M507. And the panel map moved to WorldLayers.tsx; Canvas hands it relayNameFor.
+        /renderWorldLayers\(\{[^}]*\brelayNameFor\b/.test(canvas) &&
+        /<RelayNode[\s\S]{0,200}nameOf=\{relayNameFor\}/.test(readFileSync(join(__dirname, '..', 'src/renderer/canvas/PanelNode.tsx'), 'utf8')) && /useRosterNames\(props\.workspaceId\)/.test(layer))
     }
     ok('relay.gate.4 the control line names the controller, or says why there is none',
       G.relayControlLine(v(OWNER), (u) => u === GUEST ? 'sam' : '?') === 'sam is in control' &&

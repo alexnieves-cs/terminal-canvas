@@ -73,7 +73,10 @@ ok('draft.door.3 a teammate may PROPOSE (sheet-edit is not refused) but not keep
     .map((f) => require('node:fs').readFileSync(join(paDir, f), 'utf8')).join('\n')
   ok('draft.door.4 an agent-started workflow run carries the caller into every action node (no hard-coded undefined caller)',
     /runNodeRef\.current\?\.\(node, caller,/.test(canvas) && !/runNodeRef\.current\?\.\(node, undefined,/.test(canvas) &&
-      /case 'workflow-run': return self\.runWorkflowNow\(a\.template!, caller\)/.test(actions) && /instantiateTemplateRef\.current\(template, \{\}, caller\)/.test(canvas))
+      /case 'workflow-run': return self\.runWorkflowNow\(a\.template!, caller\)/.test(actions) &&
+      // M500. runWorkflow left Canvas.tsx with the workflow verbs; Canvas still calls them.
+      /= useWorkflowVerbs\(\{/.test(canvas) &&
+      /instantiateTemplateRef\.current\(template, \{\}, caller\)/.test(require('node:fs').readFileSync(join(root, 'src/renderer/canvas/useWorkflowVerbs.ts'), 'utf8')))
 }
 
 // ── the view record ──────────────────────────────────────────────────────

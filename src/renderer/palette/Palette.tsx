@@ -1,4 +1,5 @@
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { parseCommandQuery } from './command-panel'
 import { SpawnSheet, type SpawnSheetModel } from './SpawnSheet'
 import { StartWorkSheet, type StartWorkSheetModel } from './StartWorkSheet'
 import { SetupSheet, type SetupSheetModel } from './SetupSheet'
@@ -51,6 +52,8 @@ import type { EnvReport } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
 import { needsYouCount } from '@shared/attention-words'
 import { useTeamAsks } from '@renderer/shell/useTeamAsks'
+import { withoutHiddenLabs } from '@shared/labs'
+import { useLabsOff } from '@renderer/labs/useLabs'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -318,6 +321,8 @@ export function Palette(props: PaletteProps): JSX.Element {
         // M42. The query is the search TERM only inside the search scope; the
         // "no matches" row names it, so it must be the palette's own query.
         searchQuery: scope === 'search' ? query : '',
+        // M509. A leading `>` makes the query a command, only at the top level.
+        commandQuery: scope === null ? parseCommandQuery(query) : null,
         searchResults: props.searchResults,
         ...(props.workSearch === undefined ? {} : { workSearch: props.workSearch }),
         // M365. The query is the capability NAME only inside its scope.
@@ -331,7 +336,12 @@ export function Palette(props: PaletteProps): JSX.Element {
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]
   )
-  const ranked = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
+  // M496. The cut list's hidden surfaces leave the list HERE, after the rows are
+  // built, so commandsFor still mints every row (the four-doors checks read it)
+  // and only what a person sees changes. shared/labs.ts names the rows.
+  const labsOff = useLabsOff()
+  const shown = useMemo(() => withoutHiddenLabs(commands, labsOff), [commands, labsOff])
+  const ranked = useMemo(() => filterCommands(shown, query, scope), [shown, query, scope])
   const holdKey = `${scope ?? ''}\u0000${query}`
   const ordered = useMemo(() => (held !== null && held.key === holdKey ? holdOrder(ranked, held.order) : ranked), [ranked, held, holdKey])
   // Kind is a view over the top level. A drill-in keeps every row it already

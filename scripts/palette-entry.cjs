@@ -8,6 +8,8 @@ module.exports = {
   ...require('../src/shared/credential-schema'),
   ...require('../src/renderer/palette/fuzzy'),
   ...require('../src/renderer/palette/palette-model'),
+  /* M509. Command panels: the > query, the row's folder. */
+  ...require('../src/renderer/palette/command-panel'),
   ...require('../src/renderer/palette/commands'),
   /* M65. The spawn sheet's model — pure. */
   ...require('../src/renderer/palette/spawn-sheet'),
@@ -19,6 +21,8 @@ module.exports = {
   ...require('../src/renderer/palette/template-model'),
   /* M104. The lineups and their preview plan — pure. */
   ...require('../src/shared/lineups'),
+  /* M496. The cut list's hidden surfaces: which rows each lab hides. */
+  ...require('../src/shared/labs'),
   /* M66. The settings definitions, for the voice check. */
   ...require('../src/shared/settings-schema'),
   /* Brief #19. Which advanced features a panel's ⋯ menu offers — pure. */

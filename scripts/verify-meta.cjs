@@ -521,13 +521,23 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   const expectedRenderer = [
     'browser/BrowserNode.tsx',
     'browser/usePreviewReload.ts',
-    'canvas/Canvas.tsx',
+    // canvas/Canvas.tsx is gone from this list on purpose: by M503 every door
+    // above had left it for its hook, and the component names no binding.
     // Was `canvas/usePaletteActions.ts` until that hook was split by domain.
     // The SAME two consumers, at their new paths and no others: the spawn
     // sheet's lineup seat, which mints a pane already bound to the lineup's
     // folder, and the deps interface that declares the door it calls to do it.
     'canvas/palette-actions/presets.ts',
     'canvas/palette-actions/types.ts',
+    // M502. markPreviewRead (the one `reviewed` writer for a preview) left
+    // Canvas.tsx with the creation verbs; the same door at its new path.
+    'canvas/useCreationVerbs.ts',
+    // M503. openBrowserPanel (the door that mints a browser pane with its
+    // binding) left Canvas.tsx with the object verbs; same door, new path.
+    'canvas/useObjectVerbs.ts',
+    // M501. The preview verbs (bind, open, capture) left Canvas.tsx for their
+    // own hook: the same door that writes a binding, at its new path.
+    'canvas/usePreviewVerbs.ts',
     'panels/layout-adapt.ts',
     'panels/panels.ts',
     'shell/inspector-fields.ts'
@@ -1322,7 +1332,7 @@ console.log('\n' + '='.repeat(60))
     }
   }
   const css = read('src/renderer/styles.css') || ''
-  const fenced = ['B', 'C', 'D', 'E']
+  const fenced = ['B', 'C', 'D', 'E', 'F']
   const badFences = fenced.filter((id) => {
     const a = css.indexOf(`/* ── st:${id} ── */`)
     const b = css.indexOf(`/* ── /st:${id} ── */`)
@@ -1330,8 +1340,8 @@ console.log('\n' + '='.repeat(60))
   })
   const hook = read('.claude/hooks/guard-paths.sh') || ''
   const hookReads = /docs\/streams\/ownership\.json/.test(hook) && /'tc-lane'/.test(hook)
-  ok('streams.own.1 lanes A–E own disjoint files, none claims a shared file, B–E have st: CSS fences, and the edit hook reads the map and .git/tc-lane',
-    ['A', 'B', 'C', 'D', 'E'].every((id) => Array.isArray(lanes[id]) && lanes[id].length > 0) &&
+  ok('streams.own.1 lanes A–F own disjoint files, none claims a shared file, B–F have st: CSS fences, and the edit hook reads the map and .git/tc-lane',
+    ['A', 'B', 'C', 'D', 'E', 'F'].every((id) => Array.isArray(lanes[id]) && lanes[id].length > 0) &&
       collisions.length === 0 && badFences.length === 0 && hookReads,
     JSON.stringify({ lanes: ids, collisions, badFences, hookReads }))
 }

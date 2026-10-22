@@ -14,6 +14,7 @@
  *   tc accounts | tc use <github-login>
  *   tc shares | tc share [--org <org-id>] | tc open-share <share-id>
  *   tc share-role <share-id> <login|user-id> <editor|viewer|none>
+ *   tc mcp   (M487 — mcp.ts; tc-main.ts starts it, buildRequest never sees it)
  *
  * Exit 0 on ok, 1 on a refusal (the app answered no), 2 when nothing is
  * listening — three answers, because "the app said no" and "there is no
@@ -46,6 +47,8 @@ export const USAGE = [
   '       tc accounts | tc use <github-login>',
   '       tc shares | tc share [--org <org-id>] | tc open-share <share-id>',
   '       tc share-role <share-id> <login|user-id> <editor|viewer|none>',
+  '       tc mcp   (an MCP server on stdio, for Claude Code or any MCP client)',
+  '       tc phone-test   (one test push to the ntfy topic in Settings)',
   '',
   'login and join ask in the app before they act; login opens your browser and waits for it.',
   'use, share, open-share and share-role ask in the app too; accounts and shares only list.',
@@ -274,6 +277,7 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     case 'list':
     case 'status':
     case 'ping':
+    case 'phone-test':
       return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb }) } : { kind: 'usage', error: `${verb} takes no arguments` }
     case 'focus':
       return rest.length === 1 ? { kind: 'ok', line: JSON.stringify({ verb: 'focus', id: rest[0] }) } : { kind: 'usage', error: 'focus takes exactly one panel id' }
@@ -285,6 +289,34 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
 const notRunning = (error: unknown): boolean => {
   const code = (error as { code?: string }).code
   return code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK'
+}
+
+/** One request to the running app: the reply, or why nothing answered (not running, or a broken socket). */
+export type SocketAnswer = { kind: 'reply'; reply: Record<string, unknown> } | { kind: 'down'; error: string; notRunning: boolean }
+
+/**
+ * M487. The socket walk `runCli` always did, lifted out so `tc mcp` asks the
+ * app through the SAME candidates in the same order — a second walk would be
+ * a second answer to "which app am I talking to".
+ */
+export async function ask(line: string, env: Record<string, string | undefined>, connect: Connect): Promise<SocketAnswer> {
+  const candidates = socketCandidates(env)
+  if (candidates.length === 0) return { kind: 'down', error: 'no socket path — set TC_CONTROL_SOCKET', notRunning: true }
+  let lastError: unknown = null
+  for (const path of candidates) {
+    try {
+      const raw = await connect(path, line.endsWith('\n') ? line : `${line}\n`)
+      const parsed: unknown = JSON.parse(raw.trim())
+      // The server only writes objects; anything else is a socket that is not ours.
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { kind: 'down', error: 'the control socket answered something that is not a reply', notRunning: false }
+      return { kind: 'reply', reply: parsed as Record<string, unknown> }
+    } catch (error: unknown) {
+      lastError = error
+      if (!notRunning(error)) break
+    }
+  }
+  if (notRunning(lastError)) return { kind: 'down', error: 'Terminal Canvas is not running (no control socket answered)', notRunning: true }
+  return { kind: 'down', error: String(lastError), notRunning: false }
 }
 
 export async function runCli(
@@ -299,31 +331,16 @@ export async function runCli(
     io.stderr(`${USAGE}\n`)
     return 1
   }
-  const candidates = socketCandidates(env)
-  if (candidates.length === 0) {
-    io.stderr('tc: no socket path — set TC_CONTROL_SOCKET\n')
+  const answer = await ask(built.line, env, connect)
+  if (answer.kind === 'down') {
+    io.stderr(`tc: ${answer.error}\n`)
     return 2
   }
-  let lastError: unknown = null
-  for (const path of candidates) {
-    try {
-      const raw = await connect(path, `${built.line}\n`)
-      const reply = JSON.parse(raw.trim()) as { ok?: boolean; status?: number }
-      io.stdout(`${JSON.stringify(reply)}\n`)
-      // A served 4xx/5xx is `ok: true` on the wire (the broker did its job) and
-      // exit 1 here: an agent testing $? must not read GitHub's refusal as
-      // success (M87's verifier).
-      if (reply.ok === true && typeof reply.status === 'number' && reply.status >= 400) return 1
-      return reply.ok === true ? 0 : 1
-    } catch (error: unknown) {
-      lastError = error
-      if (!notRunning(error)) break
-    }
-  }
-  if (notRunning(lastError)) {
-    io.stderr('tc: Terminal Canvas is not running (no control socket answered)\n')
-    return 2
-  }
-  io.stderr(`tc: ${String(lastError)}\n`)
-  return 2
+  const reply = answer.reply as { ok?: boolean; status?: number }
+  io.stdout(`${JSON.stringify(reply)}\n`)
+  // A served 4xx/5xx is `ok: true` on the wire (the broker did its job) and
+  // exit 1 here: an agent testing $? must not read GitHub's refusal as
+  // success (M87's verifier).
+  if (reply.ok === true && typeof reply.status === 'number' && reply.status >= 400) return 1
+  return reply.ok === true ? 0 : 1
 }

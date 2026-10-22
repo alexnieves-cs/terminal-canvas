@@ -100,6 +100,12 @@ export interface StartWorkSheetModel {
   openTeammates(): void
   /** M262. The expert route: close this sheet and open New panel. Absent hides the switch. */
   openPanel?(): void
+  /**
+   * M480. The Tonight door, offered only on the TYPED door, like openPanel:
+   * hand the board's open tasks to main for the night. Answers the line the
+   * sheet says, so a refusal is read where it was pressed.
+   */
+  runTonight?(): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M275. Whether an agent CLI answered discovery — an arrangement of agents is refused by name without one. Absent reads as available. */
   agentAvailable?: boolean
   /** M275. The card's own state, when this start is for a card already on the board; absent for a task about to be minted. */
@@ -175,6 +181,8 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const [issues, setIssues] = useState<{ kind: 'items'; items: IssueChoice[] } | { kind: 'none'; reason: string } | null>(null)
   const [issueKey, setIssueKey] = useState(restored?.issueKey ?? '')
   // M323. From an issue is the ALTERNATE route, offered beside the task and not ahead of it.
+  const [tonightBusy, setTonightBusy] = useState(false)
+  const [tonightLine, setTonightLine] = useState<string | null>(null)
   const [route, setRoute] = useState<'typed' | 'issue'>(restored?.issueKey === undefined ? 'typed' : 'issue')
   const [issueQuery, setIssueQuery] = useState('')
   const [brief, setBrief] = useState(model.brief ?? restored?.brief ?? '')
@@ -794,6 +802,19 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
             {preflight.items.length > 0 && preflight.items.every((i) => i.ok) && <span className="sheet__fit-row" data-start-preflight-ok>✓ {preflight.items.length} prerequisite{preflight.items.length === 1 ? '' : 's'} met</span>}
           </span>
         </div>
+      )}
+
+      {/* M480. Tonight: not this task, the ones already on the board — so it
+          is a line beside the form, never a mode of it. */}
+      {model.runTonight !== undefined && (
+        <p className="sheet__hint" data-start-tonight>
+          Leaving for the night?{' '}
+          <button type="button" className="pf__verb pf__verb--word" data-start-tonight-run disabled={tonightBusy}
+            title="Run the open tasks on the board one at a time while you are away — paused at usage limits, the Mac kept awake"
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onClick={(e) => { e.preventDefault(); const run = model.runTonight; if (run === undefined) return; setTonightBusy(true); void run().then((r) => { setTonightBusy(false); setTonightLine(r.kind === 'refused' ? r.reason : (r.note ?? 'queued for tonight')) }) }}>Run tonight</button>
+          {tonightLine !== null && <span data-start-tonight-line> {tonightLine}</span>}
+        </p>
       )}
 
       <div className="sheet__foot">

@@ -1,5 +1,6 @@
 import type { StateInput } from '@renderer/panels/panel-state'
 import { fuzzyMatch, initialsStart, wordStarts } from './fuzzy'
+import { COMMAND_ROW_ID, parseCommandQuery } from './command-panel'
 
 /**
  * The palette's list model: what a row is, which section it lives in, how a
@@ -235,6 +236,11 @@ export function filterCommands(
   // carrying a state word) survive, filtered by the word and ordered by
   // state priority rather than by score, so `state:` alone lists every
   // panel needs-you first.
+  // M509. `> npm test` — a command, not a search: the run row alone, so
+  // Enter runs what was typed and never a row the fuzzy matcher found in it.
+  if (scope === null && parseCommandQuery(query) !== null) {
+    return commands.filter((command) => command.id === COMMAND_ROW_ID)
+  }
   const stateQuery = parseStateQuery(query)
   if (stateQuery !== null && scope === null) {
     return commands

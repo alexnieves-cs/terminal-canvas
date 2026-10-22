@@ -8,6 +8,7 @@ import { requestTier } from './flight'
 import { getShownTier, subscribeShownTier } from './card-detail'
 import { shortcutById } from '@shared/shortcuts'
 import type { ZoomTier } from '@shared/redesign-contracts'
+import { useFollow } from './follow-door'
 
 export interface CanvasHudProps {
   viewport: Viewport
@@ -79,6 +80,9 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
   const readoutShown = zoomReadoutShown(viewport.scale, zooming)
   const shownTier = useSyncExternalStore(subscribeShownTier, getShownTier, getShownTier)
   const fitAllChord = shortcutById('fit-all')?.chord ?? ''
+  // M497 (R-052). Registered by the 3D room's chrome while it is mounted; null on the 2D canvas.
+  const follow = useFollow()
+  const followChord = shortcutById('follow')?.chord ?? ''
   const tierChord = (tier: ZoomTier): string => {
     const id = tier === 'work' ? 'tier-work' : tier === 'plan' ? 'tier-plan' : 'tier-map'
     return shortcutById(id)?.chord ?? ''
@@ -131,6 +135,23 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
               {tier === 'work' ? 'Work' : tier === 'plan' ? 'Plan' : 'Map'}
             </button>
           ))}
+          {/* M497 (R-052). Follow beside the three tiers, as screen 11 draws it.
+              Painted only while the room has registered its camera, so the 2D
+              HUD is unchanged; present and disabled, with the reason, while
+              nothing is picked. */}
+          {follow !== null && (
+            <button
+              type="button"
+              className="canvas-hud__tier"
+              data-hud-follow=""
+              disabled={follow.disabledReason !== undefined}
+              title={follow.disabledReason ?? `Follow picked (${followChord})`}
+              aria-label={follow.disabledReason === undefined ? 'Follow picked' : `Follow picked: ${follow.disabledReason}`}
+              {...shellControl(() => { if (follow.disabledReason === undefined) follow.run() })}
+            >
+              Follow
+            </button>
+          )}
         </span>
         {/* M247. Inside the zoom cluster, the HUD's one pointer surface, so it
             inherits that cluster's wheel yielding rather than needing its own. */}

@@ -92,4 +92,7 @@ module.exports = {
   // M321. Portable, versioned recipes and the preflight.
   ...require('../src/shared/recipe-portability'),
   ...require('../src/shared/backend-fit'),
+  // M479. The collision radar: the pure parse and words, and the scan over an injected runner.
+  ...require('../src/shared/collision-radar'),
+  ...require('../src/main/collision-radar'),
 }

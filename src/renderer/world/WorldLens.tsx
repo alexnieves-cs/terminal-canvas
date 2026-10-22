@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { shortcutById } from '@shared/shortcuts'
 import { setWorldOn } from './world-toggle'
 import { warmWorldView } from './WorldStage'
+import { useLab } from '@renderer/labs/useLabs'
 
 /**
  * The 2D | World segmented control at the canvas's top left (M449).
@@ -9,8 +10,12 @@ import { warmWorldView } from './WorldStage'
  * `shell__world-toggle` stays so a selector that still names the old
  * top-bar button keeps finding a control; removing that button is R-042.
  */
-export function WorldLens({ on }: { on: boolean }): JSX.Element {
+export function WorldLens({ on }: { on: boolean }): JSX.Element | null {
   const chord = shortcutById('world')?.chord ?? '⌘⇧W'
+  // M496. The cut list hid World behind `labs.world`. A room opened anyway
+  // (`#/world`) keeps its lens, so the way back to 2D is never the thing hidden.
+  const shown = useLab('world')
+  if (!shown && !on) return null
   return (
     <div
       className="world-lens shell__world-toggle"

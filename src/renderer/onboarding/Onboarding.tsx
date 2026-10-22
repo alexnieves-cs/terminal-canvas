@@ -112,7 +112,7 @@ export function Onboarding({
                         <div>
                           <span className="rd-onboard__agent">{row.label}</span>
                           <span className="rd-onboard__status">{row.status}</span>
-                          {row.path !== undefined && <span className="rd-onboard__mono">{row.path}{row.version !== undefined ? ` · ${row.version}` : ' · version unknown'}</span>}
+                          {row.path !== undefined && <span className="rd-onboard__where"><span className="rd-onboard__mono">{row.path}{row.version !== undefined ? ` · ${row.version}` : ''}</span>{row.version === undefined && <span className="rd-onboard__unknown"> · version unknown</span>}</span>}
                         </div>
                         {row.phase === 'found' && (
                           <button type="button" aria-pressed={row.enabled} onClick={() => setChosen((cur) => cur.includes(row.id) ? cur.filter((id) => id !== row.id) : [...cur, row.id])}>

@@ -34,6 +34,8 @@ const { execFileSync } = require('node:child_process')
 const { buildSync } = require('esbuild')
 const { app, BrowserWindow, webContents } = require('electron')
 
+// On CI, as panels-harness.cjs decides it; TC_SHOT_OFFSCREEN=1 tries it locally.
+const SHOT_OFFSCREEN = !!process.env.CI || process.env.TC_SHOT_OFFSCREEN === '1'
 const OUT = process.env.SHOT_DIR || join(__dirname, '..', 'out', 'shots')
 mkdirSync(OUT, { recursive: true })
 
@@ -82,7 +84,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // M410. This Mac's user and host names, which no capture may show (kit.shot).
 const PRIVATE_WORDS = (() => {
   const { userInfo, hostname } = require('node:os')
-  return [userInfo().username, hostname().split('.')[0]].filter((w) => typeof w === 'string' && w.length >= 3)
+  // M465. On a GitHub-hosted runner the account is literally `runner`: no
+  // person's name, and an English word the product prints ("a suite runner in
+  // the lane", the palette's Test arrangement row), so palette and
+  // palette-dark refused to paint on CI. The runner's host name is still fenced.
+  const user = process.env.GITHUB_ACTIONS === 'true' ? null : userInfo().username
+  return [user, hostname().split('.')[0]].filter((w) => typeof w === 'string' && w.length >= 3)
 })()
 
 // M363. A fixture time the page prints as a CLOCK ("missed at 06:16 AM") is
@@ -108,6 +115,11 @@ async function changesRead(k, scene) {
 
 // Never touch the real store: this harness spawns real shells.
 app.setPath('userData', mkdtempSync(join(tmpdir(), 'tc-shot-')))
+// M465. A hosted macOS runner has no Retina display, so it paints at 1x while
+// every golden is a 2x capture halved (verify-visual.cjs's scale gate). The CI
+// shots job sets TC_SHOT_SCALE=2 so its pictures are the same pixels a Mac
+// would paint; unset, a local run keeps the display's own factor.
+if (process.env.TC_SHOT_SCALE) app.commandLine.appendSwitch('force-device-scale-factor', process.env.TC_SHOT_SCALE)
 app.on('window-all-closed', () => {})
 
 // ---------------------------------------------------------------------------
@@ -122,7 +134,11 @@ app.on('window-all-closed', () => {})
 // printing the path; the fixed name stays so the goldens are one machine's
 // captures of one path.) Wiped first: a previous run's files would otherwise
 // leak into this one's fixture.
-const FIX = (() => { const p = join(tmpdir(), 'tc shot fixtures golden'); rmSync(p, { recursive: true, force: true }); mkdirSync(p, { recursive: true }); return realpathSync(p) })()
+// M467: on CI the base is /tmp, not tmpdir(). A hosted Mac's tmpdir() is
+// /var/folders/<hash>/T, and the hash belongs to the runner image's user, so
+// an image update would move a path the inspector prints and fail a golden.
+const FIX_BASE = process.env.CI ? '/tmp' : tmpdir()
+const FIX = (() => { const p = join(FIX_BASE, 'tc shot fixtures golden'); rmSync(p, { recursive: true, force: true }); mkdirSync(p, { recursive: true }); return realpathSync(p) })()
 const REPO = join(FIX, 'repo')
 const NOTE = join(FIX, 'notes', 'plan.md')
 mkdirSync(join(REPO, 'src'), { recursive: true })
@@ -707,10 +723,10 @@ const SCENES = [
     // M396. Everything framed first, THEN pulled back: the old camera was tuned
     // against the host-scroll displacement M395 removed, and landed with the
     // left third empty and `nightly sweep` cut at the right edge (the critic).
-    run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
+    run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.press('0', { metaKey: true }); await sleep(700); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
   { name: 'zoomed-out', intent: 'The canvas pulled back to about a fifth of the size: every card is its kind glyph, its name (large enough to read, clipped only at its end) and its state on a tone wash; with everything in view the minimap stays hidden (M395).',
     // M396. Framed, then pulled back (merged's reason, above).
-    run: async (k) => { await k.goTo('the kinds'); await k.press('1', { metaKey: true }); await sleep(700); await k.zoom(0.22); await k.shot('zoomed-out') } },
+    run: async (k) => { await k.goTo('the kinds'); await k.press('0', { metaKey: true }); await sleep(700); await k.zoom(0.22); await k.shot('zoomed-out') } },
   { name: 'zoomed-out-dark', intent: 'The zoomed-out canvas on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.shot('zoomed-out-dark'); await k.theme('light'); await k.zoom(1) } },
   { name: 'compact', intent: 'The shell at its compact breakpoint (1000px wide): the navigator and context become drawers, the canvas keeps the width.', size: [1000, 760],
@@ -1409,12 +1425,14 @@ const SCENES = [
         await typeText(word); await key('Return')
       }
       // Everything in view first (the branch may have run past the window's edge).
-      await press(ground.x, ground.y); await k.press('1', { metaKey: true }); await sleep(700)
+      // ⌘0 is Fit all since the redesign; ⌘1 became the Work tier and left the
+      // branch off-screen, so the line's midpoint fell outside the window (M465).
+      await press(ground.x, ground.y); await k.press('0', { metaKey: true }); await sleep(700)
       await label('Ask for a fix', 'no')
       await label('Build the change', 'yes')
       // Nothing selected, the whole chart framed: the picture a person keeps.
       await press(1380, 820)
-      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.press('0', { metaKey: true }); await sleep(700)
       await k.shot('flowchart')
     } },
   // M388–M393. The same chart on the DARK theme, as a person works on it: the
@@ -1427,14 +1445,16 @@ const SCENES = [
       const press = async (x, y, clickCount = 1) => { k.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount }); k.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount }); await sleep(300) }
       const centreOf = async (sel) => JSON.parse(await k.js(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return 'null'; const r = e.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) }) })()`))
       const shapeId = async (text) => k.js(`(() => { const e = [...document.querySelectorAll('.shape')].find((x) => x.getAttribute('aria-label').split(': ').slice(1).join(': ') === ${JSON.stringify(text)}); return e ? e.getAttribute('data-panel-id') : null })()`)
-      // A real shell, spawned the ordinary way (⌘N at the camera centre) —
+      // A real shell, spawned the ordinary way (the palette's New shell at the
+      // camera centre; ⌘N stopped being New shell in the redesign and a
+      // dispatched ⌘T spawned nothing, M465) —
       // the camera first panned so its centre is clear of the chart, to its right.
       const build = await shapeId('Build the change')
       k.wc.sendInputEvent({ type: 'mouseWheel', x: 900, y: 450, deltaX: -700, deltaY: 0 }); await sleep(400)
-      await k.press('n', { metaKey: true }); await sleep(2500)
+      await k.press('k', { metaKey: true }); await sleep(400); await k.type('New shell'); await sleep(400); await k.enter(); await sleep(2500)
       const term = await k.js(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-id]')].find((e) => !e.classList.contains('shape')); return p ? p.getAttribute('data-panel-id') : null })()`)
       if (term === null) throw new Error('flowchart-dark scene: no terminal was spawned')
-      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.press('0', { metaKey: true }); await sleep(700)
       // The wire, through the agent door — the same executor as a port drag
       // (verify:panels:flowchart drives the drag itself): the terminal to the step.
       k.wc.send('canvas:plan', { replyChannel: 'shot-flow-plan', req: { line: `connect ${term} ${build}` } }); await sleep(800)
@@ -1448,7 +1468,7 @@ const SCENES = [
       await k.context(true); await sleep(400)
       // VISIBLE, not merely mounted: a hidden Detail tab still holds the node.
       if (!(await k.js(`(() => { const e = document.querySelector('.shape-inspector'); return e !== null && e.offsetParent !== null && e.getBoundingClientRect().height > 0 })()`))) throw new Error('flowchart-dark scene: the inspector shows no visible Shape section for the selected decision')
-      await k.press('1', { metaKey: true }); await sleep(700)
+      await k.press('0', { metaKey: true }); await sleep(700)
       await k.shot('flowchart-dark')
       await k.context(false); await sleep(300)
     } },
@@ -1478,7 +1498,13 @@ app.whenReady().then(async () => {
       sandbox: false,
       backgroundThrottling: false,
       // M103. The browser pane is a <webview>; the tag on, as production has it.
-      webviewTag: true
+      webviewTag: true,
+      // M465. A hosted runner's screen is 1024x~700 and clamps an onscreen
+      // window to it, setContentSize included: every capture came back
+      // 1024x647 (Stream A's verify:visual run, #32). Offscreen there, sized
+      // by a device-metrics override below — panels-harness.cjs's answer to
+      // the same clamp.
+      offscreen: SHOT_OFFSCREEN
     }
   })
   // M162. The goldens are 1440x865 CONTENT captures. A 900px-tall window is
@@ -1490,6 +1516,14 @@ app.whenReady().then(async () => {
   // content is pinned to the goldens' own size whatever the Dock is doing.
   win.setContentSize(1440, 865)
   const wc = win.webContents
+  // The offscreen surface takes its size and scale from the emulated metrics,
+  // never from the window or the screen: 1440x865 like the goldens, at
+  // TC_SHOT_SCALE (shots.yml sets 2, the goldens' factor).
+  const pinMetrics = async (width, height) => {
+    if (!SHOT_OFFSCREEN) return
+    try { wc.debugger.attach('1.3') } catch { /* already attached */ }
+    await wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: Number(process.env.TC_SHOT_SCALE) || 1, mobile: false })
+  }
   const loginEnv = await resolveShellEnv()
   // M410. The prompt fence, as TC_TOOLBOX_HOME fences the toolbox. A login
   // shell the harness spawns (the flowchart's terminal, a ⌘N) read the
@@ -2060,7 +2094,20 @@ app.whenReady().then(async () => {
       // cursor" is that word on a host named cursor, so the row is left out
       // of the page scan. A terminal row is still scanned.
       const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const panel = document.querySelector('[data-world-camera]'); let page = document.body.innerText; if (panel && panel.innerText) page = page.split(panel.innerText).join(' '); const text = page + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const tokens = new Set(text.split(/[^A-Za-z0-9]+/).filter(Boolean)); return words.filter((w) => tokens.has(w)) })()`)
-      if (leaks.length > 0) throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name`)
+      if (leaks.length > 0) {
+        // Where it was seen, so a CI run that refuses says which row to fix.
+        const where = await js(`(() => { const t = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const w = ${JSON.stringify(leaks[0])}; const i = t.indexOf(w); return i < 0 ? '' : t.slice(Math.max(0, i - 60), i + w.length + 40).replace(/\\s+/g, ' ') })()`)
+        throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name, in "${where}"`)
+      }
+      // M466. Two captures, the first thrown away. The window is hidden, so
+      // nothing asks the compositor for a frame between gestures, and the
+      // first capturePage after a change hands back the LAST frame it made
+      // while scheduling a new one: a theme switched 950ms earlier was still
+      // light in the picture though the DOM computed dark (fix-list: the
+      // three dark scenes that captured light). Measured on xvfb: the warm-up
+      // capture is stale, one 150ms later is current.
+      await wc.capturePage()
+      await sleep(200)
       const img = await wc.capturePage()
       const path = join(OUT, `${name}.png`)
       writeFileSync(path, img.toPNG())
@@ -2201,7 +2248,7 @@ app.whenReady().then(async () => {
     // 900 → 868, 760 → 728) so a resized scene is as immune to the work-area
     // clamp as the first window is (the Act 0 critic). The FIRST window's 865
     // is a clamped 897 minus the same 32.
-    resize: async (w, h) => { win.setSize(w, h); win.setContentSize(w, h - 32); await sleep(900) }
+    resize: async (w, h) => { win.setSize(w, h); win.setContentSize(w, h - 32); await pinMetrics(w, h - 32); await sleep(900) }
   }
 
   // M148. A renderer error is PRINTED with its scene: a scene that fails
@@ -2213,6 +2260,7 @@ app.whenReady().then(async () => {
   // warnings-only filter threw away.
   win.webContents.on('console-message', (_e, level, message) => { if (level >= 2 || String(message).startsWith('[starter]')) console.log(`[renderer] ${String(message).slice(0, 300)}`) })
   await loadRenderer(win)
+  await pinMetrics(1440, 865)
   await sleep(1500)
 
   const manifest = []
@@ -2243,12 +2291,25 @@ app.whenReady().then(async () => {
   for (const scene of scenes) {
     if (only.length > 0 && !only.includes(scene.name)) continue
     if (scene.size) await kit.resize(scene.size[0], scene.size[1])
+    // M465. The redesign scenes are pictures of the steward cast and the
+    // older scenes of the default fixture, and one run has to paint both: a
+    // whole-run TC_FIXTURE left either set half-red (rd-l-c throws without
+    // it, the old scenes miss their cards with it). So the fixture is the
+    // scene's own: a redesign scene gets rd-steward unless it names another
+    // `fixture`, and the run's own value comes back after it.
+    const runFixture = process.env.TC_FIXTURE
+    const fixture = scene.fixture !== undefined ? scene.fixture : rdScenes.includes(scene) ? 'rd-steward' : runFixture
+    if (fixture === undefined) delete process.env.TC_FIXTURE
+    else process.env.TC_FIXTURE = fixture
     try {
       await scene.run(kit)
       manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}) })
     } catch (error) {
       console.log(`scene ${scene.name} failed: ${error && error.message || error}`)
       manifest.push({ file: `${scene.name}.png`, intent: scene.intent, ...(scene.reference ? { reference: scene.reference } : {}), failed: String(error && error.message || error) })
+    } finally {
+      if (runFixture === undefined) delete process.env.TC_FIXTURE
+      else process.env.TC_FIXTURE = runFixture
     }
   }
   writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2))

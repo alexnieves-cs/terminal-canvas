@@ -55,6 +55,12 @@ export const UPDATES_CATEGORY = 'Updates'
  * settings surface beside the Keyboard page.
  */
 export const KEYBOARD_CATEGORY = 'Keyboard'
+/**
+ * M496. Named once, for the same anti-typo reason RESTORE_CATEGORY is. The
+ * surfaces the cut list hid: each `labs.*` id is a LabDef's `setting` in
+ * shared/labs.ts, which `verify:palette labs.1` pins both ways.
+ */
+export const LABS_CATEGORY = 'Labs'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -642,6 +648,54 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
+    // M488. Off unless a person turns it on, and never `planWritable`: a plan
+    // that could set this would be an agent granting itself the answer to its
+    // own permission prompts. The description names who it reaches HONESTLY:
+    // the control socket is any process this user runs, and an agent in a
+    // panel that skips `tc` is one (the token refusal only stops an accident).
+    id: 'remote.mcpWrites',
+    label: 'Let MCP clients answer approvals and accept work',
+    description: 'allow or deny a chat\'s permission request and merge a task\'s lane through tc mcp — while on, any program you run on this Mac can do this, including an agent in a panel that talks to the control socket directly; each answer goes on the decision record',
+    keywords: ['mcp', 'remote', 'approve', 'approval', 'permission', 'accept', 'merge', 'claude code', 'client', 'write'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
+  },
+  {
+    // M489. Off while empty. A topic is readable by anyone who knows its name,
+    // so the description says to make it unguessable, and the push carries
+    // only a panel's name and its question — scrubbed, paths cut to a basename
+    // (main/phone-alerts.ts). Not planWritable: an agent never chooses where
+    // this app sends words.
+    id: 'remote.ntfyTopic',
+    label: 'Phone alerts: ntfy topic',
+    description: 'when an agent is waiting on you and you are away from your Mac, push its name and question to this ntfy topic — subscribe to the same topic in the ntfy app; anyone who knows the name can read it, so make it long and random; empty is off',
+    keywords: ['phone', 'ntfy', 'push', 'alert', 'notification', 'mobile', 'away', 'remote', 'topic'],
+    type: 'text',
+    default: '',
+    category: TELEMETRY_CATEGORY
+  },
+  {
+    id: 'remote.ntfyServer',
+    label: 'Phone alerts: ntfy server',
+    description: 'the ntfy server to push through — the free public one, or your own; https only',
+    keywords: ['phone', 'ntfy', 'server', 'self-hosted', 'push', 'alert'],
+    type: 'text',
+    default: 'https://ntfy.sh',
+    category: TELEMETRY_CATEGORY
+  },
+  {
+    id: 'remote.alertIdleMinutes',
+    label: 'Phone alerts: after this many idle minutes',
+    description: 'push only when this Mac has had no keyboard or mouse input for this long; 0 pushes whenever the window is not in front',
+    keywords: ['phone', 'ntfy', 'idle', 'away', 'minutes', 'alert'],
+    type: 'number',
+    default: 3,
+    min: 0,
+    max: 120,
+    category: TELEMETRY_CATEGORY
+  },
+  {
     // M112. A separate decision from the DSN because it fails differently: a
     // JS event is scrubbed field by field (main/telemetry.ts); a native dump
     // is process memory, which no scrubber reads.
@@ -666,6 +720,74 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: false,
     category: UPDATES_CATEGORY
+  },
+  // M496. The cut list's hidden surfaces, off by default, and World, kept on
+  // with a switch to hide it (shared/labs.ts says why). Never planWritable: a
+  // plan should not grow or shrink the product a person chose.
+  // Off hides the doors that MINT one; an object already on a canvas still
+  // opens, edits and exports (shared/labs.ts says which rows each one hides).
+  {
+    id: 'labs.world',
+    label: 'Show the 3D World view',
+    description: 'put the 2D | World lens on the canvas, ⌘⇧W, and Show in World in Sessions',
+    keywords: ['world', '3d', 'room', 'robots', 'lens', 'labs', 'three'],
+    type: 'boolean',
+    default: true,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.accounts',
+    label: 'Show accounts and sharing',
+    description: 'show the account menu, the People page and the sign-in and share rows — they need a configured accounts server',
+    keywords: ['account', 'sign in', 'login', 'share', 'team', 'people', 'presence', 'supabase', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.relay',
+    label: 'Show relay terminals',
+    description: 'offer New Relay terminal — it needs a relay server you run',
+    keywords: ['relay', 'remote', 'vm', 'server', 'terminal', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.decks',
+    label: 'Show decks',
+    description: 'offer New Deck; a deck already on a canvas still opens and exports',
+    keywords: ['deck', 'slides', 'presentation', 'pptx', 'powerpoint', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.sheets',
+    label: 'Show sheets',
+    description: 'offer New Sheet; a sheet already on a canvas still opens and exports',
+    keywords: ['sheet', 'spreadsheet', 'xlsx', 'csv', 'cells', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.jira',
+    label: 'Show the Jira panel',
+    description: 'offer Open Jira tickets; a Jira panel already on a canvas still works',
+    keywords: ['jira', 'tickets', 'atlassian', 'issues', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.toolbox',
+    label: 'Show the toolbox and memory panels',
+    description: 'offer Open toolbox and Open memory…; one already on a canvas still works',
+    keywords: ['toolbox', 'tools', 'permissions', 'memory', 'decided', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
   },
   {
     // M446. A list of `id<TAB>chord`, not a record: SettingValue has no object,

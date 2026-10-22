@@ -7,6 +7,7 @@ import { WorldFocusSheet } from './WorldFocusSheet'
 import { useWorldCamera } from './WorldCameraPanel'
 import { askTarget, clearFocus, CONTROL_SELECTOR, engageFocus, enterOpens, FIELD_SELECTOR, focusCrumb, focusedAgent, focusPreview, openableFrom, OVERLAY_SELECTOR, selectAgent, selectedAgent, setFocusPreview, useFocusedAgent, useFocusPreview, useSelectedAgent, type FocusPreview } from './world-select'
 import { isWorldOn } from './world-toggle'
+import { registerFollow } from '../canvas/follow-door'
 import { useRoster, useWaiting } from './world-roster'
 import { WorldMinimap } from './WorldMinimap'
 import { WorldPeers } from './WorldPeers'
@@ -100,6 +101,16 @@ export function WorldChrome({ camera, flat = false }: { camera: RefObject<Camera
   const timer = useRef<number | null>(null)
   const field = useRef<HTMLInputElement>(null)
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current) }, [])
+  // M497 (R-052). The HUD's Follow, beside Work / Plan / Map, is this camera's
+  // follow. The flat room has no camera, so it registers nothing and the HUD
+  // paints no Follow there; with no robot picked the control says so.
+  useEffect(() => {
+    if (flat) return undefined
+    return registerFollow({
+      run: () => camRef.current.follow(),
+      ...(picked === null ? { disabledReason: 'Pick a robot to follow' } : {})
+    })
+  }, [flat, picked])
 
   const say = (next: { ok: boolean; text: string }): void => {
     setSaid(next)

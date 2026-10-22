@@ -164,7 +164,8 @@ const shareControl = createShareControl({
 // M366. Built before the control wiring so `tc toolbox` and `toolbox:read`
 // ask plugins through the SAME runner; it reads `state` at use, not here.
 const toolbox = createToolboxHandlers(state, places)
-const control = createControlWiring(state, stores, places, tokens, account, shareControl, toolbox.listPlugins)
+// M488. The kit is built on the next lines; the merger is reached through it at use.
+const control = createControlWiring(state, stores, places, tokens, account, shareControl, toolbox.listPlugins, (req) => kit.laneMerge(req))
 // M311–M314. Built at module scope with the other collaborators; every
 // closure inside reads `state` at the point of use (context.ts's rule).
 const kit = createKitHandlers(state, stores, app.getPath('userData'))
@@ -546,6 +547,7 @@ app.on('before-quit', () => {
     backend: state.backend,
     flush: () => stores.layoutStore.flushSync(),
     agents: state.agents ?? undefined,
+    tonight: state.tonight ?? undefined,
     // M84. A watcher's child is an ordinary process: nothing else in this
     // sequence would reach it, and a quit mid-run would orphan it.
     watchers: state.watchRunner ?? undefined

@@ -21,6 +21,11 @@ import type { ControlReply } from './control-server'
 import type { AgentPlanCaller, AgentPlanReply } from '../shared/plan'
 import type { AccountService } from './account-session'
 import type { ShareControl } from './share-control'
+import type { LaneMergeRequest, LaneMergeResult } from '../shared/lane-merge'
+import type { EventRow } from '../shared/run-ledger'
+
+/** M488. Said by every refused MCP write, so the fix is in the refusal. */
+export const REMOTE_WRITES_OFF = 'MCP writes are off — a person turns on "Let MCP clients answer approvals and accept work" in Settings ▸ Privacy & export first'
 
 export interface ControlSessionRow {
   panelId: string
@@ -72,6 +77,25 @@ export interface ControlHandlerDeps {
   account?: Pick<AccountService, 'login' | 'logout' | 'invite' | 'join'>
   /** M336–M337. The account picker and sharing verbs (share-control.ts). Absent means refused by name. */
   sharing?: ShareControl
+  /**
+   * M488. The writes an MCP client may make — answer a chat's permission
+   * request, accept a lane — and the setting that allows them. Absent means
+   * every one is refused by name. `record` puts each on the decision audit.
+   */
+  remote?: {
+    writesAllowed(): boolean
+    /** Waiting requests, minus the broker's credential asks (a credential write is its owner's, never a remote client's). */
+    approvals(): Array<{ panelId: string; requestId: string; toolName: string; description?: string }>
+    /** Through the person's own path: the team router first (it may say `waiting`), then the process. */
+    answer(panelId: string, requestId: string, allow: boolean, toolName: string): 'answered' | 'waiting' | 'gone'
+    /** Only a lane this canvas made: never an arbitrary worktree on the machine. */
+    knownLane(lane: string): boolean
+    laneMerge(req: LaneMergeRequest): Promise<LaneMergeResult>
+    /** False when the row did not reach the record (recordDecision's answer). */
+    record(row: EventRow): Promise<boolean>
+  }
+  /** M489. The phone's test push. Absent: refused by name. */
+  phoneTest?: () => Promise<{ ok: true } | { ok: false; reason: string }>
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -197,6 +221,66 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
           : req.verb === 'share' ? sh.share(req.orgId)
           : req.verb === 'open-share' ? sh.openShare(req.shareId)
           : sh.shareRole({ shareId: req.shareId, who: req.who, role: req.role })
+      }
+      case 'phone-test': {
+        if (deps.phoneTest === undefined) return { ok: false, error: 'phone alerts are not available here' }
+        const r = await deps.phoneTest()
+        return r.ok ? { ok: true, sent: 'a test push — your phone should show it within a few seconds' } : { ok: false, error: r.reason }
+      }
+      case 'approvals': {
+        // READ-ONLY: what each chat is waiting on, in the request's own words
+        // (the MCP door scrubs them on the way out, like every answer it gives).
+        if (deps.remote === undefined) return { ok: false, error: 'approvals are not available here' }
+        return { ok: true, approvals: deps.remote.approvals() }
+      }
+      case 'answer': {
+        const remote = deps.remote
+        if (remote === undefined) return { ok: false, error: 'approvals are not available here' }
+        // An agent in a panel never answers a permission request, its own or
+        // another's, whatever the setting says: the setting lets a person's
+        // OTHER tools answer for them, not the agents those requests are about.
+        // A guard against ACCIDENT, not a boundary: any process this user runs
+        // can reach the socket without a token. The setting's description says so.
+        if (req.token !== undefined) return { ok: false, error: 'an agent inside a panel cannot answer a permission request' }
+        if (!remote.writesAllowed()) return { ok: false, error: REMOTE_WRITES_OFF }
+        const pending = remote.approvals().find((a) => a.panelId === req.panelId && a.requestId === req.requestId)
+        if (pending === undefined) return { ok: false, error: `no permission request ${req.requestId} is waiting on ${req.panelId} that an MCP client may answer — approvals lists them` }
+        const outcome = remote.answer(req.panelId, req.requestId, req.allow, pending.toolName)
+        if (outcome === 'gone') return { ok: false, error: `${req.requestId} was answered before this reached it` }
+        // Past the team's spend line one answer is one vote: nothing is
+        // decided, so nothing is recorded as decided either.
+        if (outcome === 'waiting') return { ok: true, answered: 'counted', note: 'this request needs a second person on the team — it is still waiting' }
+        const recorded = await remote.record({
+          kind: 'event', runId: `mcp-${req.requestId}`, at: Date.now(), event: 'permission', source: 'person', panelId: req.panelId,
+          title: `${req.allow ? 'Allowed' : 'Denied'} ${pending.toolName}, through an MCP client`,
+          detail: `request ${req.requestId} · Settings allowed MCP writes`
+        })
+        return { ok: true, answered: req.allow ? 'allowed' : 'denied', tool: pending.toolName, ...(recorded ? {} : { note: 'answered, but the decision record could not be written' }) }
+      }
+      case 'accept': {
+        const remote = deps.remote
+        if (remote === undefined) return { ok: false, error: 'accepting is not available here' }
+        if (!remote.knownLane(req.lane)) return { ok: false, error: `${req.lane} is not a lane this canvas made — accept works on a task's own worktree` }
+        const title = req.title ?? 'accepted through an MCP client'
+        // No expected head: the dry run, which only reads — what WOULD merge,
+        // and the head a real accept must name, so nothing unread is merged.
+        if (req.expectHead === undefined) {
+          const plan = await remote.laneMerge({ lane: req.lane, title, dryRun: true })
+          return plan.kind === 'ready' ? { ok: true, plan } : { ok: false, error: plan.kind === 'refused' ? plan.reason : plan.kind === 'failed' ? plan.detail : plan.kind }
+        }
+        if (req.token !== undefined) return { ok: false, error: 'an agent inside a panel cannot accept work' }
+        if (!remote.writesAllowed()) return { ok: false, error: REMOTE_WRITES_OFF }
+        const done = await remote.laneMerge({ lane: req.lane, title, expectHead: req.expectHead })
+        if (done.kind !== 'merged') {
+          return { ok: false, error: done.kind === 'refused' ? done.reason : done.kind === 'failed' ? done.detail : done.kind === 'moved' ? 'the lane moved since the dry run — run it again and read what changed' : done.kind === 'conflict' ? `the merge stopped on conflicts in ${done.files.length} file(s) and was aborted; ${done.into} is as it was` : done.kind }
+        }
+        const recorded = await remote.record({
+          kind: 'event', runId: `mcp-accept-${done.sha || req.expectHead}`, at: Date.now(), event: 'check', source: 'person',
+          title: `Accepted ${done.branch} into ${done.into}, through an MCP client`,
+          detail: `${done.commits} commit${done.commits === 1 ? '' : 's'} · ${done.sha} · Settings allowed MCP writes`,
+          paths: [req.lane]
+        })
+        return { ok: true, merged: done, ...(recorded ? {} : { note: 'merged, but the decision record could not be written' }) }
       }
       case 'audit': {
         // READ-ONLY by construction, like `status`: one read of main's own file.

@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react'
 import { shellControl } from '@renderer/shell/shell-control'
+import { useSlidingThumb } from './useSlidingThumb'
 
 export interface SegmentedOption<T extends string> {
   id: T
@@ -29,8 +30,10 @@ export interface SegmentedControlProps<T extends string> {
  * that read it.
  */
 export function SegmentedControl<T extends string>({ value, options, onChange, label, className }: SegmentedControlProps<T>): JSX.Element {
+  // M512. One lit segment that slides between options (useSlidingThumb).
+  const thumb = useSlidingThumb<HTMLDivElement>(value, '.seg__btn[aria-pressed="true"]')
   return (
-    <div className={`seg${className ? ` ${className}` : ''}`} role="group" aria-label={label}>
+    <div ref={thumb} className={`seg${className ? ` ${className}` : ''}`} role="group" aria-label={label}>
       {options.map((o) => {
         const on = o.id === value
         return (

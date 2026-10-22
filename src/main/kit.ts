@@ -1,4 +1,5 @@
 import type { LaneMergeRequest, LaneMergeResult } from '../shared/lane-merge'
+import type { RadarLane, RadarReport } from '../shared/collision-radar'
 import type { CombineRunResult } from '../shared/combine'
 import type { CombineInputsResult, IntegrateRequest, IntegrateResult, IntegrationReceipt } from '../shared/integration'
 import type { PrepareResult } from '../shared/repo-setup'
@@ -36,6 +37,8 @@ export interface KitHandlers {
   setupPreflight?: (req: { root: string; tools: readonly string[] }) => Promise<SetupPreflight>
   /** M321. Every stored version of a recipe, newest first. */
   recipeHistory?: (id: string) => Promise<Recipe[]>
+  /** M479. Sibling lanes that touch the same files, and git's trial merge of each pair (main/collision-radar.ts). Optional, like the M321 doors. */
+  laneRadar?: (lanes: RadarLane[]) => Promise<RadarReport>
 }
 
 const off = 'not wired in this process'
@@ -54,7 +57,8 @@ export const INERT_KIT: KitHandlers = {
   combineIntegrate: async () => ({ kind: 'refused', reason: `integrating is ${off}` }),
   combineReceipts: async () => [],
   setupPreflight: async () => ({ tools: {}, ports: null }),
-  recipeHistory: async () => []
+  recipeHistory: async () => [],
+  laneRadar: async (lanes) => ({ at: 0, collisions: [], unread: lanes.map((l) => ({ id: l.id, reason: `the radar is ${off}` })) })
 }
 
 /** What the editor opener needs from the OS — injected, so the harness never launches an editor. */

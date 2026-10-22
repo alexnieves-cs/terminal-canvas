@@ -24,6 +24,8 @@ import { shapeSummary } from '@shared/flowchart'
 export const DEMOTE_DELAY_MS = 250
 /** A process-table walk is intentionally slow; never put it on a render path. */
 export const MACHINE_COST_SAMPLE_MS = 2000
+/** M315. When this window's renderer started — a task created after it is not a RESUME. Here, not in Canvas.tsx, since M506: Canvas and useAttentionModels both read it. */
+export const APP_OPENED_AT = Date.now()
 
 // Module-level so the palette's props keep the same identity between renders;
 // a fresh [] each render would rebuild the command list on every frame of a pan.

@@ -121,3 +121,16 @@ back as the next turn, a check past its retries is `stuck: check`, and a check's
 a stopped run decides nothing. Its last check runs the production runner
 (`auto-check-runner.ts`) against `/bin/sh`, because a runner that read a timeout as a pass
 would be green with a fake and wrong on a Mac.
+Its `tonight.*` checks (M477) drive the Tonight runner over the same real manager with a
+rate limit set by hand, a power blocker that counts, and timers fired by hand: a night is
+minutes of fake clock. `tonight.2` is the roadmap's done check (three tasks, one retried on
+its check's output, one paused by a limit and resumed), and `tonight.3` walks every way a
+batch ends to show the blocker is released exactly once on each.
+
+`verify:review` `radar.*` (stream C, M479) runs the collision radar against REAL git: a
+temp repository with three worktrees, two editing the same line of one file (a conflict by
+git's own `merge-tree --write-tree`), one of those and a third touching the same file in
+different places (an overlap that merges clean, the third's edit left uncommitted). It needs
+git 2.38 or later for `--write-tree`; an older git is an `error`, never read as clean.
+`tonight.batch.1` (M480) pins what the door hands main — which board tasks a Run tonight takes,
+which it names as left out, and that the batch it builds passes main's own parse.

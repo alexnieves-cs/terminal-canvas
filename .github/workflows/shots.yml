@@ -1,0 +1,204 @@
+# The shots gallery (M465): paint every scene on a real Mac and publish the
+# pictures so a person can look at them without one.
+#
+# Goldens are written only after a person has LOOKED (CLAUDE.md, "A golden
+# changes on purpose or not at all"), and the owner of this repository does
+# not keep a Mac checkout at hand. This job is how looking happens: it runs
+# `npm run shot` on the hosted runner, converts every capture (and the golden
+# it would replace) to a phone-sized JPEG, and uploads a self-contained
+# gallery — index.html opens straight from the unzipped artifact, and the same
+# directory is what gets published as a private page for the owner's phone.
+# The full-size PNGs are a second artifact, because those are what a golden
+# update would commit.
+#
+# It asserts nothing and never blocks: verify:visual is the check, this is the
+# picture. A scene that fails to paint is listed first on the page, in red.
+name: shots
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated scene names (empty = every scene)'
+        required: false
+        default: ''
+      goldens:
+        description: 'Write goldens instead (only after a person has looked at the gallery)'
+        type: boolean
+        required: false
+        default: false
+  # A change to a scene or the harness shows its pictures on the PR itself.
+  pull_request:
+    paths:
+      - .github/workflows/shots.yml
+      - scripts/shot.cjs
+      - scripts/shot-gallery.cjs
+      - scripts/shot-composite.cjs
+      - scripts/shot-scenes/**
+
+# contents: write for the gallery branch below, and nothing else.
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    if: ${{ !inputs.goldens }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Scenes spawn real shells, and some read tmux; the same setup verify.yml has.
+      - name: Install tmux
+        run: brew install tmux
+
+      - name: Install dependencies
+        run: npm ci
+      # Same gotcha as verify.yml: npm ci on the runner can leave Electron's
+      # binary out of node_modules.
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
+
+      - name: Build
+        run: npm run build
+
+      # TC_SHOT_SCALE=2: the runner has no Retina display, and a 1x capture is
+      # not the picture a golden would be made from (shot.cjs explains).
+      - name: Paint every scene
+        env:
+          TC_SHOT_SCALE: '2'
+          SHOT_DIR: ${{ runner.temp }}/shots
+          SHOT_ONLY: ${{ inputs.only }}
+        run: npm run shot 2>&1 | tee "$RUNNER_TEMP/shot.log"
+
+      - name: Build the gallery
+        env:
+          SHOTS: ${{ runner.temp }}/shots
+          GALLERY: ${{ runner.temp }}/gallery
+        run: |
+          mkdir -p "$GALLERY/shots" "$GALLERY/golden"
+          # 1280px wide JPEGs: sharp on a phone, and the whole gallery stays a
+          # few tens of MB instead of hundreds. sips ships with macOS.
+          for f in "$SHOTS"/*.png; do
+            n=$(basename "$f" .png)
+            case "$n" in *.vs-reference) continue;; esac
+            sips -s format jpeg -s formatOptions 75 --resampleWidth 1280 "$f" --out "$GALLERY/shots/$n.jpg" >/dev/null
+            g="verify/visual/goldens/$n.png"
+            if [ -f "$g" ]; then
+              sips -s format jpeg -s formatOptions 75 --resampleWidth 1280 "$g" --out "$GALLERY/golden/$n.jpg" >/dev/null
+            fi
+          done
+          cp "$SHOTS/manifest.json" "$GALLERY/manifest.json"
+          node scripts/shot-gallery.cjs "$SHOTS" "$GALLERY" jpg
+          du -sh "$GALLERY"
+          # The page's headline, in the run summary too.
+          node -e 'const g=require(process.argv[1]);console.log(`### Shots\n${g.counts.scenes} scenes · ${g.counts.failed} failed · ${g.counts.noGolden} with no golden yet\n`);for(const s of g.scenes.filter(s=>s.failed||!s.shot))console.log(`- **${s.name}** failed: ${(s.failed||"no capture").slice(0,200)}`)' "$GALLERY/gallery.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots-gallery
+          path: ${{ runner.temp }}/gallery
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots-png
+          path: |
+            ${{ runner.temp }}/shots
+            ${{ runner.temp }}/shot.log
+          retention-days: 30
+
+      # The same gallery as one commit on the orphan `shots-gallery` branch,
+      # replaced on every run. An Actions artifact sits behind a storage host
+      # that a cloud session's network policy can refuse; a branch is plain
+      # git over github.com, which is how the gallery gets published as a
+      # private page for the owner's phone. One commit, force-pushed: the
+      # branch holds the latest pictures, never a history of them.
+      - name: Publish the gallery branch
+        env:
+          GALLERY: ${{ runner.temp }}/gallery
+        run: |
+          cd "$GALLERY"
+          git init -q -b shots-gallery
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qm "shots gallery: ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} @ ${GITHUB_SHA::7} (run $GITHUB_RUN_ID)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" shots-gallery
+
+      # A manifest with no scenes means the harness died before painting; that
+      # is the one outcome this job calls red.
+      - name: The harness painted something
+        run: node -e 'const m=require(process.argv[1]);if(!m.length){console.error("no scenes painted");process.exit(1)}' "$RUNNER_TEMP/shots/manifest.json"
+
+  # M467 (B3). Goldens, written where CI paints. A golden is one machine's
+  # capture, and the machine that checks them is this runner: goldens made on
+  # a developer's Mac differ from every runner capture by fonts and GPU alone.
+  # Dispatched by hand, ONLY after a person has looked at the gallery the
+  # `shots` job published; it runs verify:visual's own update path (a golden
+  # that still passes is kept byte for byte), takes every scene that now has a
+  # golden off pending-goldens.json in the same commit (verify:meta visual.1),
+  # and pushes a `goldens/<run>` branch for a PR, so the change is reviewed
+  # like any other rather than landing on main from a job.
+  goldens:
+    if: ${{ inputs.goldens }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install tmux
+        run: brew install tmux
+      - name: Install dependencies
+        run: npm ci
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
+      - name: Build
+        run: npm run build
+      # The same scale and watchdog env as verify.yml's verify:visual job, so
+      # the goldens are the pictures that job will compare against.
+      - name: Write goldens
+        env:
+          UPDATE_GOLDENS: '1'
+          # `only` narrows the update to the scenes a person just looked at, so
+          # a scene that drifted for another reason is never re-baselined blind.
+          SHOT_ONLY: ${{ inputs.only }}
+          TC_VISUAL_SCALE: '2'
+          TC_SHOT_SCALE: '2'
+          TC_WATCHDOG_SCALE: '2'
+        run: npm run verify:visual 2>&1 | tee "$RUNNER_TEMP/goldens.log"
+      - name: Take written scenes off the pending list
+        run: |
+          node -e '
+            const fs = require("fs"), p = "verify/visual/pending-goldens.json"
+            const j = JSON.parse(fs.readFileSync(p, "utf8"))
+            j.scenes = j.scenes.filter((s) => !fs.existsSync(`verify/visual/goldens/${s}.png`))
+            fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n")
+            console.log(`still pending: ${j.scenes.length}`)'
+      - name: Push the goldens branch
+        run: |
+          git add verify/visual
+          git diff --cached --stat | tail -3 | tee -a "$GITHUB_STEP_SUMMARY"
+          if git diff --cached --quiet; then echo "no golden changed"; exit 0; fi
+          branch="goldens/run-$GITHUB_RUN_ID"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qm "test(m467): goldens captured on the macOS runner (run $GITHUB_RUN_ID)"
+          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "HEAD:refs/heads/$branch"
+          echo "pushed $branch" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: goldens-log
+          path: ${{ runner.temp }}/goldens.log
+          retention-days: 30

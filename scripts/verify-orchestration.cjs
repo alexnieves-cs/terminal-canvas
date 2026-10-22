@@ -1270,12 +1270,16 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     const writers = files.filter((f) => /ledger\??\.event\b/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(srcDir.length + 1))
     const importers = files.filter((f) => /from '.*orch-record'/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(srcDir.length + 1)).sort()
     const record = readFileSync(join(srcDir, 'renderer/orchestration/orch-record.ts'), 'utf8')
+    // M507. useRestartVerbs.ts is Canvas's own M301 seed (settled outcomes read
+    // back from the record), moved out of Canvas.tsx unchanged: same importer.
+    // M501. usePreviewVerbs.ts is Canvas's own preview capture, moved out of
+    // Canvas.tsx unchanged: the same importer at a new path, not a new writer.
     // M317 adds OrchCombine: sending a traced integration failure back to an
     // agent is a person's DISPATCH, which main cannot tell from any other
     // message. The landing itself is main's to write (integrator.ts).
     ok('orch-timeline.6 the renderer writes history through ONE door: only orch-record.ts calls ledger.event, its importers are the three verbs that own a fact main cannot see (dispatch, the permission answer, the review mark) plus the canvas\'s handoff funnel, Combine\'s send-back (a dispatch), and M371\'s two decisions — a cap a person set (the cap-agent verb) and a proposal kept or discarded (the task\'s review) — and the chat door, which files that same permission row only when a caller names the decision — and the door itself starts nothing — no send, spawn, create or run',
       JSON.stringify(writers) === JSON.stringify(['renderer/orchestration/orch-record.ts']) &&
-        JSON.stringify(importers) === JSON.stringify(['renderer/canvas/Canvas.tsx', 'renderer/canvas/palette-actions/caps.ts', 'renderer/canvas/palette-actions/presets.ts', 'renderer/canvas/useBoardVerbs.ts', 'renderer/chat/ChatConversation.tsx', 'renderer/orchestration/OrchCombine.tsx', 'renderer/review/TaskReviewPanel.tsx']) &&
+        JSON.stringify(importers) === JSON.stringify(['renderer/canvas/Canvas.tsx', 'renderer/canvas/palette-actions/caps.ts', 'renderer/canvas/palette-actions/presets.ts', 'renderer/canvas/useBoardVerbs.ts', 'renderer/canvas/usePreviewVerbs.ts', 'renderer/canvas/useRestartVerbs.ts', 'renderer/chat/ChatConversation.tsx', 'renderer/orchestration/OrchCombine.tsx', 'renderer/review/TaskReviewPanel.tsx']) &&
         !/agentSession|spawn\.|\.send\(|review\.commit|review\.discard/.test(record),
       JSON.stringify({ writers, importers }))
   }
@@ -1386,8 +1390,10 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   // keeps a remembered outcome from overwriting a live one.
   {
     const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
-    const seedStart = canvasSrc.indexOf('M301, closing Phase C')
-    const seed = seedStart === -1 ? '' : canvasSrc.slice(seedStart, seedStart + 2600)
+    // M507. The seed moved with the restart verbs; Canvas still calls them.
+    const restartSrc = /= useRestartVerbs\(\{/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/useRestartVerbs.ts'), 'utf8') : ''
+    const seedStart = restartSrc.indexOf('M301, closing Phase C')
+    const seed = seedStart === -1 ? '' : restartSrc.slice(seedStart, seedStart + 2600)
     ok('orch-reconcile.4 a handoff outcome survives a relaunch: every outcome is written at the ONE funnel that also fills the in-memory map, carrying the link\'s own from:to key so no reader parses a title; on mount the record seeds the map newest-row-per-key, a live outcome always wins (the seed fills only keys this run has not written), and a failed read seeds nothing rather than inheriting a stale sentence',
       /key\b/.test(canvasSrc.slice(canvasSrc.indexOf('const setHandoffResult'), canvasSrc.indexOf('const setHandoffResult') + 1200)) &&
         /e\.row\.event !== 'handoff'/.test(seed) && /!seed\.has\(key\)/.test(seed) && /if \(!next\.has\(k\)\) next\.set\(k, v\)/.test(seed) &&
@@ -1501,7 +1507,9 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
         !R.isSettledHandoff('queued — target starts when it comes on screen') &&
         !R.isSettledHandoff('waiting for panel-3, panel-4') &&
         /if \(!isSettledHandoff\(sentence\)\) return/.test(canvasSrc) &&
-        /isSettledHandoff\(e\.row\.detail\)/.test(canvasSrc) &&
+        // M507. The seed's read is in useRestartVerbs.ts, which Canvas calls.
+        /= useRestartVerbs\(\{/.test(canvasSrc) &&
+        /isSettledHandoff\(e\.row\.detail\)/.test(readFileSync(join(root, 'src/renderer/canvas/useRestartVerbs.ts'), 'utf8')) &&
         /setHandoffResult\(key, 'skipped — target is dormant'\)/.test(canvasSrc) &&
         /setHandoffResult\(key, `ran after exit \$\{info\.exitCode\}`\)/.test(canvasSrc) &&
         /\.then\(\(accepted\) => \{/.test(presets) && /if \(accepted === false\) return/.test(presets),

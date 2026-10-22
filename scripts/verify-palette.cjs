@@ -298,7 +298,9 @@ const spyActions = () => {
     openReplay: record('openReplay'),
     // M409. The Undo/Redo rows' verbs (palette.undo.1 runs both).
     undoCanvas: record('undoCanvas'),
-    redoCanvas: record('redoCanvas')
+    redoCanvas: record('redoCanvas'),
+    // M509. The `>` row's verb (cmd.*).
+    runCommandPanel: record('runCommandPanel')
   }
 }
 
@@ -2953,7 +2955,9 @@ const WS = [
   ok('advanced.3 each door says what it GIVES, and runs a verb the palette already holds (no new action)',
     Object.values(P.ADVANCED_DOORS).every((d) => d.benefit.length > 30 && !/^(a|an|the) /i.test(d.benefit)) &&
       (() => {
-        const canvas = require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+        const read = (f) => require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', f), 'utf8')
+        // M507. The advanced doors moved with the task lens; Canvas still calls it.
+        const canvas = /= useTaskLens\(\{/.test(read('Canvas.tsx')) ? read('useTaskLens.ts') : ''
         return /a\.openTeammates\(\)/.test(canvas) && /a\.openToolbox\(id\)/.test(canvas) && /a\.createObject\('workflow'\)/.test(canvas) && /a\.beginWatcher\(\)/.test(canvas) && /a\.beginSaveTemplate\(/.test(canvas)
       })())
   ok('advanced.4 the workflow editor has an obvious expanded view — a labelled toolbar verb over the frame\'s own maximise, and the diagram refits to it',
@@ -3292,6 +3296,106 @@ const FRESH = () => ctx({
       res.calls.includes('["runRoutine","r1"]') && res.calls.some((c) => c.includes('beginStartWork') && c.includes('my-flaky')) &&
       res.calls.some((c) => c.includes('beginSpawnSheet') && c.includes('__lineup__:pair')),
     threw ?? JSON.stringify(res))
+}
+
+// cmd.* — M509 (backlog #55), command panels. `> npm test` is a command,
+// not a search: the run row alone, which hands the typed words to the verb
+// untouched; a bare `>` is a disabled row with its reason; a `>` anywhere but
+// first, or inside a scope, is the ordinary query.
+{
+  ok('cmd.1 parseCommandQuery reads only a LEADING >, trimmed, and says null for anything else',
+    P.parseCommandQuery('> npm test') === 'npm test' && P.parseCommandQuery('>npm   test ') === 'npm   test' &&
+      P.parseCommandQuery('  >') === '' && P.parseCommandQuery('npm test') === null && P.parseCommandQuery('a > b') === null)
+
+  const actions = spyActions()
+  const all = (q, scope = null) => P.filterCommands(P.buildCommands(ctx({ actions, commandQuery: scope === null ? P.parseCommandQuery(q) : null })), q, scope)
+  const run = all('> npm test -- --watch=false')
+  ok('cmd.2 a command query shows the run row and nothing else, and running it hands the verb exactly what was typed',
+    run.length === 1 && run[0].id === P.COMMAND_ROW_ID && run[0].title === 'Run npm test -- --watch=false' && run[0].disabledReason === undefined &&
+      (run[0].run(), JSON.stringify(actions.calls.at(-1)) === JSON.stringify(['runCommandPanel', 'npm test -- --watch=false'])),
+    JSON.stringify(run.map((r) => r.id)))
+
+  const bare = all('>')
+  ok('cmd.3 a bare > is one DISABLED row that says what to type',
+    bare.length === 1 && bare[0].id === P.COMMAND_ROW_ID && bare[0].disabledReason === P.REASON_NO_COMMAND,
+    JSON.stringify(bare.map((r) => [r.id, r.disabledReason])))
+
+  const plain = all('new')
+  ok('cmd.4 an ordinary query, or a > inside a scope, never builds or keeps the run row',
+    plain.length > 0 && !plain.some((r) => r.id === P.COMMAND_ROW_ID) &&
+      !P.buildCommands(ctx({ actions })).some((r) => r.id === P.COMMAND_ROW_ID) &&
+      !all('> x', 'capability').some((r) => r.id === P.COMMAND_ROW_ID))
+
+  ok('cmd.5 the folder is the last-focused terminal\'s, never one never focused, and home when none was',
+    P.commandPanelCwd([{ id: 'a', cwd: '/repo/a' }, { id: 'b', cwd: '/repo/b' }, { id: 'c', cwd: '/repo/c' }], { a: 5, b: 9, c: 0 }) === '/repo/b' &&
+      P.commandPanelCwd([{ id: 'a', cwd: '/repo/a' }], {}) === '~' && P.commandPanelCwd([], {}) === '~')
+
+  // The verb is wired to the spawn sheet's own typed-task request (main runs
+  // it as /bin/sh -lc in the login env and asks for focus), never a second
+  // spawn path, and a refusal is said.
+  const presets = require('node:fs').readFileSync(join(__dirname, '..', 'src/renderer/canvas/palette-actions/presets.ts'), 'utf8')
+  const verb = presets.slice(presets.indexOf('runCommandPanel: (command) =>'))
+  ok('cmd.6 runCommandPanel submits spawn.sheet({ command, cwd, title }) and says a refusal',
+    /window\.canvas\.spawn\.sheet\(\{ command: typed, cwd, title: typed \}\)/.test(verb) && /notifyRefused\(result\.reason\)/.test(verb) &&
+      /commandPanelCwd\(terminals, registry\.lastFocusedAt\(\)\)/.test(verb))
+}
+
+// labs.* — M496 (E2), the cut list's hidden surfaces. Each is one boolean
+// `labs.<id>` setting (off by default, except World, kept on) that hides the
+// doors which MINT the surface and never a verb that acts on one already there.
+{
+  const fs = require('node:fs')
+  const src = (rel) => fs.readFileSync(join(__dirname, '..', rel), 'utf8')
+  const defs = P.LABS.map((lab) => P.SETTINGS.find((d) => d.id === lab.setting))
+  const strays = P.SETTINGS.filter((d) => d.id.startsWith('labs.') && !P.LABS.some((lab) => lab.setting === d.id)).map((d) => d.id)
+  ok('labs.1 every lab is a declared boolean setting whose default is the lab\'s own, in the Labs category, not planWritable — and no labs.* setting is without a lab',
+    P.LABS.length > 0 && defs.every((d, i) => d !== undefined && d.type === 'boolean' && d.default === P.LABS[i].shown && d.category === P.LABS_CATEGORY && d.planWritable === undefined) &&
+      strays.length === 0 && P.LABS.every((lab) => lab.setting === `labs.${lab.id}`),
+    JSON.stringify({ missing: P.LABS.filter((_, i) => defs[i] === undefined).map((l) => l.setting), strays }))
+
+  // A lab row that names nothing hides nothing, silently. Every exact id is a
+  // row the palette really builds: a minted creation row, or a literal id in
+  // the palette's source.
+  const built = new Set(P.buildCommands(ctx({ actions: spyActions() })).map((r) => r.id))
+  const palSrc = src('src/renderer/palette/commands.ts')
+  const stale = P.LABS.flatMap((lab) => lab.rows).filter((id) => !built.has(id) && !palSrc.includes(`id: '${id}'`))
+  ok('labs.2 every row a lab hides is a row the palette builds', stale.length === 0, JSON.stringify(stale))
+
+  // The no-dead-end rule: what acts on an object already on a canvas stays.
+  const kept = ['deck.edit', 'deck.export-pptx', 'sheet.edit', 'sheet.review', 'credential.set.jira', 'credential.verify.jira', 'team.allow.w1.a1', 'spawn.sheet', 'object.create.note', 'capability.open']
+  ok('labs.3 no lab hides a verb on an existing object, a credential row, a team ask or a near-namesake',
+    kept.every((id) => P.labOfRow(id) === undefined) &&
+      P.labOfRow('object.create.deck') === 'decks' && P.labOfRow('object.create.sheet') === 'sheets' && P.labOfRow('jira.open') === 'jira' &&
+      P.labOfRow('world.view') === 'world' && P.labOfRow('share.open') === 'accounts' && P.labOfRow('object.create.relay') === 'relay' && P.labOfRow('panel.memory') === 'toolbox',
+    JSON.stringify(kept.map((id) => [id, P.labOfRow(id)])))
+
+  const rows = [...built].map((id) => ({ id }))
+  const allOff = P.labsOff(() => false)
+  const allOn = P.labsOff(() => true)
+  const atDefaults = P.labsOff(() => undefined)
+  const off = P.withoutHiddenLabs(rows, allOff).map((r) => r.id)
+  ok('labs.4 at the defaults only the hidden labs are off (World stays); switched off, a lab\'s rows leave; switched on, nothing leaves; a malformed value is off',
+    allOff.size === P.LABS.length && allOn.size === 0 && P.labsOff(() => 'true').size === P.LABS.length &&
+      [...atDefaults].sort().join() === P.LABS.filter((l) => !l.shown).map((l) => l.id).sort().join() && !atDefaults.has('world') && atDefaults.has('decks') &&
+      !off.includes('object.create.deck') && !off.includes('jira.open') && off.includes('object.create.note') && off.includes('spawn.sheet') &&
+      P.withoutHiddenLabs(rows, allOn).length === rows.length && off.length === rows.length - rows.filter((r) => P.labOfRow(r.id) !== undefined).length,
+    JSON.stringify({ off: allOff.size, kept: off.length, rows: rows.length }))
+
+  // The doors outside the palette, read as text: each reads its lab, and the
+  // way OUT of a room opened anyway is never what is hidden.
+  const palette = src('src/renderer/palette/Palette.tsx')
+  const lens = src('src/renderer/world/WorldLens.tsx')
+  const tail = src('src/renderer/canvas/useShellTail.ts')
+  const table = src('src/renderer/sessions/SessionsTable.tsx')
+  const bar = src('src/renderer/shell/TopBar.tsx')
+  const panes = src('src/renderer/settings/panes.ts')
+  ok('labs.5 the palette, the World lens, ⌘⇧W, Show in World and the account menu each read their lab; a room already up keeps its lens and its chord, and a signed-in session keeps its menu',
+    /withoutHiddenLabs\(commands, labsOff\)/.test(palette) && /filterCommands\(shown, query, scope\)/.test(palette) &&
+      /useLab\('world'\)/.test(lens) && /if \(!shown && !on\) return null/.test(lens) &&
+      /if \(!labOn\('world'\) && !isWorldOn\(\)\) return/.test(tail) &&
+      /useLab\('world'\)/.test(table) && /\{worldShown && <button/.test(table) &&
+      /useLab\('accounts'\)/.test(bar) && /accountsShown \|\| signedIn \? accountsProp : undefined/.test(bar) &&
+      /categories: \[SHELL_CATEGORY, LABS_CATEGORY, UPDATES_CATEGORY\]/.test(panes))
 }
 
 const failed = results.filter((r) => !r.pass)

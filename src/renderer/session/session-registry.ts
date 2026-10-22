@@ -2,6 +2,7 @@ import type { PanelId, PtyCreateResult, PtyDataChunk, PtyExitInfo } from '@share
 import type { AgentKind } from '@shared/cost'
 import type { Tier } from '@renderer/canvas/lod'
 import type { PanelSession, PanelSpecTemplate, SessionFactory, TerminalOptions } from './panel-session'
+import { FULL_SCROLLBACK, RATIONED_SCROLLBACK, rationPlan } from './memory-ration'
 
 /**
  * Owns every panel's session for the lifetime of the renderer.
@@ -124,6 +125,19 @@ export interface Registry {
    * verify:registry 25.
    */
   touch(id: PanelId): void
+  /**
+   * M508 (backlog #64). Trim the scrollback of every session nobody has
+   * looked at for RATION_AFTER_MS, and return the ids it trimmed.
+   *
+   * The first registry operation that changes a Terminal's contents —
+   * detachSlot explicitly never does — and it is a configure, never a
+   * dispose: the Terminal, the PTY and the process all stay, and the last
+   * screen survives because xterm drops the OLDEST rows first. A live session
+   * is never trimmed, and going live restores the full buffer before the
+   * terminal is shown (setTier). No bump: nothing a render reads changed.
+   * verify:registry mem.*.
+   */
+  rationMemory(): PanelId[]
   subscribe(listener: () => void): () => void
   /**
    * Observe an actual process exit after the registry has recorded it. #24
@@ -292,6 +306,14 @@ export function createRegistry(deps: RegistryDeps): Registry {
    * once the host is actually mounted.
    */
   function setTier(session: PanelSession, tier: Tier): void {
+    // M508. Crossing live in either direction is being looked at. On the way
+    // IN, a rationed session gets its full buffer back before it is shown,
+    // so new output from here on is kept at the full depth again.
+    if (tier === 'live' || session.tier === 'live') session.seenAt = now()
+    if (tier === 'live' && session.rationed) {
+      session.handle.configure({ scrollback: FULL_SCROLLBACK })
+      session.rationed = false
+    }
     session.tier = tier
     bump()
   }
@@ -315,7 +337,9 @@ export function createRegistry(deps: RegistryDeps): Registry {
         spawned: false,
         sentGrid: null,
         lastFocusedAt: 0,
-        dormant: options?.dormant ?? false
+        dormant: options?.dormant ?? false,
+        seenAt: now(),
+        rationed: false
       }
       sessions.set(id, session)
       // Deliberately no bump(): ensure() is called while Canvas renders, and
@@ -458,6 +482,20 @@ export function createRegistry(deps: RegistryDeps): Registry {
       // focus()'s first two lines and none of its third.
       session.lastFocusedAt = now()
       bump()
+    },
+
+    rationMemory() {
+      const at = now()
+      const trim = rationPlan([...sessions.values()].map((s) => ({
+        id: s.id, tier: s.tier, seenAt: Math.max(s.seenAt, s.lastFocusedAt), rationed: s.rationed
+      })), at)
+      for (const id of trim) {
+        const session = sessions.get(id)
+        if (!session) continue
+        session.handle.configure({ scrollback: RATIONED_SCROLLBACK })
+        session.rationed = true
+      }
+      return trim
     },
 
     subscribe(listener) {

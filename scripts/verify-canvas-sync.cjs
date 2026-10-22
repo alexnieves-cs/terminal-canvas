@@ -380,7 +380,9 @@ async function until(pred, ms = 3000) {
     RA.unbind(); RB.unbind()
 
     const layer = readFileSync(join(root, 'src/renderer/shared-canvas/SharedPlaceholderLayer.tsx'), 'utf8')
-    const canvas = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    // M507. The placeholder layer is mounted in WorldLayers.tsx, which Canvas calls.
+    const canvasOwn = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+    const canvas = /\brenderWorldLayers\(\{/.test(canvasOwn) ? readFileSync(join(root, 'src/renderer/canvas/WorldLayers.tsx'), 'utf8') : canvasOwn
     ok('cs.relay.5 a relay placeholder with a session offers Attach (the person\'s click), which opens a relay panel HERE attached to that session',
       /data-shared-relay-attach/.test(layer) && /onClick=\{\(\) => props\.onAttachRelay\?\.\(p\)\}/.test(layer) &&
       /onAttachRelay=\{\(p\) => \{ if \(p\.relay !== undefined\) openRelayPanel\(\{ program: p\.relay\.program, sessionId: p\.relay\.session/.test(canvas))

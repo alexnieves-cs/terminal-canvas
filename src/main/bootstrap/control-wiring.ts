@@ -14,6 +14,9 @@ import type { ShareControl } from '../share-control'
 import { createToolboxDoor } from '../toolbox-door'
 import { resolveToolboxHome } from '../toolbox-read'
 import type { PluginListResult } from '../plugin-list'
+import { recordDecision } from '../decision-audit'
+import type { LaneMergeRequest, LaneMergeResult } from '../../shared/lane-merge'
+import { denyMessageFor, type PermissionAnswer } from '../../shared/transcript'
 
 /**
  * M87. The broker over the credential store — the store's LAST reader — with
@@ -29,7 +32,10 @@ export interface ControlWiring {
   teammateOfPanel(panelId: string): string | undefined
 }
 
-export function createControlWiring(state: MainState, stores: Stores, places: Places, tokens: PanelTokens, account?: AccountService, sharing?: ShareControl, listPlugins?: () => Promise<PluginListResult>): ControlWiring {
+export function createControlWiring(state: MainState, stores: Stores, places: Places, tokens: PanelTokens, account?: AccountService, sharing?: ShareControl, listPlugins?: () => Promise<PluginListResult>,
+  // M488. Appended last (no positional caller shifts). Called at USE, since
+  // the kit is built after this wiring in index.ts.
+  laneMerge?: (req: LaneMergeRequest) => Promise<LaneMergeResult>): ControlWiring {
   const { layoutStore, credentialStore, brokerAudit, ptyManager, memoryStore, teammateMemory } = stores
 
   // M102. A panel's teammate is MAIN's own record (the chat's `teammateId`),
@@ -104,6 +110,31 @@ export function createControlWiring(state: MainState, stores: Stores, places: Pl
         return memoryStore.add({ ...req, root: resolved.root })
       }
     },
+    // M488. The MCP writes and the one setting that allows them, read at use.
+    // The answer takes the PERSON's path (agent-handlers.ts `answer`): the team
+    // router first, which past the spend line counts it as one vote, then the
+    // process — with the canvas's own deny words, so a plan sent back reads
+    // "keep planning" whoever sent it back. No session grant: that is a
+    // person's choice at the card. The broker's credential asks (`tc-ext-`)
+    // are never listed or answered here, as the team router never routes them.
+    ...(laneMerge === undefined ? {} : {
+      remote: {
+        writesAllowed: () => layoutStore.getSetting('remote.mcpWrites' as never) === true,
+        approvals: () => (state.agents?.list() ?? []).flatMap((s) => s.pending.filter((p) => !p.requestId.startsWith('tc-ext-')).map((p) => ({ panelId: s.id, requestId: p.requestId, toolName: p.toolName, ...(p.description === undefined ? {} : { description: p.description }) }))),
+        answer: (panelId, requestId, allow, toolName) => {
+          const answer: PermissionAnswer = allow ? { allow: true } : { allow: false, message: denyMessageFor(toolName) }
+          const routed = state.teamAsks?.localAnswer(panelId, requestId, answer) ?? 'not-routed'
+          if (routed === 'waiting') return 'waiting'
+          if (routed === 'decided') return 'answered'
+          return state.agents?.answerPermission(panelId, requestId, answer) === true ? 'answered' : 'gone'
+        },
+        knownLane: (lane) => layoutStore.worktrees().some((w) => w.path === lane),
+        laneMerge,
+        record: (row) => recordDecision(stores.runLedger, stores.decisionAudit, row)
+      }
+    }),
+    // M489. The phone's test push, past the idle rule: a person asked for it.
+    phoneTest: () => stores.phoneAlerts.test(),
     // M369. The decision audit, read from main's own file.
     audit: (limit) => stores.decisionAudit.list(limit),
     // M366. The toolbox door `toolbox:read` uses, over main's ONE cache, so a

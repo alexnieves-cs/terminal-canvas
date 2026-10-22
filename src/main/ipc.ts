@@ -30,6 +30,8 @@ import { incomingWorkflowGraphSchema, graphProblems } from '../shared/workflow-g
 import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
+import { RADAR_LANES_MAX } from '../shared/collision-radar'
+import type { TonightStatus } from '../shared/tonight'
 import type { EventRow, RunRow, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -228,6 +230,10 @@ export interface AgentHandlers {
   /** M97. */
   autoStart(req: AutoStartRequest): AutoStartResult
   autoStop(id: string): boolean
+  /** M480. Tonight's doors (main/tonight-runner.ts). Optional, so a harness mirror without them answers by name. */
+  tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }
+  tonightStop?(): boolean
+  tonightStatus?(): TonightStatus | null
   /** M98. The tools granted for a session, in grant order. */
   grants(id: string): string[]
   /** M98. Drop every grant for a session; it asks again. */
@@ -929,6 +935,11 @@ export function registerIpcHandlers(
     if (typeof r?.lane !== 'string' || !r.lane.startsWith('/')) return { kind: 'refused', reason: 'an accept names the lane it merges' }
     return kit.laneMerge({ lane: r.lane, title: typeof r.title === 'string' ? r.title : '', ...(r.dryRun === true ? { dryRun: true } : {}), ...(typeof r.expectHead === 'string' ? { expectHead: r.expectHead } : {}) })
   })
+  // M479. Shape-checked here; the radar reads each lane's repository itself.
+  ipcMain.handle(IPC.LANE_RADAR, (_event, raw: unknown) => {
+    const lanes = Array.isArray(raw) ? raw.filter((l): l is { id: string; path: string } => typeof l?.id === 'string' && typeof l.path === 'string' && l.path.startsWith('/')).slice(0, RADAR_LANES_MAX) : []
+    return kit.laneRadar === undefined ? { at: Date.now(), collisions: [], unread: lanes.map((l) => ({ id: l.id, reason: 'the radar is not wired in this process' })) } : kit.laneRadar(lanes.map((l) => ({ id: l.id, path: l.path })))
+  })
   ipcMain.handle(IPC.SETUP_READ, (_event, cwd: unknown) => (typeof cwd === 'string' ? kit.setupRead(cwd) : { kind: 'not-a-repo' as const }))
   ipcMain.handle(IPC.SETUP_SAVE, (_event, setup: unknown) => kit.setupSave(setup))
   ipcMain.handle(IPC.SETUP_PREPARE, (_event, req: unknown) => {
@@ -983,6 +994,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
   ipcMain.handle(IPC.AGENT_AUTO_START, (_event, req: AutoStartRequest) => agents.autoStart(req))
   ipcMain.handle(IPC.AGENT_AUTO_STOP, (_event, id: string) => agents.autoStop(id))
+  ipcMain.handle(IPC.TONIGHT_START, (_event, raw: unknown) => agents.tonightStart?.(raw) ?? { kind: 'refused', reason: 'tonight is not available in this process' })
+  ipcMain.handle(IPC.TONIGHT_STOP, () => agents.tonightStop?.() ?? false)
+  ipcMain.handle(IPC.TONIGHT_STATUS, () => agents.tonightStatus?.() ?? null)
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))
