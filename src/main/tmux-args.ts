@@ -169,10 +169,15 @@ export function buildTmuxConf(exitDir: string, socket: TmuxSocket = TMUX_SOCKET)
     // failure is completely silent. Every fixture used a space-free path,
     // which is why it survived to a whole-branch review.
     `set-hook -g pane-died 'run-shell "echo #{pane_dead_status} > \\"${exitDir}/#{session_name}.exit\\"; tmux -L ${socket} kill-session -t =#{session_name}"'`,
-    // NOTE: `mouse` is deliberately absent, i.e. left off. `mouse on` makes
-    // TMUX capture mouse reporting instead of passing it to the application,
-    // which would silently defeat all of M4a's pointer correction from one
-    // process further down. This is the mirror image of the :RGB line above.
+    // `mouse on` makes TMUX capture mouse reporting instead of passing it to
+    // the application, which would silently defeat all of M4a's pointer
+    // correction from one process further down. This is the mirror image of
+    // the :RGB line above. It is set OFF by name rather than left absent: the
+    // hosted macOS runner's tmux server reported `mouse on` with nothing in
+    // this file setting it, and then every attach turns the outer mouse modes on, xterm
+    // takes the right-click, and the terminal's context menu never opens
+    // (verify:panels ctx.panel.1, tmux's own `show -gv mouse` in its evidence).
+    'set -g mouse off',
     ''
   ].join('\n')
 }

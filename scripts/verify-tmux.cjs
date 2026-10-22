@@ -107,6 +107,10 @@ const { ok, results } = require('./lib/checks.cjs').createChecks()
   const conf = T.buildTmuxConf(EXIT_DIR)
   ok('5 the config never enables tmux mouse capture', !/mouse\s+on/.test(conf),
     JSON.stringify(conf.match(/.*mouse.*/g) ?? []))
+  // Absent was not enough: the hosted macOS runner's tmux server reported
+  // `mouse on` with nothing here setting it, and captured the mouse all the same.
+  ok('tmux.mouse.1 the config turns tmux mouse capture OFF by name, never leaving it to the default',
+    /^set -g mouse off$/m.test(conf), JSON.stringify(conf.match(/.*mouse.*/g) ?? []))
 }
 
 // 6. The hook writes the exit file BEFORE killing the session. That ordering is
