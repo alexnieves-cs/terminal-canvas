@@ -21,15 +21,10 @@ on:
   pull_request:
   workflow_dispatch:
 
-# The Electron suites still listed here have not yet passed three of three runs
-# on a Mac runner since their flakes were fixed (Stream A, M458–M461). They
-# stay RUNNING in `verify-electron-known-red`,
-# which cannot fail the PR, while `verify` runs everything else and blocks. The
-# two lists below are the whole partition: scripts/verify-all.cjs errors on a
-# name that matches no suite, so a typo cannot drop one from both jobs. Remove a
-# name here when its suite is fixed; when the list is empty, delete the second job.
-env:
-  KNOWN_RED: verify:panels:agents,verify:panels:product
+# Every suite blocks. The known-red partition (a KNOWN_RED list skipped here and
+# run in a non-blocking second job) was emptied and deleted in M464, once each
+# Electron suite had passed three of three runs on a Mac runner (Stream A,
+# M458–M461). A suite that turns flaky is fixed, never moved back out of the gate.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -47,8 +42,9 @@ jobs:
     # correct budget is closer to the SUM, not less than either half. GitHub
     # bills minutes actually consumed, so a generous ceiling costs nothing; a
     # tight one produces a timeout, a red badge indistinguishable from a real
-    # failure.
-    timeout-minutes: 60
+    # failure. 90 since M464 folded the known-red job's suites (agents and
+    # product, about 20 minutes on the runner) back into this one.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,59 +93,9 @@ jobs:
       # slowest-first table of every suite.
       - name: Run the full verification harness
         env:
-          TC_VERIFY_SKIP: ${{ env.KNOWN_RED }}
           # The runner is roughly twice as slow as the machine the watchdogs were
           # measured on; headroom.1 skips itself above 1, so a slow runner
           # cannot read as a regression.
-          TC_WATCHDOG_SCALE: '2'
-        run: npm run verify
-
-  # Non-blocking by construction: continue-on-error keeps the PR green whatever
-  # this job reports, and its log is where the follow-up work reads failures.
-  verify-electron-known-red:
-    name: verify (known-red Electron suites, non-blocking)
-    runs-on: macos-latest
-    continue-on-error: true
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # M135. verify:meta panels-split.2 reads scripts/verify-panels.cjs at
-          # the `pre-v7-run` commit through `git show`; a depth-1 checkout has
-          # no such commit and the check would read as red on the runner for a
-          # reason that is not the code's. The check names the commit by sha
-          # because the tag was never pushed; full history is what it needs.
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          # 22, not 20: verify:relay and verify:canvas-sync use the global
-          # `WebSocket`, which Node only has from 22. On 20 they threw
-          # `WebSocket is not defined`, and relay then hung to its watchdog.
-          node-version: 22
-          cache: npm
-
-      # Several suites skip loudly rather than failing when no tmux binary is
-      # found. This is what makes them actually run instead of silently skip.
-      - name: Install tmux
-        run: brew install tmux
-
-      # postinstall runs electron-rebuild against node-pty. This is the step
-      # that fails first if the native toolchain is wrong.
-      - name: Install dependencies
-        run: npm ci
-      # M125's first CI run after the ship: every plain-node suite passed on the
-      # runner (the across fixture's fix held), then the chain died at verify:pty
-      # with `Electron.app: No such file or directory` — npm ci on the runner did
-      # not leave Electron's binary in node_modules (the README's own
-      # `Error: Electron uninstall` gotcha). Fetch it explicitly; a no-op when
-      # the postinstall already did.
-      - name: Fetch Electron's binary
-        run: node node_modules/electron/install.js
-
-      - name: Run the known-red Electron suites
-        env:
-          TC_VERIFY_ONLY: ${{ env.KNOWN_RED }}
           TC_WATCHDOG_SCALE: '2'
         run: npm run verify
 
