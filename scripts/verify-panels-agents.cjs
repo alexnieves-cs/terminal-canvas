@@ -1143,7 +1143,18 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // the drop landed host.left px left of the centre — inside the chat
         // only while it was wide enough (dropped "opened" on the runner; the
         // shot scene hit the same thing and says so).
-        const centre = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
+        // The centre is read once the chat holds still AND is the panel under
+        // that point: a freshly minted chat can still be gliding to its place
+        // (or under the camera's fly), and a centre read mid-move dropped
+        // "opened" on the runner once in three, onto bare canvas.
+        let lastCentre = null
+        const centre = await waitUntil(async () => {
+          const c = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); if (!p) return null; const r = p.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2
+            const hit = document.elementFromPoint(x, y)?.closest('.panel'); return { x, y, hit: hit ? hit.getAttribute('data-panel-id') : null } })()`)
+          const still = c && lastCentre && Math.abs(c.x - lastCentre.x) < 0.5 && Math.abs(c.y - lastCentre.y) < 0.5
+          lastCentre = c
+          return still && c.hit === chatId ? c : false
+        }, 6000, 250) || lastCentre
         const dropped = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'pic.png'))}, ${centre.x}, ${centre.y})`)
         const chip = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-attachment="pic.png"]')} !== null`), 4000)
         const droppedText = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'notes.txt'))}, ${centre.x}, ${centre.y})`)
