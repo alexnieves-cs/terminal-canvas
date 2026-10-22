@@ -2164,6 +2164,15 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           minted = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-chat-status]')].find((q) => !${JSON.stringify(knownChats)}.includes(q.getAttribute('data-panel-id'))); if (!p) return false
             const word = p.querySelector('[data-chat-backend]'); const interrupt = p.querySelector('[data-chat-interrupt]'); const door = p.querySelector('[data-open-in-terminal]')
             return { id: p.getAttribute('data-panel-id'), backend: word ? word.getAttribute('data-chat-backend') : null, wordText: word ? word.textContent : null, interruptDisabled: interrupt ? interrupt.disabled : null, interruptTitle: interrupt ? interrupt.title : null, doorDisabled: door ? door.disabled : null, doorTitle: door ? door.title : null, empty: p.querySelector('[data-chat-empty]')?.textContent ?? null, refusal: p.querySelector('[data-chat-refusal]')?.textContent ?? null, bodyText: (p.querySelector('.chat__transcript')?.textContent ?? '').slice(0, 160) } })()`), 6000)
+          // The fake runner can still be streaming its first turn when the panel
+          // paints, and while it streams Interrupt carries codex's no-interrupt
+          // reason instead of the idle one this check names. Read it again once
+          // the turn has settled.
+          if (minted) {
+            const sel = `.panel[data-panel-id="${minted.id}"] [data-chat-interrupt]`
+            await waitUntil(() => wc.executeJavaScript(`document.querySelector(${JSON.stringify(sel)})?.title === 'nothing is in flight'`), 6000)
+            Object.assign(minted, await wc.executeJavaScript(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); return { interruptDisabled: i ? i.disabled : null, interruptTitle: i ? i.title : null } })()`))
+          }
         } else {
           await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
         }
@@ -5535,16 +5544,24 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         if (typeof liveId !== 'string') throw new Error('editor.1d: Cmd+N spawned no panel to paste into')
         const liveSel = `.panel[data-panel-id=${JSON.stringify(liveId)}]`
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('${liveSel} .xterm') !== null`), 8000)
-        const liveBox = await wc.executeJavaScript(`(() => {
+        // Read where the panel is on each look: a panel still settling into
+        // place moves out from under a box read once.
+        const liveBoxNow = () => wc.executeJavaScript(`(() => {
           const n = document.querySelector('${liveSel} .panel__slot') || document.querySelector('${liveSel}')
           if (!n) return null
           const r = n.getBoundingClientRect()
           return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
-        if (liveBox !== null) await clickPanelAt(liveBox.x, liveBox.y)
+        // A click can land while the new panel is still arriving and miss the
+        // focus it means to give (one full-harness run read focusedBefore false
+        // and then the control paste had no terminal to reach), so it is sent
+        // again on each look until the terminal holds focus, as check 57 does.
         const focusedBefore = await waitUntil(async () => {
           const id = await wc.executeJavaScript(`window.__m4aFocusedId()`)
-          return id === liveId ? id : false
-        }, 8000)
+          if (id === liveId) return id
+          const box = await liveBoxNow()
+          if (box !== null) await clickPanelAt(box.x, box.y)
+          return false
+        }, 8000, 400)
         await settle()
         // DOM focus into the editor while focusedId still names the terminal:
         // that is the hazard exactly, not a contrived arrangement.
