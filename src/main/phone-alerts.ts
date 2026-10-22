@@ -38,6 +38,8 @@ export interface PhonePayload {
   message: string
   tags: string[]
   priority: number
+  /** M532. Allow once / Deny buttons (phone-answers.ts); absent unless answers are on and the panel has an askable request. */
+  actions?: Array<{ action: 'http'; label: string; url: string; method: 'POST'; body: string; clear: true }>
 }
 
 /** A topic is a name in a URL path: letters, digits, `-` and `_`, as ntfy itself allows. */
@@ -178,6 +180,8 @@ export function createPhoneAlerts(deps: {
   post: Post
   now?: () => number
   log?: (line: string) => void
+  /** M532. Buttons for this panel's push, minted only once a push is really going out. */
+  actions?: (panelId: string) => NonNullable<PhonePayload['actions']>
 }): PhoneAlerts {
   const now = deps.now ?? Date.now
   const sent: Array<{ panelId: string; at: number }> = []
@@ -207,7 +211,8 @@ export function createPhoneAlerts(deps: {
       sent.push({ panelId, at })
       spellPushed = true
       while (sent.length > 0 && at - sent[0]!.at > 60 * 60 * 1000) sent.shift()
-      return (await send(d.url, d.payload)) ? 'send' : 'failed'
+      const actions = deps.actions?.(panelId) ?? []
+      return (await send(d.url, actions.length === 0 ? d.payload : { ...d.payload, actions })) ? 'send' : 'failed'
     },
     waiting(count) {
       // A spell ends when nothing waits; the next one may push again.

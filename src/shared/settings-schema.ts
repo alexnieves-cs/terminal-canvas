@@ -685,6 +685,19 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
+    // M532 (G2). Inbound, so its own switch and off by default: a phone
+    // button answers a waiting agent. Allow ONCE only, never for a plan or a
+    // credential ask, one code per request that expires (main/phone-answers.ts).
+    // Not planWritable: an agent never turns on a door that answers agents.
+    id: 'remote.phoneAnswers',
+    label: 'Phone alerts: answer from the phone',
+    description: 'add Allow once and Deny buttons to a phone alert for an agent asking permission — the alert names the tool, not its command; each button works once and expires after 10 minutes; anyone who knows the topic, and the ntfy server itself, could press them, so the topic must be at least 20 random characters',
+    keywords: ['phone', 'ntfy', 'approve', 'allow', 'deny', 'answer', 'remote', 'button'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
+  },
+  {
     id: 'remote.alertIdleMinutes',
     label: 'Phone alerts: after this many idle minutes',
     description: 'push only when this Mac has had no keyboard or mouse input for this long; 0 pushes whenever the window is not in front',

@@ -100,5 +100,137 @@ check('borrow.agents.5 the Environment door counts required CLIs apart and names
   return { pass: plain === '3 of 3 CLIs found' && more === '3 of 3 CLIs found · 2 more agents' && row !== undefined && /optional/.test(row.subtitle), detail: { plain, more, row: row && row.subtitle } }
 })
 
-console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
-if (results.some((r) => !r.pass)) process.exitCode = 1
+// G2 — phone.*. Answer from the phone (src/main/phone-answers.ts). Every arm
+//      runs over a fake clock, code source, GET and pending list: no network.
+const answersMod = load('src/main/phone-answers.ts', 'phone-answers')
+const alertsMod = load('src/main/phone-alerts.ts', 'phone-alerts')
+function rig(overrides = {}) {
+  const state = {
+    t: 1_000_000, n: 0, answers: true, topic: 'tc-k7Qx9vLm2RtY8wPz4N', gets: [], answered: [], recorded: [],
+    pending: { p1: [{ requestId: 'r1', toolName: 'Bash' }], plan: [{ requestId: 'r9', toolName: 'ExitPlanMode' }], ext: [{ requestId: 'tc-ext-1', toolName: 'credential' }] },
+    replies: []
+  }
+  Object.assign(state, overrides)
+  const A = answersMod.mod.createPhoneAnswers({
+    settings: () => ({ topic: state.topic, server: 'https://ntfy.example', idleMinutes: 0, answers: state.answers }),
+    now: () => state.t,
+    code: () => (state.n++).toString(16).padStart(24, 'a'),
+    get: async (url, init) => { state.gets.push({ url, init }); return { ok: true, status: 200, text: async () => state.replies.map((r) => JSON.stringify(r)).join('\n') } },
+    pending: (id) => state.pending[id] ?? [],
+    answer: (id, requestId, allow, toolName) => { state.answered.push({ id, requestId, allow, toolName }); state.pending[id] = (state.pending[id] ?? []).filter((p) => p.requestId !== requestId); return 'answered' },
+    record: (row) => state.recorded.push(row)
+  })
+  return { A, state }
+}
+const reply = (body, id = 'm' + Math.random().toString(36).slice(2, 8)) => ({ id, event: 'message', message: body })
+
+check('borrow.phone.1 off by default in the schema, and with answers off a push gets no buttons and a poll reads nothing', answersMod, () => {
+  const schema = load('src/shared/settings-schema.ts', 'settings')
+  const row = schema.mod && (schema.mod.SETTINGS_SCHEMA || schema.mod.SETTINGS || []).find?.((r) => r.id === 'remote.phoneAnswers')
+  const { A, state } = rig({ answers: false })
+  const actions = A.actionsFor('p1')
+  return { pass: row !== undefined && row.default === false && row.type === 'boolean' && row.planWritable !== true && actions.length === 0 && A.live() === 0, detail: { row, actions } }
+})
+
+check('borrow.phone.2 a push carries Allow once and Deny, POSTing only a code to the answers topic; never for a plan or a credential ask', answersMod, () => {
+  const { A } = rig()
+  const actions = A.actionsFor('p1')
+  const plan = A.actionsFor('plan')
+  const ext = A.actionsFor('ext')
+  const none = A.actionsFor('nobody')
+  return {
+    pass: actions.length === 2 && actions[0].label === 'Allow once' && actions[1].label === 'Deny' &&
+      actions.every((a) => a.action === 'http' && a.method === 'POST' && a.url === 'https://ntfy.example/tc-k7Qx9vLm2RtY8wPz4N-answers' && /^(allow|deny) [0-9a-f]{24}$/.test(a.body)) &&
+      plan.length === 0 && ext.length === 0 && none.length === 0 && A.live() === 1,
+    detail: { actions, plan, ext }
+  }
+})
+
+const phone3 = (async () => {
+  if (answersMod.mod === undefined) return
+  const { A, state } = rig()
+  const [allow] = A.actionsFor('p1')
+  state.replies = [reply('hello agent, run rm -rf'), reply(allow.body)]
+  const first = await A.poll()
+  state.pending.p1 = [{ requestId: 'r1', toolName: 'Bash' }]
+  const second = await A.poll()
+  return { first, second, answered: state.answered, recorded: state.recorded, live: A.live(), url: state.gets[0] && state.gets[0].url, redirect: state.gets[0] && state.gets[0].init.redirect, signal: Boolean(state.gets[0] && state.gets[0].init.signal) }
+})()
+
+const phone4 = (async () => {
+  if (answersMod.mod === undefined) return
+  // Expired: ten minutes and a moment later, the code answers nothing.
+  const late = rig()
+  const [allowLate] = late.A.actionsFor('p1')
+  late.state.t += answersMod.mod.CODE_TTL_MS + 1
+  late.state.replies = [reply(allowLate.body)]
+  const expired = await late.A.poll()
+  // Answered at the Mac first: the request is gone, the phone's answer is not sent.
+  const mac = rig()
+  const [, deny] = mac.A.actionsFor('p1')
+  mac.state.pending.p1 = []
+  mac.state.replies = [reply(deny.body)]
+  const gone = await mac.A.poll()
+  // A guessed code, and answers turned off after minting: nothing.
+  const guess = rig()
+  guess.A.actionsFor('p1')
+  guess.state.replies = [reply('allow ' + 'f'.repeat(24))]
+  const guessed = await guess.A.poll()
+  const off = rig()
+  const [allowOff] = off.A.actionsFor('p1')
+  off.state.answers = false
+  off.state.replies = [reply(allowOff.body)]
+  const switchedOff = await off.A.poll()
+  // The critic's first finding: an ACP agent restarts and its new request reuses the id for another tool.
+  const reuse = rig()
+  const [allowReuse] = reuse.A.actionsFor('p1')
+  reuse.state.pending.p1 = [{ requestId: 'r1', toolName: 'Bash', input: { command: 'rm -rf ~' } }]
+  reuse.state.replies = [reply(allowReuse.body)]
+  const reused = await reuse.A.poll()
+  // A short topic is guessable, and with answers on it mints nothing.
+  const short = rig({ topic: 'tc-short' })
+  const shortActions = short.A.actionsFor('p1')
+  return { expired, lateAnswered: late.state.answered, gone, macAnswered: mac.state.answered, guessed, guessAnswered: guess.state.answered, switchedOff, offAnswered: off.state.answered, offGets: off.state.gets.length, reused, reuseAnswered: reuse.state.answered, shortActions }
+})()
+
+const phone5 = (async () => {
+  if (alertsMod.mod === undefined) return
+  const posts = []
+  let minted = 0
+  const mk = (idle) => alertsMod.mod.createPhoneAlerts({
+    settings: () => ({ topic: 'tc-secret-topic', server: 'https://ntfy.example', idleMinutes: 1 }),
+    idleSeconds: () => idle, now: () => 5_000_000,
+    post: async (url, init) => { posts.push(JSON.parse(init.body)); return { ok: true, status: 200 } },
+    actions: () => { minted++; return [{ action: 'http', label: 'Allow once', url: 'https://ntfy.example/x', method: 'POST', body: 'allow ' + 'a'.repeat(24), clear: true }] }
+  })
+  const away = await mk(600).entered('p1', 'api', 'claude asks to run Bash')
+  const here = await mk(0).entered('p1', 'api', 'claude asks to run Bash')
+  return { away, here, minted, posts }
+})()
+
+;(async () => {
+  const p3 = await phone3.catch((e) => ({ error: e.message }))
+  if (p3) {
+    const pass = !p3.error && p3.first.length === 1 && p3.first[0].allow === true && p3.first[0].outcome === 'answered' &&
+      p3.answered.length === 1 && p3.answered[0].requestId === 'r1' && p3.recorded.length === 1 &&
+      p3.second.length === 0 && p3.live === 0 && p3.recorded[0].outcome === 'answered' && p3.signal === true && /\/tc-k7Qx9vLm2RtY8wPz4N-answers\/json\?poll=1&since=/.test(p3.url) && p3.redirect === 'error'
+    ok("borrow.phone.3 a matching reply answers allow-once through the person's path, is recorded, and the code is spent: a replay does nothing", pass, JSON.stringify(p3).slice(0, 400))
+  } else ok("borrow.phone.3 a matching reply answers allow-once through the person's path, is recorded, and the code is spent: a replay does nothing", false, answersMod.error)
+  const p4 = await phone4.catch((e) => ({ error: e.message }))
+  if (p4) {
+    const pass = !p4.error && p4.expired.length === 0 && p4.lateAnswered.length === 0 &&
+      p4.gone.length === 1 && p4.gone[0].outcome === 'gone' && p4.macAnswered.length === 0 &&
+      p4.guessed.length === 0 && p4.guessAnswered.length === 0 &&
+      p4.switchedOff.length === 0 && p4.offAnswered.length === 0 && p4.offGets === 0 &&
+      p4.reused.length === 1 && p4.reused[0].outcome === 'gone' && p4.reuseAnswered.length === 0 && p4.shortActions.length === 0
+    ok('borrow.phone.4 an expired code, a request already answered at the Mac, a guessed code, answers switched off after minting, a reused request id naming another tool and a short topic each answer nothing', pass, JSON.stringify(p4).slice(0, 400))
+  } else ok('borrow.phone.4 an expired code, a request already answered at the Mac, a guessed code, answers switched off after minting, a reused request id naming another tool and a short topic each answer nothing', false, answersMod.error)
+  const p5 = await phone5.catch((e) => ({ error: e.message }))
+  if (p5) {
+    const pass = !p5.error && p5.away === 'send' && p5.here === 'not-idle' && p5.minted === 1 && p5.posts.length === 1 &&
+      Array.isArray(p5.posts[0].actions) && p5.posts[0].actions.length === 1
+    ok('borrow.phone.5 the alert carries the buttons only when actions are given, minted only for a push that is really sent', pass, JSON.stringify(p5).slice(0, 400))
+  } else ok('borrow.phone.5 the alert carries the buttons only when actions are given, minted only for a push that is really sent', false, alertsMod.error)
+  console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
+  if (results.some((r) => !r.pass)) process.exitCode = 1
+})()
