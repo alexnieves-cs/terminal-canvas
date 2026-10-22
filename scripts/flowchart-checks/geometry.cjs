@@ -357,6 +357,18 @@ module.exports = async function (ok, F) {
     times.push(performance.now() - s)
   }
   const total = performance.now() - t0
+  // A route is deterministic, so its cost is the FASTEST of a few runs: a
+  // single timing also holds whatever GC pause or preemption landed inside
+  // it. CI's concurrent first wave read one 0.02 ms route at 16.9 ms that
+  // way. The 10 ms bar is unchanged; a route that is really slow is slow on
+  // every run, so the minimum still catches it.
+  for (let k = 0; k < inputs.length; k++) {
+    for (let rep = 0; rep < 2; rep++) {
+      const s = performance.now()
+      G.routeConnector(inputs[k].input)
+      times[k] = Math.min(times[k], performance.now() - s)
+    }
+  }
   const sorted = [...times].sort((a, b) => a - b)
   const loopMax = Math.max(...times.filter((_, k) => inputs[k].kind === 'loop'))
   const fmt = (v) => v.toFixed(3)
