@@ -47,7 +47,7 @@ jobs:
             grep -E '^[0-9]+/[0-9]+ passed' suite-$i.log | tail -1 || true
             grep -E '^(FAIL|\s*FAIL)' suite-$i.log | cut -c1-2500 || true
             grep -nE 'watchdog — run did not finish' suite-$i.log || true
-            echo "--- tail"; tail -8 suite-$i.log | cut -c1-300
+            echo "--- tail"; tail -30 suite-$i.log | cut -c1-300
           done
       # Red unless all three runs reported and none failed: the job's colour is the verdict.
       - name: Verdict
