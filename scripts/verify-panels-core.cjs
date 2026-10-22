@@ -328,7 +328,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     const placed7 = await occupiedWorld(wc)
     const newest7 = placed7.find((r) => r.newest)
     const overlaps7 = newest7 === undefined ? ['missing'] : placed7.filter((r) => !r.newest && overlapsRect(r, newest7)).map((r) => r.id)
-    const shown7 = newest7 === undefined ? false : await onScreen(wc, newest7.id)
+    // On screen once the reveal's flight LANDS (the view had no room, so it
+    // flies): one settle() read the camera still at INITIAL once in three runs.
+    const shown7 = newest7 === undefined ? false : await waitUntil(async () => { await cameraStill(wc); return await onScreen(wc, newest7.id) }, 4000)
     // The M402 critic: without a pin on WHERE, "clear and on screen" passed a
     // panel anywhere in view. The store rect, to 1px, against the spot the
     // rule gives for what the canvas showed at the press (place-probe.cjs's
