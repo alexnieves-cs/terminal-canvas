@@ -586,6 +586,22 @@ const FACTS = {
       fitDoor !== undefined && typeof fitDoor.canvas === 'string' && /HUD/.test(fitDoor.canvas) && fitDoor.palette === 'task.fit' &&
         commandsSrc.includes("id: 'task.fit'") && fitBound?.kind === 'plan' && fitBound.plan.steps[0]?.verb === 'fit-task' && fitDoor.workflow === 'an action node whose line is: fit-task',
       JSON.stringify({ fitDoor, fitBound }))
+    // M480 — tonight.doors.1. Tonight is a VERB with all four doors: the New
+    // task sheet's Run tonight line, the task.tonight row, `tc plan tonight`
+    // and an action node holding `tonight stop`. A teammate's plan is refused
+    // by name — a night of runs across every lane is the person's to start.
+    const tonightDoor = doors?.['tonight']
+    const tonightBound = P.buildPlan(P.parsePlanLine('tonight'), facts)
+    const tonightStop = P.buildPlan(P.parsePlanLine('tonight stop'), facts)
+    const sheetSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'StartWorkSheet.tsx'), 'utf8')
+    const boardSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'palette-actions', 'board.ts'), 'utf8')
+    const teammateRefusal = tonightBound?.kind === 'plan' ? P.agentDoorRefusal(tonightBound.plan.steps[0], facts, { teammateId: 'tm1' }) : null
+    ok('tonight.doors.1 tonight is a verb with a real New task gesture (wired on the typed door), the task.tonight row, an agent line and an action-node line (`tonight stop`) that bind, and a teammate caller is refused by name',
+      tonightDoor !== undefined && tonightDoor.palette === 'task.tonight' && commandsSrc.includes("id: 'task.tonight'") && commandsSrc.includes("id: 'task.tonight-stop'") &&
+        tonightBound?.kind === 'plan' && tonightBound.plan.steps[0]?.verb === 'tonight' && tonightStop?.kind === 'plan' && tonightStop.plan.steps[0]?.args.op === 'stop' &&
+        sheetSrc.includes('data-start-tonight-run') && /runTonight: \(\) => self\.runTonight\(\)/.test(boardSrc) &&
+        typeof teammateRefusal === 'string' && teammateRefusal.length > 0,
+      JSON.stringify({ tonightDoor, tonightBound, tonightStop, teammateRefusal }))
     // M264 — Fit task lights the sticky lens; Fit task is primary in the HUD.
     ok('fit-task.stage.1 Fit task sets relatedItemId on a successful frame, and the HUD places Fit task before Fit all',
       /setRelatedItemId\(target\.itemId\)/.test(fitTaskFn) && fitBeforeAll,

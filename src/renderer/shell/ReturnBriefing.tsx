@@ -3,8 +3,9 @@ import { outward } from '@shared/outward'
 import type { TimelineEntry } from '@shared/run-ledger'
 import {
   buildReturnBriefing, sinceWords,
-  type BriefEvidence, type BriefLine, type BriefingDecision, type ReturnBriefing, type TaskBriefing
+  type BriefEvidence, type BriefLine, type BriefingDecision, type BriefingTaskInput, type MorningItem, type ReturnBriefing, type TaskBriefing
 } from '@shared/return-briefing'
+import { autoVerdictOf } from '@shared/auto'
 import type { PersistedWorkItem } from '@shared/work-items'
 import { getChat } from '@renderer/chat/chat-store'
 import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
@@ -65,7 +66,9 @@ export function useReturnBriefing(deps: BriefingDeps): ReturnBriefing | null {
       const chat = t.panelId === undefined ? undefined : getChat(t.panelId)
       const reply = chat?.turns.filter((turn) => turn.role === 'assistant').pop()
       const text = reply?.blocks.map((b) => (b.type === 'text' ? b.text : '')).join(' ').replace(/\s+/g, ' ').trim() ?? ''
+      const auto = autoOfMembers(membersOf(t.id))
       return {
+        ...(auto === undefined ? {} : { auto }),
         itemId: t.id,
         title: t.title,
         panelIds: [...membersOf(t.id)],
@@ -77,6 +80,23 @@ export function useReturnBriefing(deps: BriefingDeps): ReturnBriefing | null {
     }), decisions)
   }, [since, timelines, tasks, inbox, handoffOf, membersOf, labelOf])
 }
+
+/**
+ * M478. How the task's last auto run ended, read from its member chats'
+ * snapshots (main's projection): the first member with a finished run wins.
+ */
+function autoOfMembers(panelIds: readonly string[]): BriefingTaskInput['auto'] {
+  for (const id of panelIds) {
+    const a = getChat(id).snapshot?.auto
+    if (a === undefined) continue
+    const v = autoVerdictOf(a)
+    if (v !== undefined) return { verdict: v, ...(a.check === undefined ? {} : { check: a.check }) }
+    if (a.state === 'stuck' && a.reason === 'check') return { stuck: 'check', ...(a.check === undefined ? {} : { check: a.check }) }
+  }
+  return undefined
+}
+
+const MORNING_WORDS: Record<MorningItem['kind'], string> = { failed: 'failed', decision: 'decide', checked: 'checked', review: 'review', claimed: 'unchecked' }
 
 export interface ReturnBriefingCardProps {
   briefing: ReturnBriefing
@@ -130,6 +150,22 @@ export function ReturnBriefingCard({ briefing, onGoToPanel, onReview, onDecision
         <div className="resume-banner__kicker">Since you left · {sinceWords(briefing.since, now)}</div>
         <p className="briefing__headline" data-briefing-headline>{briefing.headline}</p>
       </div>
+      {/* M478. The morning queue: every task's items as one list, in the order to work it. */}
+      {briefing.queue.length > 1 && (
+        <div className="briefing__group" data-morning-queue>
+          <span className="briefing__group-title">Work it in this order</span>
+          <ol className="briefing__lines">
+            {briefing.queue.map((m, i) => (
+              <li key={`${m.itemId}:${m.kind}:${i}`} className="briefing__line" data-morning-item={m.kind} data-briefing-tone={m.kind === 'failed' ? 'failed' : m.kind === 'decision' ? 'needs-you' : m.kind === 'checked' ? 'passed' : 'neutral'}>
+                <span className="briefing__text"><b>{MORNING_WORDS[m.kind]}</b> · {outward(m.title, 'return briefing').text} — {outward(m.text, 'return briefing').text}</span>
+                {m.evidence !== undefined && (
+                  <button type="button" className="rail-row__verb" data-briefing-evidence={m.evidence.kind} title={m.evidence.kind === 'output' ? 'Open this run\'s own output' : m.evidence.kind === 'review' ? 'Open the task\'s review' : m.evidence.kind === 'decision' ? 'Open this decision in Needs you' : 'Go to the panel'} {...shellControl(() => act(m.evidence as BriefEvidence))}>{verb(m.evidence)}</button>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       {briefing.tasks.map(task)}
       {briefing.quietCount > 0 && <p className="briefing__quiet">{briefing.quietCount} other task{briefing.quietCount === 1 ? '' : 's'} had nothing new.</p>}
       <div className="briefing__verbs">

@@ -1,4 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, Dispatch, RefObject, SetStateAction, JSX } from 'react'
+import { radarFlags, type RadarReport } from '@shared/collision-radar'
 import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { AgentBackend } from '@shared/agent-session'
 import type { AgentOptions } from '@shared/cost'
@@ -149,6 +150,8 @@ export interface PanelNodeContext {
   stopWorkflowRun: (templateId: string, runId?: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
   taskContextFor: (itemId: string | undefined) => ReviewTaskContext | undefined
   taskHandoffOf: (itemId: string) => ReviewHandoff | undefined
+  /** M479. The collision radar's last answer, for the work cards. */
+  radar: RadarReport | null
   teammates: PersistedTeammate[] | null
   templateRows: PersistedTemplate[]
   terminalNameOf: ReadonlyMap<string, string>
@@ -161,7 +164,7 @@ export interface PanelNodeContext {
 
 export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Element | null {
   const {
-    activeWorkspaceId, addGithubToBoard, addJiraToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSheetView, setWatcherArmed, shared, skillSources, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
+    activeWorkspaceId, addGithubToBoard, addJiraToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSheetView, setWatcherArmed, shared, skillSources, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
   } = ctx
   // The partition, at the last hop. onSelect is selectAndRaise and
   // NOT onSelectPanel: the latter clears the dormant id and calls
@@ -469,6 +472,7 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
       // record, and a missing member is a fact of now, not of the task.
       onShow={(panelId) => { const r = paletteActionsRef.current?.showTask(panelId); if (r !== undefined && (r.kind === 'refused' || r.partial === true)) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) }}
       handoff={item === undefined ? undefined : taskHandoffOf(item.id)}
+      collisions={item === undefined || radar === null ? undefined : radarFlags(item.id, radar, (id) => workItems.find((w) => w.id === id)?.title ?? 'another task')}
       // M202 (D07). Resume is a CAMERA and FOCUS move onto the
       // lane's conversation, never a send: the person decides what
       // their agent is told next.

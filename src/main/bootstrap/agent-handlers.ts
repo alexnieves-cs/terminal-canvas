@@ -11,6 +11,7 @@ import { importClaudeTranscript } from '../claude-transcript-import'
 import { resolveTranscript } from '../transcript-reader'
 import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
 import { parseAutoCheck } from '../../shared/auto'
+import { parseTonightBatch } from '../../shared/tonight'
 import { BACKENDS, backendOf, type AgentBackend } from '../../shared/agent-backends'
 import { capSentence, type AgentCreateResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
 import type { AgentHandlers } from '../ipc'
@@ -230,6 +231,18 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
       return state.agents?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit, ...(check.check === undefined ? {} : { check: check.check }) }) ?? { kind: 'refused', reason: 'the agent runtime is not available' }
     },
     autoStop: (id) => state.agents?.stopAuto(id) ?? false,
+    // M480. Parsed by name here, like autoStart's check; the runner refuses a
+    // second batch while one is live and a task whose chat has no session.
+    tonightStart: (raw) => {
+      if (state.tonight === null) return { kind: 'refused', reason: 'the agent runtime is not available' }
+      const parsed = parseTonightBatch(raw)
+      if (parsed.kind === 'refused') return parsed
+      const r = state.tonight.start(parsed.batch)
+      const status = state.tonight.status()
+      return r.kind === 'refused' ? r : status === null ? { kind: 'refused', reason: 'the batch ended before it began' } : { kind: 'started', status }
+    },
+    tonightStop: () => state.tonight?.stop() ?? false,
+    tonightStatus: () => state.tonight?.status() ?? null,
     importSession: ({ fromPanelId, toPanelId }) => {
       const sessionId = layoutStore.session(fromPanelId)
       if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }

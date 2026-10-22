@@ -282,6 +282,12 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'zoom-fit', label: 'Zoom to fit', args: [], destructive: false, actions: ['zoomToFit'], target: 'canvas', hint: 'the selected panels, or every panel, in view' },
   // M258. Fit task: the ACTIVE task's panels — the lens's task, else the selected panel's one task. Distinct from zoom-fit (the selection or everything).
   { id: 'fit-task', label: 'Fit task', args: [], destructive: false, actions: ['fitTask'], target: 'canvas', hint: 'frame the active task — the one Show related lit, else the selected panel\'s task' },
+  // M480. TONIGHT. Not destructive, for `dispatch`'s reason: it opens nothing
+  // and writes nothing outward — each task is an auto run on a conversation
+  // that already exists, bounded by its turn limit, its check and the usage
+  // window. It IS on TEAMMATE_REFUSED_VERBS (plan.ts): a night of runs across
+  // every lane is the person's to start, never a teammate's plan.
+  { id: 'tonight', label: 'Run tonight', args: [{ name: 'op', kind: 'value', optional: true }], destructive: false, actions: ['runTonight'], target: 'canvas', hint: 'run the open tasks one at a time while you are away — paused at usage limits, Mac kept awake; `tonight stop` ends the batch' },
   { id: 'workspace-from-template', label: 'New workspace from template', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['workspaceFromTemplate'], target: 'canvas', hint: 'a fresh workspace holding the shape' },
   { id: 'zoom-reset', label: 'Reset zoom', args: [], destructive: false, actions: ['resetZoom'], target: 'canvas', hint: 'the initial camera' },
   { id: 'workspace', label: 'Switch workspace', args: [{ name: 'workspace', kind: 'key' }], destructive: false, actions: ['switchWorkspace'], target: 'canvas', hint: 'switch to a workspace by id' },
@@ -556,6 +562,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: 'an action node whose line is: preview-capture' },
   'preview-bind': { canvas: 'Bind source / Change source on the preview pane', palette: 'preview.bind', agent: 'tc plan preview-bind', workflow: 'an action node whose line is: preview-bind' },
   'fit-task': { canvas: 'Fit task (primary) in the canvas HUD\'s zoom cluster — also lights the related lens', palette: 'task.fit', agent: 'tc plan fit-task', workflow: 'an action node whose line is: fit-task' },
+  tonight: { canvas: 'Run tonight on the New task sheet', palette: 'task.tonight', agent: 'tc plan tonight', workflow: 'an action node whose line is: tonight stop' },
   'show-task': { canvas: 'Show on a work card', palette: 'task.show', agent: 'tc plan show-task wk1', workflow: 'an action node whose line is: show-task wk1' },
   'show-related': { canvas: 'Show related in the ⋯ menu of any panel of a task, and Related in the command pill with one panel of a task selected', palette: 'task.related', agent: 'tc plan show-related wk1', workflow: 'an action node whose line is: show-related wk1' },
   'arrange-task': { canvas: 'Arrange this task in the ⋯ menu of any panel of a task, Arrange on the lens bar, and Arrange task in the command pill with one panel of a task selected', palette: 'task.arrange', agent: 'tc plan arrange-task wk1', workflow: 'an action node whose line is: arrange-task wk1' },
