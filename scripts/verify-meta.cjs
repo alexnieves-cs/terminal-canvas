@@ -882,9 +882,11 @@ console.log('\n' + '='.repeat(60))
 // M123 — update.1. THE UPDATE CHECK NEVER REACHES THE NETWORK FROM A SUITE,
 // AND NO PLAN MAY SWITCH IT ON. Three facts pinned as text, each with a
 // silent failure behind it. (a) The setting `update.checkOnLaunch` exists,
-// is a boolean, defaults to false and is NOT `planWritable`: a plan that
-// could turn on a launch-time network call has the shape of exfiltration,
-// the same reason telemetry's keys carry no flag. (b) `main/update-check.ts`
+// is a boolean and is NOT `planWritable`: a plan that could flip a
+// launch-time network call has the shape of exfiltration, the same reason
+// telemetry's keys carry no flag. Its default is ON since 6.0 (M474, the B6
+// step: an unsigned build never hears of a fix otherwise), so the default is
+// pinned as TRUE — a quiet flip back would silence every install. (b) `main/update-check.ts`
 // imports no `https` — the fetcher is injected and the real one lives in
 // `main/bootstrap/workspace-handlers.ts`, which no suite bundles — so it runs under plain
 // node in verify:file. (c) No suite script holds a real fetcher: `https.get(`,
@@ -899,12 +901,12 @@ console.log('\n' + '='.repeat(60))
   const schema = stripComments(read('src/shared/settings-schema.ts') ?? '')
   const start = schema.indexOf("id: 'update.checkOnLaunch'")
   const entry = start === -1 ? '' : schema.slice(schema.lastIndexOf('{', start), schema.indexOf('}', start))
-  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: false/.test(entry) && !/planWritable/.test(entry)
+  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: true/.test(entry) && !/planWritable/.test(entry)
   const moduleSrc = stripComments(read('src/main/update-check.ts') ?? '')
   const moduleOk = moduleSrc !== '' && !/['"](node:)?https['"]/.test(moduleSrc) && /export (async )?function checkForUpdate/.test(moduleSrc)
   const offenders = readdirSync(join(ROOT, 'scripts')).filter((n) => /\.cjs$/.test(n))
     .filter((f) => /https\.get\(|['"](node:)?https['"]|api\.github\.com\/repos\/\$\{/.test(stripComments(read(join('scripts', f)) ?? '')))
-  ok('update.1 update.checkOnLaunch is a boolean, default false, not planWritable; main/update-check.ts imports no https (the fetcher is injected); no script under scripts/ holds https.get, an https import or a templated api.github.com url',
+  ok('update.1 update.checkOnLaunch is a boolean, default true, not planWritable; main/update-check.ts imports no https (the fetcher is injected); no script under scripts/ holds https.get, an https import or a templated api.github.com url',
     settingOk && moduleOk && offenders.length === 0,
     JSON.stringify({ settingOk, moduleOk, offenders }))
 }

@@ -1700,7 +1700,9 @@ app.whenReady().then(async () => {
     // always. A shelf seeded with nothing would paint only derived columns,
     // and the ordering rule the scene exists to judge would be invisible.
     shelf: { columns: [{ id: 'col-milestone', title: 'starting a milestone', keys: [skillKey('project', 'brainstorming'), skillKey('project', 'writing-plans'), skillKey('project', 'test-driven-development')] }] },
-    preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false, 'vault.root': join(FIX, 'notes') },
+    // M474. The launch-time update check is on by default since 6.0; a scene
+    // that painted its answer would change the day a release is cut.
+    preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false, 'vault.root': join(FIX, 'notes'), 'update.checkOnLaunch': false },
     // M77. The chat's baseline too: the fixture's edit to server.ts predates
     // boot, so it is seeded rather than captured (as the terminal's is).
     baselines: { live: { root: REPO, sha: baselineSha }, chat: { root: REPO, sha: baselineSha } }
