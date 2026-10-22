@@ -642,6 +642,54 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
+    // M488. Off unless a person turns it on, and never `planWritable`: a plan
+    // that could set this would be an agent granting itself the answer to its
+    // own permission prompts. The description names who it reaches HONESTLY:
+    // the control socket is any process this user runs, and an agent in a
+    // panel that skips `tc` is one (the token refusal only stops an accident).
+    id: 'remote.mcpWrites',
+    label: 'Let MCP clients answer approvals and accept work',
+    description: 'allow or deny a chat\'s permission request and merge a task\'s lane through tc mcp — while on, any program you run on this Mac can do this, including an agent in a panel that talks to the control socket directly; each answer goes on the decision record',
+    keywords: ['mcp', 'remote', 'approve', 'approval', 'permission', 'accept', 'merge', 'claude code', 'client', 'write'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
+  },
+  {
+    // M489. Off while empty. A topic is readable by anyone who knows its name,
+    // so the description says to make it unguessable, and the push carries
+    // only a panel's name and its question — scrubbed, paths cut to a basename
+    // (main/phone-alerts.ts). Not planWritable: an agent never chooses where
+    // this app sends words.
+    id: 'remote.ntfyTopic',
+    label: 'Phone alerts: ntfy topic',
+    description: 'when an agent is waiting on you and you are away from your Mac, push its name and question to this ntfy topic — subscribe to the same topic in the ntfy app; anyone who knows the name can read it, so make it long and random; empty is off',
+    keywords: ['phone', 'ntfy', 'push', 'alert', 'notification', 'mobile', 'away', 'remote', 'topic'],
+    type: 'text',
+    default: '',
+    category: TELEMETRY_CATEGORY
+  },
+  {
+    id: 'remote.ntfyServer',
+    label: 'Phone alerts: ntfy server',
+    description: 'the ntfy server to push through — the free public one, or your own; https only',
+    keywords: ['phone', 'ntfy', 'server', 'self-hosted', 'push', 'alert'],
+    type: 'text',
+    default: 'https://ntfy.sh',
+    category: TELEMETRY_CATEGORY
+  },
+  {
+    id: 'remote.alertIdleMinutes',
+    label: 'Phone alerts: after this many idle minutes',
+    description: 'push only when this Mac has had no keyboard or mouse input for this long; 0 pushes whenever the window is not in front',
+    keywords: ['phone', 'ntfy', 'idle', 'away', 'minutes', 'alert'],
+    type: 'number',
+    default: 3,
+    min: 0,
+    max: 120,
+    category: TELEMETRY_CATEGORY
+  },
+  {
     // M112. A separate decision from the DSN because it fails differently: a
     // JS event is scrubbed field by field (main/telemetry.ts); a native dump
     // is process memory, which no scrubber reads.

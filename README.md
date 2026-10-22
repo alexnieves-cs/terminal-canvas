@@ -204,7 +204,15 @@ The first-run card asks what you want to work on and in which repository, then s
   Its tools read the canvas, the attention queue and the decision audit,
   propose a task, open a review and send a message to a chat agent. Each is a line on
   the same socket, with the same caps, and every answer is scrubbed on its way
-  out. A permission prompt is never answered through it.
+  out. Answering a chat's permission request and accepting a lane are refused
+  unless you turn on *Let MCP clients answer approvals and accept work* in
+  Settings ▸ Privacy & export; an agent inside a panel is refused either way,
+  and each answer goes on the decision record.
+- **Your phone buzzes when an agent asks you something.** Set an ntfy topic in
+  Settings ▸ Privacy & export and subscribe to it in the free
+  [ntfy](https://ntfy.sh) app. When an agent starts waiting on you and the Mac
+  has been idle a few minutes, the phone gets its name and question, scrubbed
+  and with every path cut to a basename. `tc phone-test` sends one test push.
 - **Command boundaries the app can see.** A login shell is decorated at spawn
   with OSC 133 marks (zsh through a `ZDOTDIR` shim that sources your own
   files first, bash through `--rcfile`), so every command gets a gutter mark
