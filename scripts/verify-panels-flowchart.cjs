@@ -69,7 +69,15 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const js = (code) => wc.executeJavaScript(code)
-  const reload = async () => { await reloadWithin(wc); await settle() }
+  // A development build's "Maximum update depth" warning names no component, so
+  // the page appends the stack the warning was raised on: its frames point
+  // into the unminified bundle, where triage prints the lines they name.
+  const installLoopTrap = () => js(`(() => { if (window.__loopTrap) return true; window.__loopTrap = true
+    const orig = console.error.bind(console)
+    console.error = (...args) => { const head = String(args[0]); if (head.includes('Maximum update depth')) orig(head + ' [stack] ' + String(new Error().stack)); else orig(...args) }
+    window.addEventListener('error', (e) => { orig('[stack] ' + String(e.error && e.error.stack || e.message)) })
+    return true })()`).catch(() => false)
+  const reload = async () => { await reloadWithin(wc); await settle(); await installLoopTrap() }
   const press = async (x, y, modifiers = []) => {
     wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })
     wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })
@@ -880,7 +888,7 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       const manyBefore = await rectOf(pick.map((s) => s.id))
       // The thrown error's own stack, as console text the recorder above keeps:
       // the console line alone carries only the message.
-      await js(`(() => { window.addEventListener('error', (e) => { console.error('[stack] ' + String(e.error && e.error.stack || e.message)) }); return true })()`)
+      await installLoopTrap()
       const many = await dragFrames(lead, '200 shapes · drag a 40-shape selection (multi-move)')
       // A condition, not the drag's one settle(): two of three CI runs read
       // every member 'missing' after the multi-move commit, so the read waits
