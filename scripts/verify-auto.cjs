@@ -529,6 +529,31 @@ function makeManager(overrides = {}) {
     n.runner.stop()
   }
 
+  // M480 (C2b) — tonight.batch.1. What the door hands main: the board's open
+  // tasks with a live conversation, in board order, each left-out one named.
+  {
+    const recipe = (checks) => ({ id: 'r', version: 1, hash: 'h', at: 0, definition: { id: 'r', name: 'r', checks } })
+    const items = [
+      { id: 'w1', title: 'Fix login', state: 'working', panelId: 'c1', brief: 'the 500 on bad passwords', criteria: ['returns 401', ' '], recipeUsed: recipe(['npm test', ' npm run lint ']) },
+      { id: 'w2', title: 'Docs', state: 'todo', panelId: 'c2' },
+      { id: 'w3', title: 'Ready', state: 'review', panelId: 'c3' },
+      { id: 'w4', title: 'Closed chat', state: 'working', panelId: 'gone' },
+      { id: 'w5', title: 'Never started', state: 'todo' },
+      { id: 'w6', title: 'Shipped', state: 'done', panelId: 'c6' },
+      { id: 'w7', title: 'Merged', state: 'working', panelId: 'c7', merged: { into: 'main', sha: 's', at: 1 } }
+    ]
+    const open = new Set(['c1', 'c2', 'c3', 'c6', 'c7'])
+    const r = TN.tonightBatchFrom(items, (id) => open.has(id))
+    const parsed = TN.parseTonightBatch({ tasks: r.tasks })
+    const words = TN.tonightWords({ kind: 'started', tasks: 2, checked: 1, skipped: 3 })
+    ok('tonight.batch.1 Run tonight takes the open tasks with a live conversation in board order — the brief and criteria as the task, the recipe\'s checks joined as its gate — names each one it leaves out (in review, chat closed, never started), drops done and merged silently, and what it builds passes main\'s own parse',
+      r.tasks.map((t) => t.id).join() === 'w1,w2' && r.tasks[0].task === 'Fix login\n\nthe 500 on bad passwords\n\nDone when:\n- returns 401' &&
+        r.tasks[0].check?.command === 'npm test && npm run lint' && r.tasks[1].check === undefined && r.tasks[1].task === 'Docs' &&
+        JSON.stringify(r.skipped.map((x) => x.title)) === '["Ready","Closed chat","Never started"]' && /review/.test(r.skipped[0].reason) && /closed/.test(r.skipped[1].reason) && /start/.test(r.skipped[2].reason) &&
+        parsed.kind === 'ok' && /^2 tasks queued for tonight.*1 gated by a check.*awake.*3 left out$/.test(words),
+      JSON.stringify({ r, parsed: parsed.kind, words }))
+  }
+
   const failed = results.filter((x) => !x.pass)
   console.log(`verify:auto ${results.length - failed.length}/${results.length}`)
   if (failed.length) {

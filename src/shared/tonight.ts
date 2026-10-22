@@ -1,5 +1,6 @@
 import { parseAutoCheck, type AutoCheck, type AutoModeId, AUTO_MODE_IDS } from './auto'
 import type { RateLimitState } from './rate-limit'
+import type { PersistedWorkItem } from './work-items'
 
 /**
  * M477. TONIGHT — a batch of auto runs handed off for the night, as data.
@@ -136,4 +137,44 @@ export function parseTonightBatch(raw: unknown): { kind: 'ok'; batch: TonightBat
     })
   }
   return { kind: 'ok', batch: { tasks, ...(r.notBefore === undefined ? {} : { notBefore: r.notBefore as number }) } }
+}
+
+/**
+ * M480 (C2b). WHICH TASKS A "RUN TONIGHT" TAKES — the board's open tasks
+ * whose lane conversation is still on the canvas, in board order. Each one
+ * the door leaves out is named with its reason, so "Run tonight" never
+ * silently runs fewer tasks than the person expected.
+ *
+ * The task text is the person's own (the brief, else the provider's
+ * description, else the title), with the acceptance criteria listed; the
+ * check is the task's recipe's checks joined with `&&`, so a recipe that
+ * names tests gates the night by them and a task without one is `claimed`
+ * at best — the morning queue says which.
+ */
+export function tonightBatchFrom(
+  items: readonly PersistedWorkItem[],
+  chatOpen: (panelId: string) => boolean
+): { tasks: TonightTask[]; skipped: { title: string; reason: string }[] } {
+  const tasks: TonightTask[] = []
+  const skipped: { title: string; reason: string }[] = []
+  for (const item of items) {
+    if (item.state === 'done' || item.merged !== undefined) continue
+    if (item.state === 'review') { skipped.push({ title: item.title, reason: 'waiting on your review' }); continue }
+    if (item.panelId === undefined) { skipped.push({ title: item.title, reason: 'not started — start it once so it has a lane' }); continue }
+    if (!chatOpen(item.panelId)) { skipped.push({ title: item.title, reason: 'its conversation is closed' }); continue }
+    if (tasks.length >= TONIGHT_TASKS_MAX) { skipped.push({ title: item.title, reason: `a night holds at most ${TONIGHT_TASKS_MAX} tasks` }); continue }
+    const what = (item.brief ?? item.description ?? '').trim()
+    const criteria = (item.criteria ?? []).filter((c) => c.trim() !== '')
+    const task = [what === '' ? item.title : `${item.title}\n\n${what}`, ...(criteria.length === 0 ? [] : [`Done when:\n${criteria.map((c) => `- ${c}`).join('\n')}`])].join('\n\n')
+    const checks = (item.recipeUsed?.definition.checks ?? []).map((c) => c.trim()).filter((c) => c !== '')
+    tasks.push({ id: item.id, panelId: item.panelId, title: item.title, task, ...(checks.length === 0 ? {} : { check: { command: checks.join(' && ') } }) })
+  }
+  return { tasks, skipped }
+}
+
+/** The one line a door says after a start, a refusal or a stop. */
+export function tonightWords(r: { kind: 'started'; tasks: number; checked: number; skipped: number } | { kind: 'refused'; reason: string }): string {
+  if (r.kind === 'refused') return r.reason
+  const s = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`
+  return `${s(r.tasks, 'task')} queued for tonight, one at a time (${r.checked} gated by a check); the Mac stays awake while they run${r.skipped === 0 ? '' : ` · ${r.skipped} left out`}`
 }

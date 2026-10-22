@@ -298,7 +298,9 @@ const spyActions = () => {
     openReplay: record('openReplay'),
     // M409. The Undo/Redo rows' verbs (palette.undo.1 runs both).
     undoCanvas: record('undoCanvas'),
-    redoCanvas: record('redoCanvas')
+    redoCanvas: record('redoCanvas'),
+    // M509. The `>` row's verb (cmd.*).
+    runCommandPanel: record('runCommandPanel')
   }
 }
 
@@ -2953,7 +2955,9 @@ const WS = [
   ok('advanced.3 each door says what it GIVES, and runs a verb the palette already holds (no new action)',
     Object.values(P.ADVANCED_DOORS).every((d) => d.benefit.length > 30 && !/^(a|an|the) /i.test(d.benefit)) &&
       (() => {
-        const canvas = require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+        const read = (f) => require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', f), 'utf8')
+        // M507. The advanced doors moved with the task lens; Canvas still calls it.
+        const canvas = /= useTaskLens\(\{/.test(read('Canvas.tsx')) ? read('useTaskLens.ts') : ''
         return /a\.openTeammates\(\)/.test(canvas) && /a\.openToolbox\(id\)/.test(canvas) && /a\.createObject\('workflow'\)/.test(canvas) && /a\.beginWatcher\(\)/.test(canvas) && /a\.beginSaveTemplate\(/.test(canvas)
       })())
   ok('advanced.4 the workflow editor has an obvious expanded view — a labelled toolbar verb over the frame\'s own maximise, and the diagram refits to it',
@@ -3292,6 +3296,48 @@ const FRESH = () => ctx({
       res.calls.includes('["runRoutine","r1"]') && res.calls.some((c) => c.includes('beginStartWork') && c.includes('my-flaky')) &&
       res.calls.some((c) => c.includes('beginSpawnSheet') && c.includes('__lineup__:pair')),
     threw ?? JSON.stringify(res))
+}
+
+// cmd.* — M509 (backlog #55), command panels. `> npm test` is a command,
+// not a search: the run row alone, which hands the typed words to the verb
+// untouched; a bare `>` is a disabled row with its reason; a `>` anywhere but
+// first, or inside a scope, is the ordinary query.
+{
+  ok('cmd.1 parseCommandQuery reads only a LEADING >, trimmed, and says null for anything else',
+    P.parseCommandQuery('> npm test') === 'npm test' && P.parseCommandQuery('>npm   test ') === 'npm   test' &&
+      P.parseCommandQuery('  >') === '' && P.parseCommandQuery('npm test') === null && P.parseCommandQuery('a > b') === null)
+
+  const actions = spyActions()
+  const all = (q, scope = null) => P.filterCommands(P.buildCommands(ctx({ actions, commandQuery: scope === null ? P.parseCommandQuery(q) : null })), q, scope)
+  const run = all('> npm test -- --watch=false')
+  ok('cmd.2 a command query shows the run row and nothing else, and running it hands the verb exactly what was typed',
+    run.length === 1 && run[0].id === P.COMMAND_ROW_ID && run[0].title === 'Run npm test -- --watch=false' && run[0].disabledReason === undefined &&
+      (run[0].run(), JSON.stringify(actions.calls.at(-1)) === JSON.stringify(['runCommandPanel', 'npm test -- --watch=false'])),
+    JSON.stringify(run.map((r) => r.id)))
+
+  const bare = all('>')
+  ok('cmd.3 a bare > is one DISABLED row that says what to type',
+    bare.length === 1 && bare[0].id === P.COMMAND_ROW_ID && bare[0].disabledReason === P.REASON_NO_COMMAND,
+    JSON.stringify(bare.map((r) => [r.id, r.disabledReason])))
+
+  const plain = all('new')
+  ok('cmd.4 an ordinary query, or a > inside a scope, never builds or keeps the run row',
+    plain.length > 0 && !plain.some((r) => r.id === P.COMMAND_ROW_ID) &&
+      !P.buildCommands(ctx({ actions })).some((r) => r.id === P.COMMAND_ROW_ID) &&
+      !all('> x', 'capability').some((r) => r.id === P.COMMAND_ROW_ID))
+
+  ok('cmd.5 the folder is the last-focused terminal\'s, never one never focused, and home when none was',
+    P.commandPanelCwd([{ id: 'a', cwd: '/repo/a' }, { id: 'b', cwd: '/repo/b' }, { id: 'c', cwd: '/repo/c' }], { a: 5, b: 9, c: 0 }) === '/repo/b' &&
+      P.commandPanelCwd([{ id: 'a', cwd: '/repo/a' }], {}) === '~' && P.commandPanelCwd([], {}) === '~')
+
+  // The verb is wired to the spawn sheet's own typed-task request (main runs
+  // it as /bin/sh -lc in the login env and asks for focus), never a second
+  // spawn path, and a refusal is said.
+  const presets = require('node:fs').readFileSync(join(__dirname, '..', 'src/renderer/canvas/palette-actions/presets.ts'), 'utf8')
+  const verb = presets.slice(presets.indexOf('runCommandPanel: (command) =>'))
+  ok('cmd.6 runCommandPanel submits spawn.sheet({ command, cwd, title }) and says a refusal',
+    /window\.canvas\.spawn\.sheet\(\{ command: typed, cwd, title: typed \}\)/.test(verb) && /notifyRefused\(result\.reason\)/.test(verb) &&
+      /commandPanelCwd\(terminals, registry\.lastFocusedAt\(\)\)/.test(verb))
 }
 
 const failed = results.filter((r) => !r.pass)

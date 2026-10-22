@@ -171,6 +171,9 @@ jobs:
       - name: Write goldens
         env:
           UPDATE_GOLDENS: '1'
+          # `only` narrows the update to the scenes a person just looked at, so
+          # a scene that drifted for another reason is never re-baselined blind.
+          SHOT_ONLY: ${{ inputs.only }}
           TC_VISUAL_SCALE: '2'
           TC_SHOT_SCALE: '2'
           TC_WATCHDOG_SCALE: '2'

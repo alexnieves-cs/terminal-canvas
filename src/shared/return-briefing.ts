@@ -1,4 +1,5 @@
 import type { TimelineEntry } from './run-ledger'
+import { AUTO_VERDICT_WORDS, type AutoVerdict } from './auto'
 
 /**
  * M309. THE RETURN BRIEFING — on coming back, per task: what CHANGED, what
@@ -67,6 +68,12 @@ export interface BriefingTaskInput {
   lastReply?: { panelId: string; at: number; excerpt: string }
   /** The panel id → label, for sentences. */
   labelOf: (panelId: string) => string
+  /**
+   * M478. How the task's last auto run ended, from its chats' snapshots:
+   * done with a verdict, or stuck because its check kept failing. Absent
+   * when no auto run finished there.
+   */
+  auto?: { verdict: AutoVerdict; check?: string } | { stuck: 'check'; check?: string }
 }
 
 export interface BriefingDecision {
@@ -83,6 +90,64 @@ export interface ReturnBriefing {
   quietCount: number
   /** One sentence over all tasks. */
   headline: string
+  /** M478. The morning queue: one list across tasks, in the order to work it. */
+  queue: MorningItem[]
+}
+
+/**
+ * M478. THE MORNING QUEUE — what a night of work left, as ONE list across
+ * tasks in the order a person should work it: failed checks first (the work
+ * is wrong and an agent can be sent back now), then decisions (an agent is
+ * stopped on the person), then finished work to review — CHECKED work before
+ * work with no auto run before work the agent only CLAIMED, and within each,
+ * the fewest changed files first, so the cheapest review is always on top.
+ *
+ * Every item is a line the briefing already built or a fact the card already
+ * shows; nothing here is invented. Pure. `verify:ux morning.*`.
+ */
+export type MorningKind = 'failed' | 'decision' | 'checked' | 'review' | 'claimed'
+
+export interface MorningItem {
+  kind: MorningKind
+  itemId: string
+  title: string
+  text: string
+  evidence?: BriefEvidence
+  /** Changed files in the task's lane, when known — the review's cost. */
+  files?: number
+}
+
+const MORNING_RANK: Record<MorningKind, number> = { failed: 0, decision: 1, checked: 2, review: 3, claimed: 4 }
+
+export function morningQueue(tasks: readonly TaskBriefing[], inputs: readonly BriefingTaskInput[]): MorningItem[] {
+  const out: MorningItem[] = []
+  for (const t of tasks) {
+    const input = inputs.find((i) => i.itemId === t.itemId)
+    const files = input?.handoff?.files
+    const auto = input?.auto
+    // A check that failed overnight is said once per task, by its own line; a
+    // run that gave up on its check says so even when no command row landed.
+    const failedLines = t.finished.filter((l) => l.tone === 'failed')
+    for (const l of failedLines) out.push({ kind: 'failed', itemId: t.itemId, title: t.title, text: l.text, ...(l.evidence === undefined ? {} : { evidence: l.evidence }) })
+    if (failedLines.length === 0 && auto !== undefined && 'stuck' in auto) {
+      out.push({ kind: 'failed', itemId: t.itemId, title: t.title, text: `${auto.check === undefined ? 'its check' : `\`${auto.check}\``} kept failing — the auto run gave up`, evidence: { kind: 'review', itemId: t.itemId } })
+    }
+    for (const l of t.decisions) out.push({ kind: 'decision', itemId: t.itemId, title: t.title, text: l.text, ...(l.evidence === undefined ? {} : { evidence: l.evidence }) })
+    if (failedLines.length > 0 || (auto !== undefined && 'stuck' in auto)) continue
+    const verdict = auto !== undefined && 'verdict' in auto ? auto.verdict : undefined
+    const hasWork = files !== undefined && files > 0
+    if (!hasWork && verdict === undefined) continue
+    const kind: MorningKind = verdict === 'checked' ? 'checked' : verdict === 'claimed' ? 'claimed' : 'review'
+    const what = hasWork ? `${plural(files as number, 'changed file')} to review` : 'finished — nothing changed in the lane'
+    const how = kind === 'checked' ? ` · ${auto !== undefined && 'check' in auto && auto.check !== undefined ? `\`${auto.check}\` passed` : AUTO_VERDICT_WORDS.checked}`
+      : kind === 'claimed' ? ` · ${AUTO_VERDICT_WORDS.claimed}, nothing checked it` : ''
+    out.push({ kind, itemId: t.itemId, title: t.title, text: `${what}${how}`, evidence: { kind: 'review', itemId: t.itemId }, ...(files === undefined ? {} : { files }) })
+  }
+  // Stable within a rank (the briefing's own order), then cheapest first.
+  return out
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => MORNING_RANK[a.item.kind] - MORNING_RANK[b.item.kind] || (a.item.files ?? Infinity) - (b.item.files ?? Infinity) || a.i - b.i)
+    .map(({ item }) => item)
 }
 
 const MAX_LINES = 6
@@ -180,7 +245,8 @@ export function buildReturnBriefing(since: number, tasks: readonly BriefingTaskI
     since,
     tasks: loud,
     quietCount: all.length - loud.length,
-    headline: parts.length === 0 ? 'Nothing happened on your tasks while you were away.' : `${parts.join(' · ')}.`
+    headline: parts.length === 0 ? 'Nothing happened on your tasks while you were away.' : `${parts.join(' · ')}.`,
+    queue: morningQueue(loud, tasks)
   }
 }
 

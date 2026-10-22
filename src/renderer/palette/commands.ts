@@ -1,4 +1,5 @@
 import type { TaskPlan } from '@shared/task-plan'
+import { COMMAND_ROW_ID, REASON_NO_COMMAND } from './command-panel'
 import { teamAskWords } from '@shared/team-asks'
 import { noteFormSentence } from '@shared/notes'
 import { shapeFormSentence } from '@shared/flowchart'
@@ -234,6 +235,12 @@ export interface PaletteActions {
   jumpPrompt(id: string, direction: -1 | 1): void
   /** M52. Copy the lines between the last command's start and end marks. */
   copyLastOutput(id: string): void
+  /**
+   * M509 (backlog #55). Run a typed command in a new, focused panel — the
+   * spawn sheet's one-off task without the sheet (command-panel.ts). The
+   * palette's `>` row is its only door: EXCLUDED_ACTIONS says why.
+   */
+  runCommandPanel(command: string): void
   /** M56. Bookmarks and the camera trail. */
   addBookmark: () => void
   goToBookmark: (id: string) => void
@@ -528,6 +535,8 @@ export interface PaletteActions {
   arrangeTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M258. Frame the ACTIVE task — the lens's, else the selected panel's one task. A camera move through the trail; nothing else. */
   fitTask(): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /** M480. Hand the board's open tasks to main for the night (`op` absent), or end tonight's batch (`stop`). */
+  runTonight(op?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M324. Open the focus view of the task a card or member panel belongs to. */
   focusTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
@@ -2467,6 +2476,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(withReason({ id: 'task.focus', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: focus this task', subtitle: 'open the task beside its conversation — changes, checks, review and preview on one page; Esc comes back', group: 'canvas', searchText: 'task focus workspace conversation diff review checks preview open page', run: () => { if (taskPanelId !== undefined) { const r = actions.focusTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   out.push(withReason({ id: 'task.related', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: show related', subtitle: 'ring the task\'s panels and dim the rest; nothing moves — again to turn it off', group: 'canvas', searchText: 'task related highlight lens dim focus members show', run: () => { if (taskPanelId !== undefined) { const r = actions.showRelated(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   // M258. Fit task — present at rest; the verb itself refuses by name with no task context.
+  // M480. Tonight: start and stop, both through the one verb.
+  out.push({ id: 'task.tonight', title: 'Run tonight', subtitle: 'the open tasks, one auto run at a time while you are away — paused at usage limits, the Mac kept awake', group: 'canvas', searchText: 'tonight overnight batch night auto run queue away sleep', run: () => { void actions.runTonight().then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
+  out.push({ id: 'task.tonight-stop', ...hiddenAtRestIf(true), title: 'Stop tonight\'s batch', subtitle: 'stop the current run and drop the rest of the queue; the Mac may sleep again', group: 'canvas', searchText: 'tonight stop overnight batch cancel', run: () => { void actions.runTonight('stop').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
   out.push({ id: 'task.fit', title: 'Fit task', subtitle: 'frame the active task — the one Show related lit, else the selected panel\'s task', group: 'canvas', searchText: 'fit task frame zoom active lens focus camera', run: () => { const r = actions.fitTask(); if (r.kind === 'refused') actions.say(r.reason) } })
   out.push(withReason({ id: 'task.arrange', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: arrange this task', subtitle: 'compact the task\'s panels in reading order, clear of everything else — one undo', group: 'canvas', searchText: 'task arrange tidy compact layout members gather', run: () => { if (taskPanelId !== undefined) { const r = actions.arrangeTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   out.push(withReason({ id: 'image.replace', ...hiddenAtRestIf(imagePanelId === undefined), title: 'Image: replace this picture…', subtitle: 'choose different bytes for the selected picture', group: 'canvas', searchText: 'image replace picture missing repair choose', run: () => { if (imagePanelId !== undefined) void actions.replaceImage(imagePanelId) } }, imagePanelId === undefined ? 'select a picture panel first' : undefined))
@@ -2548,6 +2560,22 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'flip terminals titles far view overview roles',
     run: () => actions.toggleFlip()
   })
+
+  // M509 (backlog #55). `> npm test`: the one row a command query shows
+  // (filterCommands keeps only it). Run in a new panel — command-panel.ts.
+  if (ctx.commandQuery !== undefined && ctx.commandQuery !== null) {
+    const typed = ctx.commandQuery
+    const row: Command = {
+      id: COMMAND_ROW_ID,
+      title: typed === '' ? 'Run a command' : `Run ${typed}`,
+      subtitle: 'in a new panel, in the folder of the terminal you were last in; it shows the exit code',
+      group: 'spawn',
+      mono: true,
+      hiddenAtRest: true,
+      run: () => actions.runCommandPanel(typed)
+    }
+    out.push(typed === '' ? withReason(row, REASON_NO_COMMAND) : row)
+  }
 
   // M399 (A10). SAY THE DIFFERENCE. With a panel selected (the HUD reads "1
   // selected") and none clicked into, every focus-gated row said "click into

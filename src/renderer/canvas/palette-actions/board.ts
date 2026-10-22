@@ -19,6 +19,7 @@ import { startAgentName, startWorkNeeds, type StartWorkOutcome, type StartWorkRe
 import { getChat } from '@renderer/chat/chat-store'
 import { allRecipes } from '@shared/recipes'
 import { recipeUse } from '@shared/recipe-portability'
+import { tonightBatchFrom, tonightWords } from '@shared/tonight'
 import { isWorkPanel, isChatPanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
 import { bindFitTask } from '@renderer/canvas/flight'
@@ -50,6 +51,7 @@ export type BoardActions = Pick<PaletteActions,
   | 'showRelated'
   | 'arrangeTask'
   | 'fitTask'
+  | 'runTonight'
   | 'focusTask'
   | 'addWorkItem'
   | 'beginStartWork'
@@ -104,6 +106,20 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     arrangeTask: (panelId) => boardVerbsRef.current?.arrange?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     // M258. Fit task reads the lens and the selection, both Canvas's.
     fitTask: () => boardVerbsRef.current?.fitTask?.() ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    // M480. Tonight. The renderer only NAMES the tasks (tonightBatchFrom, over
+    // the board and the conversations on this canvas); main parses, runs and
+    // owns the batch and the power blocker.
+    runTonight: async (op) => {
+      const door = window.canvas?.tonight
+      if (door === undefined) return { kind: 'refused', reason: 'tonight is not available in this window' }
+      if (op === 'stop') return (await door.stop()) ? { kind: 'ran', note: 'tonight\'s batch stopped — the Mac may sleep again' } : { kind: 'refused', reason: 'no batch is running tonight' }
+      if (op !== undefined && op !== '') return { kind: 'refused', reason: `tonight takes no argument, or \`stop\` — not ${op}` }
+      const { tasks, skipped } = tonightBatchFrom(workItemsRef.current ?? [], (id) => panelsRef.current.some((p) => p.rect.id === id && isChatPanel(p)))
+      if (tasks.length === 0) return { kind: 'refused', reason: skipped.length === 0 ? 'no open tasks on the board to run tonight' : `nothing to run tonight — ${skipped.slice(0, 3).map((s) => `${s.title}: ${s.reason}`).join('; ')}` }
+      const r = await door.start({ tasks })
+      if (r.kind === 'refused') return r
+      return { kind: 'ran', note: tonightWords({ kind: 'started', tasks: tasks.length, checked: tasks.filter((t) => t.check !== undefined).length, skipped: skipped.length }) }
+    },
     // M324. The focus view is Canvas's page; the same delegation.
     focusTask: (panelId) => boardVerbsRef.current?.focus?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     // M113. The dedupe lives in upsertWorkItem; the id the caller gets back is
@@ -276,7 +292,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
             openTeammates: () => chooseNavigator('teammates'),
             // M262. The expert route, offered only on the TYPED door: a start
             // from a card is about that card, and a raw panel would drop it.
-            ...(itemId === undefined ? { openPanel: () => self.beginSpawnSheet() } : {})
+            ...(itemId === undefined ? { openPanel: () => self.beginSpawnSheet(), runTonight: () => self.runTonight() } : {})
           }
         })
         palette.openPalette()

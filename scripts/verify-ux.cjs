@@ -25,7 +25,8 @@ buildSync({
       import { matchShortcut } from '../src/shared/shortcuts'
       import { buildTaskQueue } from '../src/renderer/shell/task-queue'
       import { AUTO_VERDICT_WORDS, autoChipWords } from '../src/shared/auto'
-      export { buildTaskQueue, AUTO_VERDICT_WORDS, autoChipWords, probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES, taskSeedFromPaste, parseAdoptable, adoptCommand, adoptSentence, ADOPT_LIST_ARGS, matchShortcut }
+      import { buildReturnBriefing } from '../src/shared/return-briefing'
+      export { buildReturnBriefing, buildTaskQueue, AUTO_VERDICT_WORDS, autoChipWords, probesFromReport, foundAgentIds, agentRows, STARTER_LAYOUTS, LINEUP_IDS, readyReviews, nextReview, arrivedReviews, reviewNotice, quickAccept, QUICK_ACCEPT_MAX_FILES, taskSeedFromPaste, parseAdoptable, adoptCommand, adoptSentence, ADOPT_LIST_ARGS, matchShortcut }
     `,
     resolveDir: __dirname,
     sourcefile: 'ux-entry.ts',
@@ -42,7 +43,15 @@ buildSync({
   }
 })
 const M = require(OUT)
-const canvas = read('src/renderer/canvas/Canvas.tsx')
+// M507 (the Canvas.tsx split). Code these checks read moved, verbatim, into
+// files Canvas calls at the same position: the hooks M442 appended
+// (useShellTail.ts), the preset menu's events (useHistoryVerbs.ts) and what
+// the host draws over the world (HostOverlays.tsx). The canvas's source is
+// Canvas.tsx followed by each, and only while Canvas still calls it.
+const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
+const canvas = canvasOwn + [['useShellTail', 'useShellTail.ts'], ['useHistoryVerbs', 'useHistoryVerbs.ts'], ['renderHostOverlays', 'HostOverlays.tsx'], ['renderWorldLayers', 'WorldLayers.tsx']]
+  .filter(([call]) => new RegExp(`\\b${call}\\(\\{`).test(canvasOwn))
+  .map(([, file]) => '\n' + read(`src/renderer/canvas/${file}`)).join('')
 
 // ── First run ────────────────────────────────────────────────────────────
 
@@ -145,7 +154,9 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
 }
 
 {
-  const jump = canvas.slice(canvas.indexOf('jumpAttentionImplRef.current = '), canvas.indexOf('const pillJump'))
+  // M507. The jump moved with the panel gestures; Canvas still calls them.
+  const gestures = /= usePanelGestures\(\{/.test(canvas) ? read('src/renderer/canvas/usePanelGestures.ts') : ''
+  const jump = gestures.slice(gestures.indexOf('jumpAttentionImplRef.current = '), gestures.indexOf('const pillJump'))
   // M506. The notice moved with the attention models; Canvas still calls them.
   const attention = /= useAttentionModels\(\{/.test(canvas) ? read('src/renderer/canvas/useAttentionModels.tsx') : ''
   const notice = attention.slice(attention.indexOf('const readyToReview = '), attention.indexOf('}, [readyToReview, notifySetting])'))
@@ -361,6 +372,45 @@ const canvas = read('src/renderer/canvas/Canvas.tsx')
   const hook = read('src/renderer/shell/useTaskQueue.ts')
   ok('ux.verdict.3 the queue reads each task\'s verdict from its member chats\' snapshots, re-reading when any chat changes — a verdict never passed in would read every task as unverified',
     /getChat\(id\)\.snapshot\?\.auto/.test(hook) && /autoVerdictOf\(a\)/.test(hook) && /\.\.\.\(auto === undefined \? \{\} : \{ auto \}\)/.test(hook) && /chatsVersion\]\)/.test(hook))
+}
+
+// ── The morning queue (M478) ─────────────────────────────────────────────
+
+{
+  const since = 1000
+  const at = 5000
+  const label = (id) => `chat ${id}`
+  const cmd = (panelId, command, exitCode) => ({ kind: 'command', row: { panelId, command, exitCode, endedAt: at, startedAt: at - 10, ...(exitCode !== 0 ? { outputId: `out-${panelId}` } : {}) } })
+  const reply = (panelId) => ({ panelId, at, excerpt: 'done' })
+  const task = (itemId, extra) => ({ itemId, title: `Task ${itemId}`, panelIds: [`p${itemId}`], timeline: [], labelOf: label, ...extra })
+  const tasks = [
+    task('claimedBig', { lastReply: reply('pclaimedBig'), handoff: { actionLabel: 'Review', detail: '', state: 'ready', files: 9 }, auto: { verdict: 'claimed' } }),
+    task('checkedBig', { lastReply: reply('pcheckedBig'), handoff: { actionLabel: 'Review', detail: '', state: 'ready', files: 7 }, auto: { verdict: 'checked', check: 'npm test' } }),
+    task('plain', { lastReply: reply('pplain'), handoff: { actionLabel: 'Review', detail: '', state: 'ready', files: 3 } }),
+    task('checkedSmall', { lastReply: reply('pcheckedSmall'), handoff: { actionLabel: 'Review', detail: '', state: 'ready', files: 1 }, auto: { verdict: 'checked', check: 'npm test' } }),
+    task('asks', { lastReply: reply('pasks') }),
+    task('broken', { timeline: [cmd('pbroken', 'npm test', 1)], handoff: { actionLabel: 'Review', detail: '', state: 'ready', files: 2 } }),
+    task('gaveUp', { lastReply: reply('pgaveUp'), auto: { stuck: 'check', check: 'make check' } }),
+    task('quiet', {})
+  ]
+  const decisions = [{ panelId: 'pasks', requestId: 'r1', label: 'chat asks', blocker: 'wants to use Bash — rm -rf build' }]
+  const b = M.buildReturnBriefing(since, tasks, decisions)
+  const order = b.queue.map((m) => `${m.kind}:${m.itemId}`)
+  ok('morning.1 the morning queue is ONE list across tasks in the order to work it: failed checks (a command that failed, and an auto run that gave up on its check), then decisions, then finished work — checked before plain before claimed, and fewest changed files first within each',
+    order.join(' ') === 'failed:broken failed:gaveUp decision:asks checked:checkedSmall checked:checkedBig review:plain claimed:claimedBig',
+    JSON.stringify(order))
+  const byId = (id) => b.queue.find((m) => m.itemId === id)
+  ok('morning.2 each item says why it is where it is and opens its evidence: a failed check its own output, a decision the decision, finished work the review; checked work names the check that passed, claimed work says the agent only said so; a failed task is not also listed as work to review; a quiet task is not listed',
+    byId('broken').evidence.kind === 'output' && /`npm test` exited 1/.test(byId('broken').text) &&
+      /`make check` kept failing/.test(byId('gaveUp').text) && byId('asks').evidence.kind === 'decision' &&
+      /`npm test` passed/.test(byId('checkedSmall').text) && /1 changed file to review/.test(byId('checkedSmall').text) &&
+      byId('claimedBig').text.includes(M.AUTO_VERDICT_WORDS.claimed) && byId('plain').evidence.kind === 'review' &&
+      b.queue.filter((m) => m.itemId === 'broken').length === 1 && byId('quiet') === undefined,
+    JSON.stringify(b.queue))
+  const card = read('src/renderer/shell/ReturnBriefing.tsx')
+  ok('morning.3 the welcome-back card renders the queue above the per-task sections, each item through the outward gate, and the hook reads each task\'s auto verdict from its member chats',
+    /data-morning-queue/.test(card) && card.indexOf('data-morning-queue') < card.indexOf('{briefing.tasks.map(task)}') &&
+      /outward\(m\.text, 'return briefing'\)/.test(card) && /autoOfMembers\(membersOf\(t\.id\)\)/.test(card) && /getChat\(id\)\.snapshot\?\.auto/.test(card))
 }
 
 const passed = results.filter((r) => r.pass).length

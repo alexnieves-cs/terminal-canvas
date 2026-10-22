@@ -66,6 +66,7 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 | `REASON_SEARCH_OFF` | scrollback is off — turn on Keep output for search to read | Settings → scrollback.persist |
 | `REASON_SEARCH_NO_MATCHES` | try another word | change the query |
 | `REASON_NOTHING_TO_EXPORT` | this panel has never started, and scrollback is off — turn on scrollback.persist in Settings, or start the panel first | start the panel, or Settings → scrollback.persist |
+| `REASON_NO_COMMAND` | type a command after > — it runs in a new panel | type the command after the `>` (M509) |
 
 ## Surfaces walked, and their states
 

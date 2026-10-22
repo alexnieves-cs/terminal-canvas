@@ -137,6 +137,7 @@ agent:event watcher:state vault:changed session:live session:host session:recove
 file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip board:add
 canvas:plan pool:mint pool:event check:output combine:run combine:inputs combine:integrate combine:receipts setup:read setup:save
 setup:prepare editor:open recipe:list recipe:save recipe:delete session:last-exit lane:merge
+lane:radar tonight:start tonight:stop tonight:status
 job:list job:recover agent:cancel-queued agent:terminate task:evidence task:evidence-index
 task:export-handoff setup:preflight recipe:history agent:queue-edit agent:send-correction
 auth:login auth:logout auth:sessions auth:use auth:status presence:local presence:rosters presence:remote

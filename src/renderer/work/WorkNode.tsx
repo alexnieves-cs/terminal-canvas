@@ -11,6 +11,7 @@ import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
 import type { RunNodeSupervision } from '@shared/run-outcome'
 import { retainedNextAction, retainedRefsWord, type RetainedOutcome } from '@shared/retained-outcomes'
 import type { ReviewHandoff } from '@shared/review-readiness'
+import type { RadarFlag } from '@shared/collision-radar'
 import { SWARM_LIST, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 
 /**
@@ -58,6 +59,12 @@ export interface WorkNodeProps {
    * lane's diff has been read, so the card never guesses.
    */
   handoff?: ReviewHandoff
+  /**
+   * M479. The collision radar's flags for this task's lane: another task's
+   * lane changed the same files (and whether git's trial merge of the two
+   * stops). Absent or empty draws nothing — never a "no collisions" line.
+   */
+  collisions?: readonly RadarFlag[]
   /** Focus the lane's conversation. The `resume` half of Start / Resume / Review. */
   onResume: (itemId: string) => void
   /** M324. Open the task's focus view. Optional: without it the card draws no Focus verb. */
@@ -245,6 +252,13 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   saying `unknown`, which the rest rule forbids. */}
               {props.handoff !== undefined && <div><dt>review</dt><dd data-work-readiness={props.handoff.state} data-work-standing={props.handoff.standing} data-tone={props.handoff.tone}>{props.handoff.word}</dd></div>}
             </dl>
+            {props.collisions !== undefined && props.collisions.length > 0 && (
+              <ul className="work-node__radar" data-work-radar>
+                {props.collisions.map((f) => (
+                  <li key={`${f.kind}:${f.other}`} className="pf__note" data-work-radar-flag={f.kind} data-tone={f.kind === 'conflict' ? 'needs-you' : 'idle'}>{f.text}</li>
+                ))}
+              </ul>
+            )}
             {props.execution?.blocker !== undefined && (
               <div className="work-node__blocker" data-work-blocker={props.execution.blocker.kind} role="status">
                 <p className="pf__note">{props.execution.detail}</p>

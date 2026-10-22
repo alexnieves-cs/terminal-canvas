@@ -70,9 +70,19 @@ const FACTS = {
     // old `[:=]` matched that `===` as if commands.ts cleared the mark.
     const reaching = doors.filter((p) => /mark(Template|Preview)Read|onMarkRead|reviewed\s*(?::|=(?!=))/.test(src(p)))
     const canvas = src('renderer/canvas/Canvas.tsx')
-    const uses = (name) => [...canvas.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
-    const passedOnly = uses('markTemplateRead') === 2 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(canvas) &&
-      uses('markPreviewRead') === 2 && /onMarkRead=\{markPreviewRead\}/.test(canvas)
+    // M507. The per-panel render moved to PanelNode.tsx, which Canvas calls.
+    // Canvas names each function twice (where it gets it, where it hands it
+    // to the render); PanelNode three times (its context's type, where it
+    // takes it, the one onMarkRead).
+    // The panel map moved on again, to WorldLayers.tsx, which names each
+    // function three times too (its context's type, where it takes it, where
+    // it hands it to PanelNode).
+    const world = /\brenderWorldLayers\(\{/.test(canvas) ? src('renderer/canvas/WorldLayers.tsx') : ''
+    const node = /renderPanelNode\(panel, \{/.test(world) ? src('renderer/canvas/PanelNode.tsx') : ''
+    const usesIn = (text, name) => [...text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
+    const uses = (name) => usesIn(canvas, name)
+    const passedOnly = uses('markTemplateRead') === 2 && usesIn(world, 'markTemplateRead') === 3 && usesIn(world, 'markPreviewRead') === 3 && usesIn(node, 'markTemplateRead') === 3 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(node) &&
+      uses('markPreviewRead') === 2 && usesIn(node, 'markPreviewRead') === 3 && /onMarkRead=\{markPreviewRead\}/.test(node)
     ok('tool.door.1 marking a tool read has NO verb, palette row, agent line or workflow node: no door file names a mark-read function or writes `reviewed`, and Canvas passes each mark-read function only to its node\'s onMarkRead',
       reaching.length === 0 && passedOnly, JSON.stringify({ reaching, markTemplateRead: uses('markTemplateRead'), markPreviewRead: uses('markPreviewRead') }))
   }
@@ -261,8 +271,10 @@ const FACTS = {
     //   session/scrollback-store.ts  the renderer's own tail mirror
     const DISPLAY_READERS = [
       'main/ipc.ts',
-      'renderer/canvas/Canvas.tsx',
       'renderer/canvas/useBoardVerbs.ts',
+      // M507. Was Canvas.tsx: the rail's last line said (M105), a DISPLAY of
+      // the chat's own answer, left with the run rows. Same reader, new path.
+      'renderer/canvas/useRunRows.ts',
       'renderer/chat/chat-store.ts',
       'renderer/session/scrollback-store.ts'
     ]
@@ -574,6 +586,22 @@ const FACTS = {
       fitDoor !== undefined && typeof fitDoor.canvas === 'string' && /HUD/.test(fitDoor.canvas) && fitDoor.palette === 'task.fit' &&
         commandsSrc.includes("id: 'task.fit'") && fitBound?.kind === 'plan' && fitBound.plan.steps[0]?.verb === 'fit-task' && fitDoor.workflow === 'an action node whose line is: fit-task',
       JSON.stringify({ fitDoor, fitBound }))
+    // M480 — tonight.doors.1. Tonight is a VERB with all four doors: the New
+    // task sheet's Run tonight line, the task.tonight row, `tc plan tonight`
+    // and an action node holding `tonight stop`. A teammate's plan is refused
+    // by name — a night of runs across every lane is the person's to start.
+    const tonightDoor = doors?.['tonight']
+    const tonightBound = P.buildPlan(P.parsePlanLine('tonight'), facts)
+    const tonightStop = P.buildPlan(P.parsePlanLine('tonight stop'), facts)
+    const sheetSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'StartWorkSheet.tsx'), 'utf8')
+    const boardSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'palette-actions', 'board.ts'), 'utf8')
+    const teammateRefusal = tonightBound?.kind === 'plan' ? P.agentDoorRefusal(tonightBound.plan.steps[0], facts, { teammateId: 'tm1' }) : null
+    ok('tonight.doors.1 tonight is a verb with a real New task gesture (wired on the typed door), the task.tonight row, an agent line and an action-node line (`tonight stop`) that bind, and a teammate caller is refused by name',
+      tonightDoor !== undefined && tonightDoor.palette === 'task.tonight' && commandsSrc.includes("id: 'task.tonight'") && commandsSrc.includes("id: 'task.tonight-stop'") &&
+        tonightBound?.kind === 'plan' && tonightBound.plan.steps[0]?.verb === 'tonight' && tonightStop?.kind === 'plan' && tonightStop.plan.steps[0]?.args.op === 'stop' &&
+        sheetSrc.includes('data-start-tonight-run') && /runTonight: \(\) => self\.runTonight\(\)/.test(boardSrc) &&
+        typeof teammateRefusal === 'string' && teammateRefusal.length > 0,
+      JSON.stringify({ tonightDoor, tonightBound, tonightStop, teammateRefusal }))
     // M264 — Fit task lights the sticky lens; Fit task is primary in the HUD.
     ok('fit-task.stage.1 Fit task sets relatedItemId on a successful frame, and the HUD places Fit task before Fit all',
       /setRelatedItemId\(target\.itemId\)/.test(fitTaskFn) && fitBeforeAll,

@@ -53,7 +53,10 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'orch-terminal', sentence: 'no recorded logs yet — select a panel to read its scrollback or last chat turn', verb: 'Show Canvas' },
   { id: 'orch-files', sentence: 'no file panels on this canvas — drop a file or open one from the palette', verb: 'Show Canvas' },
   /** M441. The minimap when the canvas has nothing on it. L-B's overlay reads the same sentence (R-022). */
-  { id: 'minimap', sentence: 'Nothing placed yet' }
+  { id: 'minimap', sentence: 'Nothing placed yet' },
+  /** M466. Sessions with nothing to list, and Settings' shortcut search with no hit — each had kept its own sentence (fix-list). */
+  { id: 'sessions', sentence: 'No sessions on this canvas — a terminal or a conversation is one.' },
+  { id: 'keyboard-search', sentence: 'No shortcut matches that search.' }
 ]
 
 export function emptyState(id: string): EmptyState {
@@ -73,7 +76,8 @@ export const BLANK_CANVAS_PURPOSE = 'Describe a task and an agent will take it f
 /** M388's ground double-click places a flowchart process step. The owner kept that gesture (Oct 6, 2026); the hint names it. */
 export const GHOST_TARGET = 'Double-click to place a flowchart step'
 
-/** The mono chip. An empty repository says so, rather than a blank or a zero. */
+/** The repository chip. An empty repository says so, rather than a blank or a zero. The chip sets a
+ * repository NAME in mono and the sentence in the UI face (M466): only the name is a path. */
 export function repoChipLabel(repo: string | null | undefined): string {
   const name = (repo ?? '').trim()
   return name === '' ? 'no repository chosen' : name

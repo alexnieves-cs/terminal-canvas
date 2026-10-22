@@ -2,6 +2,7 @@ import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { FULL_SCROLLBACK } from '../session/memory-ration'
 
 /**
  * Central xterm factory. Every panel goes through here so theme, font metrics,
@@ -49,8 +50,9 @@ export function createTerminal(theme: ITheme = LIGHT_TERMINAL_THEME): TerminalHa
     letterSpacing: 0,
     cursorBlink: true,
     // Agent TUIs redraw a lot; a generous scrollback costs little and makes
-    // reading back through a long agent run practical.
-    scrollback: 10_000,
+    // reading back through a long agent run practical. M508: the registry
+    // trims a session nobody has looked at, and restores this on return.
+    scrollback: FULL_SCROLLBACK,
     allowProposedApi: true,
     macOptionIsMeta: true
   })

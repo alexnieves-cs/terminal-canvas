@@ -48,6 +48,7 @@ export const USAGE = [
   '       tc shares | tc share [--org <org-id>] | tc open-share <share-id>',
   '       tc share-role <share-id> <login|user-id> <editor|viewer|none>',
   '       tc mcp   (an MCP server on stdio, for Claude Code or any MCP client)',
+  '       tc phone-test   (one test push to the ntfy topic in Settings)',
   '',
   'login and join ask in the app before they act; login opens your browser and waits for it.',
   'use, share, open-share and share-role ask in the app too; accounts and shares only list.',
@@ -276,6 +277,7 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     case 'list':
     case 'status':
     case 'ping':
+    case 'phone-test':
       return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb }) } : { kind: 'usage', error: `${verb} takes no arguments` }
     case 'focus':
       return rest.length === 1 ? { kind: 'ok', line: JSON.stringify({ verb: 'focus', id: rest[0] }) } : { kind: 'usage', error: 'focus takes exactly one panel id' }

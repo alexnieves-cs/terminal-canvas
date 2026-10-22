@@ -69,7 +69,7 @@ export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt
         <p className="rd-empty__purpose">{BLANK_CANVAS_PURPOSE}</p>
         <div className="rd-empty__task">
           <input data-edit-owner="" value={text} placeholder="What should the agent do?" aria-label="Task" onChange={(e) => setText(e.target.value)} />
-          <span className="rd-empty__chip">{repoChipLabel(repo)}</span>
+          <span className="rd-empty__chip">{(repo ?? '').trim() === '' ? repoChipLabel(repo) : <span className="rd-empty__repo">{repoChipLabel(repo)}</span>}</span>
           <button type="button" className="rd-empty__start" disabled={!verb.enabled} title={verb.reason} onClick={() => { if (verb.enabled) onStart?.(text) }}>{verb.label}</button>
         </div>
         {adopt != null && (
