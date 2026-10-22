@@ -69,19 +69,13 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const js = (code) => wc.executeJavaScript(code)
-  // A development build's "Maximum update depth" warning names no component, so
-  // the page appends the stack the warning was raised on: its frames point
-  // into the unminified bundle, where triage prints the lines they name.
-  const installLoopTrap = () => js(`(() => { if (window.__loopTrap) return true; window.__loopTrap = true
-    const orig = console.error.bind(console)
-    console.error = (...args) => { const head = String(args[0]); if (head.includes('Maximum update depth')) orig(head + ' [stack] ' + String(new Error().stack)); else orig(...args) }
-    window.addEventListener('error', (e) => {
-      orig('[stack] ' + String(e.error && e.error.stack || e.message))
-      // The triage build's probe (absent elsewhere): which components' external stores forced the last re-renders.
-      if (Array.isArray(window.__fsr)) { const n = {}; for (const c of window.__fsr) n[c] = (n[c] || 0) + 1; orig('[fsr] ' + JSON.stringify(n) + ' last ' + JSON.stringify(window.__fsr.slice(-8))) }
-    })
+  // An uncaught renderer error's console line carries only its message; the page
+  // logs the stack too, so the recorder above keeps where it was thrown (perf.2's
+  // lost page was React #185, traced this way to the attention census, M458).
+  const installErrorStacks = () => js(`(() => { if (window.__errorStacks) return true; window.__errorStacks = true
+    window.addEventListener('error', (e) => { console.error('[stack] ' + String(e.error && e.error.stack || e.message)) })
     return true })()`).catch(() => false)
-  const reload = async () => { await reloadWithin(wc); await settle(); await installLoopTrap() }
+  const reload = async () => { await reloadWithin(wc); await settle(); await installErrorStacks() }
   const press = async (x, y, modifiers = []) => {
     wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })
     wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })
@@ -890,13 +884,8 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       for (const [i, s] of pick.entries()) await press(s.cx, s.cy, i === 0 ? [] : ['shift'])
       const selectedIds = (await shapes()).filter((s) => s.selected).map((s) => s.id)
       const manyBefore = await rectOf(pick.map((s) => s.id))
-      // The thrown error's own stack, as console text the recorder above keeps:
-      // the console line alone carries only the message.
-      await installLoopTrap()
-      await js('(() => { window.__fsrN = {}; return true })()')
+      await installErrorStacks()
       const many = await dragFrames(lead, '200 shapes · drag a 40-shape selection (multi-move)')
-      // The triage build's probe, crash or not: every external-store forced re-render the 40-shape move caused.
-      console.log('[fsr-drag] ' + JSON.stringify(await js('window.__fsrN || null').catch(() => 'gone')))
       // A condition, not the drag's one settle(): two of three CI runs read
       // every member 'missing' after the multi-move commit, so the read waits
       // until all 40 are back in the DOM with a position. countAfter, before
