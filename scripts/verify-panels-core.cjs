@@ -4053,7 +4053,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const back = await waitUntil(() => isLive(shellId), 6000)
         const before = await agentStateOf(shellId)
         const mark = (await agentLog()).length
-        const click = await clickPanelBody(`[data-panel-id="${shellId}"] .panel__slot`)
+        // isLive turns true when the panel is promoted, a beat before its
+        // xterm is mounted to take a click: the runner once read
+        // reachedXterm=false, active empty, and nothing acknowledged. The
+        // click is repeated until it lands on the xterm (an acknowledge is
+        // idempotent), and the last attempt is the evidence.
+        let click = { active: '', reachedXterm: false }
+        await waitUntil(async () => {
+          try { click = await clickPanelBody(`[data-panel-id="${shellId}"] .panel__slot`) } catch { return false }
+          return click.reachedXterm === true
+        }, 6000)
         const answered = await waitUntil(async () => {
           const since = (await agentLog()).slice(mark)
           return since.some((u) => u.panelId === shellId && u.state !== 'wants-you')
