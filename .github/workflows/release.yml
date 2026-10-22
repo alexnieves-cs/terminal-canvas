@@ -1,0 +1,138 @@
+# The release (M467): a `v*` tag becomes a GitHub release with a DMG that
+# verify:packaged passed on the same runner.
+#
+# verify:packaged is the pre-release gate CLAUDE.md names and keeps OUT of
+# `npm run verify` (minutes, electron-builder's own downloads). This is where
+# it runs: it packages the app, strips PATH the way launchd does, launches the
+# real binary and checks node-pty loads from outside the asar. A tag whose
+# build fails it gets no release.
+#
+# Unsigned on purpose for 6.0.0 (the owner's call, 2026-10-21): builder-config
+# pins `identity: null`, and verify:package checks that pin. The release body
+# says how to open an unsigned app; the job also records what `codesign`
+# makes of the bundle, so the signing decision at 6.1 starts from a fact.
+#
+# Run by hand (workflow_dispatch), or on a PR that touches the packaging, it
+# does everything except publish, so the pipeline is proved without minting a
+# tag. The DMG is still uploaded as an artifact.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - build/**
+      - electron-builder.config.cjs
+      - scripts/verify-packaged.cjs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # arm64. macos-latest is Apple silicon; an Intel build is a second job
+    # when someone asks for one.
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # verify:packaged launches two real instances against a scratch tmux socket.
+      - name: Install tmux
+        run: brew install tmux
+
+      - name: Install dependencies
+        run: npm ci
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
+
+      # A tag that disagrees with package.json would publish a DMG whose
+      # About box and update check name a different version than the release.
+      - name: The tag is package.json's version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          want="v$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::tag $GITHUB_REF_NAME but package.json says $want"
+            exit 1
+          fi
+
+      - name: Package config checks
+        run: npm run verify:package
+
+      # Builds, packages a --dir bundle and launches it. The gate.
+      - name: verify:packaged
+        env:
+          TC_WATCHDOG_SCALE: '2'
+        run: npm run verify:packaged
+
+      # The DMG itself. `--publish never`: the release step below is the only
+      # thing that talks to GitHub, so a failed upload cannot leave half a
+      # release behind with electron-builder's own naming.
+      - name: Build the DMG
+        env:
+          # Unsigned by decision; stop electron-builder hunting the keychain
+          # for an identity the runner does not have.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --config electron-builder.config.cjs --mac --publish never
+
+      - name: Checksums and a codesign note
+        id: files
+        run: |
+          cd release
+          ls -la
+          dmg=$(ls *.dmg | head -1)
+          shasum -a 256 "$dmg" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          app=$(ls -d mac*/*.app | head -1)
+          # Not a gate: the build is unsigned by decision. What macOS will
+          # make of it is written down so nobody has to guess.
+          { codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true; } | tee codesign.txt
+          echo "dmg=release/$dmg" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg
+          path: |
+            release/*.dmg
+            release/SHA256SUMS.txt
+            release/codesign.txt
+          retention-days: 30
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DMG: ${{ steps.files.outputs.dmg }}
+        run: |
+          cat > notes.md <<EOF
+          ## Install
+
+          1. Download \`$(basename "$DMG")\` below (Apple silicon) and open it.
+          2. Drag **Terminal Canvas** into Applications.
+          3. This build is **not signed** with an Apple Developer ID, so macOS stops the first launch.
+             Open it once from **System Settings → Privacy & Security → Open Anyway**
+             (on older macOS, right-click the app and choose **Open**).
+             If macOS says the app "is damaged", run this once in Terminal and open it again:
+             \`xattr -dr com.apple.quarantine "/Applications/Terminal Canvas.app"\`
+
+          Check the download against \`SHA256SUMS.txt\`: \`shasum -a 256 -c SHA256SUMS.txt\`.
+
+          The packaged app passed \`verify:packaged\` on the build runner before this release was created.
+          EOF
+          gh release create "$GITHUB_REF_NAME" "$DMG" release/SHA256SUMS.txt \
+            --title "Terminal Canvas ${GITHUB_REF_NAME#v}" \
+            --notes-file notes.md \
+            --verify-tag
