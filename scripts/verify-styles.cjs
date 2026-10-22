@@ -510,9 +510,13 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const gridPitch = /--grid-canvas:\s*24px/.test(bare)
   const shellGrid = shell !== undefined
     && /background-color:\s*var\(--s-0\)/.test(shell.body)
-    && /background-image:\s*radial-gradient\(circle,\s*var\(--canvas-grid\)\s+1px,\s*transparent\s+1px\)/.test(shell.body)
-    && /background-size:\s*var\(--grid-canvas\)\s+var\(--grid-canvas\)/.test(shell.body)
-  ok('ground.1', 'the canvas is transparent and flat; the 24px dot grid is on .shell from --canvas-grid and --grid-canvas; the light is on the two aura layers, each a gradient from the aura tokens that takes no pointer; no --dot token',
+    // M518: drafting paper, a major dot every fourth pitch over half-strength
+    // minor dots, both from --canvas-grid and --grid-canvas, the major layer
+    // shifted half a pitch so it lands on a minor dot.
+    && /background-image:\s*radial-gradient\(circle,\s*var\(--canvas-grid\)[^;]*radial-gradient\(circle,\s*color-mix\(in srgb,\s*var\(--canvas-grid\)/.test(shell.body)
+    && /background-size:\s*calc\(var\(--grid-canvas\) \* 4\) calc\(var\(--grid-canvas\) \* 4\),\s*var\(--grid-canvas\)\s+var\(--grid-canvas\)/.test(shell.body)
+    && /background-position:\s*calc\(var\(--grid-canvas\) \/ 2\) calc\(var\(--grid-canvas\) \/ 2\),\s*0 0/.test(shell.body)
+  ok('ground.1', 'the canvas is transparent and flat; the dot grid (24px minor, every fourth a major dot, aligned) is on .shell from --canvas-grid and --grid-canvas; the light is on the two aura layers, each a gradient from the aura tokens that takes no pointer; no --dot token',
     canvas !== null && !/gradient/.test(canvasBg) && /background:\s*transparent/.test(canvasBg) && dotUses === 0 && dotDeclared === 0 && auraOk(auraShell) && auraOk(auraCanvas) && gridPitch && shellGrid,
     JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared, auraShell: auraShell !== undefined, auraCanvas: auraCanvas !== undefined, gridPitch, shellGrid }))
 
