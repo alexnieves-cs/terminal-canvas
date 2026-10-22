@@ -3341,15 +3341,15 @@ const FRESH = () => ctx({
 }
 
 // labs.* — M496 (E2), the cut list's hidden surfaces. Each is one boolean
-// `labs.<id>` setting, off by default, that hides the doors which MINT the
-// surface and never a verb that acts on one already on a canvas.
+// `labs.<id>` setting (off by default, except World, kept on) that hides the
+// doors which MINT the surface and never a verb that acts on one already there.
 {
   const fs = require('node:fs')
   const src = (rel) => fs.readFileSync(join(__dirname, '..', rel), 'utf8')
   const defs = P.LABS.map((lab) => P.SETTINGS.find((d) => d.id === lab.setting))
   const strays = P.SETTINGS.filter((d) => d.id.startsWith('labs.') && !P.LABS.some((lab) => lab.setting === d.id)).map((d) => d.id)
-  ok('labs.1 every lab is a declared boolean setting, false by default, in the Labs category, not planWritable — and no labs.* setting is without a lab',
-    P.LABS.length > 0 && defs.every((d) => d !== undefined && d.type === 'boolean' && d.default === false && d.category === P.LABS_CATEGORY && d.planWritable === undefined) &&
+  ok('labs.1 every lab is a declared boolean setting whose default is the lab\'s own, in the Labs category, not planWritable — and no labs.* setting is without a lab',
+    P.LABS.length > 0 && defs.every((d, i) => d !== undefined && d.type === 'boolean' && d.default === P.LABS[i].shown && d.category === P.LABS_CATEGORY && d.planWritable === undefined) &&
       strays.length === 0 && P.LABS.every((lab) => lab.setting === `labs.${lab.id}`),
     JSON.stringify({ missing: P.LABS.filter((_, i) => defs[i] === undefined).map((l) => l.setting), strays }))
 
@@ -3370,11 +3370,13 @@ const FRESH = () => ctx({
     JSON.stringify(kept.map((id) => [id, P.labOfRow(id)])))
 
   const rows = [...built].map((id) => ({ id }))
-  const allOff = P.labsOff(() => undefined)
+  const allOff = P.labsOff(() => false)
   const allOn = P.labsOff(() => true)
+  const atDefaults = P.labsOff(() => undefined)
   const off = P.withoutHiddenLabs(rows, allOff).map((r) => r.id)
-  ok('labs.4 at the defaults every lab is off and its rows leave; switched on, nothing leaves; anything but true stays off',
+  ok('labs.4 at the defaults only the hidden labs are off (World stays); switched off, a lab\'s rows leave; switched on, nothing leaves; a malformed value is off',
     allOff.size === P.LABS.length && allOn.size === 0 && P.labsOff(() => 'true').size === P.LABS.length &&
+      [...atDefaults].sort().join() === P.LABS.filter((l) => !l.shown).map((l) => l.id).sort().join() && !atDefaults.has('world') && atDefaults.has('decks') &&
       !off.includes('object.create.deck') && !off.includes('jira.open') && off.includes('object.create.note') && off.includes('spawn.sheet') &&
       P.withoutHiddenLabs(rows, allOn).length === rows.length && off.length === rows.length - rows.filter((r) => P.labOfRow(r.id) !== undefined).length,
     JSON.stringify({ off: allOff.size, kept: off.length, rows: rows.length }))

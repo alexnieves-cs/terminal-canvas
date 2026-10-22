@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { LABS, labsOff, type LabId } from '@shared/labs'
+import { labsOff, type LabId } from '@shared/labs'
 
 /**
  * M496. Which hidden surfaces are switched back on, for the renderer.
@@ -7,11 +7,11 @@ import { LABS, labsOff, type LabId } from '@shared/labs'
  * One module-level copy, read through `settings.list` and re-read on
  * `settings:changed`, the way the overview's toggle is (useShellSettings): a
  * switch from the Settings page, the palette or `tc` must apply without the
- * palette ever opening. Until the first read lands every lab is OFF, which is
- * the default, so a launch never flashes a hidden door and then takes it away.
+ * palette ever opening. Until the first read lands each lab is at its default,
+ * so a launch never flashes a hidden door and then takes it away.
  */
 
-let off: ReadonlySet<LabId> = new Set(LABS.map((lab) => lab.id))
+let off: ReadonlySet<LabId> = labsOff(() => undefined)
 const listeners = new Set<() => void>()
 let started = false
 

@@ -721,8 +721,9 @@ export const SETTINGS: readonly SettingDef[] = [
     default: false,
     category: UPDATES_CATEGORY
   },
-  // M496. The cut list's seven hidden surfaces, all off by default and never
-  // planWritable: a plan should not grow the product a person chose to trim.
+  // M496. The cut list's hidden surfaces, off by default, and World, kept on
+  // with a switch to hide it (shared/labs.ts says why). Never planWritable: a
+  // plan should not grow or shrink the product a person chose.
   // Off hides the doors that MINT one; an object already on a canvas still
   // opens, edits and exports (shared/labs.ts says which rows each one hides).
   {
@@ -731,7 +732,7 @@ export const SETTINGS: readonly SettingDef[] = [
     description: 'put the 2D | World lens on the canvas, ⌘⇧W, and Show in World in Sessions',
     keywords: ['world', '3d', 'room', 'robots', 'lens', 'labs', 'three'],
     type: 'boolean',
-    default: false,
+    default: true,
     category: LABS_CATEGORY
   },
   {

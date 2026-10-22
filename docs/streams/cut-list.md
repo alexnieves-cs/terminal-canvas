@@ -1,14 +1,17 @@
 # The cut list (E1–E2, M495–M496)
 
-The owner's decision, 2026-10-22: **keep 22 surfaces, hide 7, remove none.** The
+The owner's decision, 2026-10-22: **keep 22 surfaces, hide 7, remove none** — then
+**World kept on**, with a switch to hide it, once hiding it was measured to move 35 of
+the goldens the owner had just approved (the lens sits on every resting canvas). So six
+are hidden and World is shown by default. The
 reasoning for each row is in the cut-list doc posted on the Stream E thread; this file
 records what was decided and what "hide" means in the code.
 
-## Hidden (off by default, one setting each)
+## The switches (one setting each; all off by default but World)
 
 | Surface | Setting | Doors that hide |
 |---|---|---|
-| World 3D view | `labs.world` | the 2D \| World lens, ⌘⇧W, Sessions' Show in World, the `world.view` row |
+| World 3D view (**on** by default) | `labs.world` | the 2D \| World lens, ⌘⇧W, Sessions' Show in World, the `world.view` row |
 | Accounts, sharing, presence, People | `labs.accounts` | the account menu and avatars, the People segment, `account.sign-in`, `canvas.people`, `share.*` |
 | Relay terminals | `labs.relay` | `object.create.relay` |
 | Decks | `labs.decks` | `object.create.deck` |
