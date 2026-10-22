@@ -2679,21 +2679,6 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // `:not([disabled])`: an unscoped wait would resolve the instant
         // check 138's now-idle panel's own (already-enabled) edit button
         // matched, before this second panel's file:read ever resolved.
-        await waitUntil(() => wc.executeJavaScript(`
-          (() => {
-            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
-            const last = nodes[nodes.length - 1]
-            const btn = last && last.querySelector('[data-file-node-edit]')
-            return !!(btn && !btn.disabled)
-          })()
-        `), 5000)
-        await wc.executeJavaScript(`
-          (() => {
-            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
-            nodes[nodes.length - 1].querySelector('[data-file-node-edit]')
-              .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-          })()
-        `)
         // Every query below is scoped to the NEWEST file panel, like the edit
         // button above. An unscoped [data-file-node-editor] matched 169's
         // panel when its closeDraft had not yet run after the save: the typing
@@ -2701,8 +2686,31 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // the read came back null once 169's editor unmounted (draft=null on
         // the runner).
         const NEWEST = `[...document.querySelectorAll('[data-panel-kind="file"]')].pop()`
-        const editorUp = await waitUntil(() => wc.executeJavaScript(
-          `!!(${NEWEST}?.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])'))`), 12000)
+        // The press is part of the wait. The blocking job once read
+        // editorUp=false after 12s with the press sent once, unconditionally,
+        // after a wait whose answer nobody read: a press on a button still
+        // disabled (file:read not back) opens nothing and is never repeated.
+        // Now the edit button is pressed only while the newest panel has no
+        // editor at all and the button is enabled, and what was pressed is
+        // evidence.
+        let pressed139 = null
+        const editorUp = await waitUntil(async () => {
+          const st = await wc.executeJavaScript(`
+            (() => {
+              const last = ${NEWEST}
+              if (!last) return { up: false, why: 'no file panel' }
+              const id = last.closest('.panel')?.getAttribute('data-panel-id') ?? null
+              if (last.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')) return { up: true, id }
+              if (last.querySelector('[data-file-node-editor]')) return { up: false, id, why: 'loading' }
+              const btn = last.querySelector('[data-file-node-edit]')
+              if (!btn || btn.disabled) return { up: false, id, why: btn ? 'edit disabled' : 'no edit button' }
+              btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+              return { up: false, id, why: 'pressed' }
+            })()
+          `)
+          if (!st.up) pressed139 = st
+          return st.up
+        }, 12000)
         const typed = await wc.executeJavaScript(`
           (() => {
             const ta = ${NEWEST}?.querySelector('[data-file-node-editor]')
@@ -2731,7 +2739,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         `)
         ok('170 a write under a dirty draft raises the conflict banner and does not clobber the draft',
           state139.draft === 'my unsaved work\n' && state139.banner === true,
-          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner} editorUp=${editorUp} typed=${typed} dirty=${dirty}`)
+          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner} editorUp=${editorUp} typed=${typed} dirty=${dirty} last=${JSON.stringify(pressed139)}`)
       }
 
       // 140 — THE TRUNCATION BYPASS. buildFileNodeModel refuses to mark a
