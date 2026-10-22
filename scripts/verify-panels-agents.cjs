@@ -1704,18 +1704,37 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
         // A real click on the chrome selects (the inspector follows selectedId).
         const box = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="${chatId}"] .pf__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
-        if (box) { wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 }) }
-        const changes = await waitUntil(() => wc.executeJavaScript(`(() => { const f = [...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file')); return f.includes('seed.txt') ? f : false })()`), 10000)
+        const selectChat = () => { if (box) { wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 }) } }
+        selectChat()
+        // The Changes list is the inspector's git read at selection: on the
+        // runner one run in three it held the read from before the edit for
+        // the whole 10 s. A fresh selection (a press on bare canvas, then the
+        // chrome again) asks git again, once per 4 s without the file.
+        let selectedAt = Date.now()
+        const changes = await waitUntil(async () => {
+          const f = await wc.executeJavaScript(`[...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file'))`)
+          if (f.includes('seed.txt')) return f
+          if (Date.now() - selectedAt > 4000) { wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle(); selectChat(); selectedAt = Date.now() }
+          return false
+        }, 14000, 300)
+        const changesSaid = Array.isArray(changes) ? null : await wc.executeJavaScript(`(document.querySelector('[data-review-summary]') || document.querySelector('[data-work-arm="changes"]') || {}).textContent || null`)
         const reviewBtn = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); return b && !b.disabled ? { title: b.title } : false })()`), 5000)
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
-        const nodeRow = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.review-node'); if (!n) return false; const f = n.querySelector('[data-review-node-file="seed.txt"]'); if (!f) return false; const t = f.querySelector('[data-review-node-touches]'); return { id: n.getAttribute('data-panel-id'), touches: t ? t.getAttribute('data-review-node-touches') : null, text: t ? t.textContent : null, other: !!n.querySelector('[data-review-node-file="other.txt"]') } })()`), 10000)
+        const pressReview = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await pressReview()
+        // Pressed again only while no review node exists at all (as shell's 106).
+        let pressedAt = Date.now()
+        const nodeRow = await waitUntil(async () => {
+          const r = await wc.executeJavaScript(`(() => { const n = document.querySelector('.review-node'); if (!n) return null; const f = n.querySelector('[data-review-node-file="seed.txt"]'); if (!f) return false; const t = f.querySelector('[data-review-node-touches]'); return { id: n.getAttribute('data-panel-id'), touches: t ? t.getAttribute('data-review-node-touches') : null, text: t ? t.textContent : null, other: !!n.querySelector('[data-review-node-file="other.txt"]') } })()`)
+          if (r === null && Date.now() - pressedAt > 4000) { await pressReview(); pressedAt = Date.now() }
+          return r || false
+        }, 12000)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.review-node [data-review-node-file="seed.txt"] .review-node__file-button'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const touchList = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('.review-node [data-review-node-touch-list]'); return l ? l.textContent : false })()`), 5000)
         ok(IDS[0],
           restored === true && baseline && typeof baseline.sha === 'string' && Array.isArray(changes) && changes.includes('seed.txt') && !changes.includes('other.txt') &&
             reviewBtn && /review node/.test(reviewBtn.title) && nodeRow && nodeRow.touches === '1' && /1 tool call/.test(nodeRow.text) && nodeRow.other === false &&
             typeof touchList === 'string' && /Edit/.test(touchList) && !/Read/.test(touchList),
-          JSON.stringify({ restored, restoreState, baseline: baseline && baseline.sha, changes, reviewBtn, nodeRow, touchList, log: tLog.slice(-3) }))
+          JSON.stringify({ restored, restoreState, baseline: baseline && baseline.sha, changes, changesSaid, reviewBtn, nodeRow, touchList, log: tLog.slice(-3) }))
 
         // tools.2 — the chat's own tool rows.
         const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
