@@ -30,3 +30,9 @@ Format:
 - File: scripts/shot-scenes/** (and scripts/shot.cjs if a seed is simpler)
 - Smallest change: M496 hides six surfaces behind `labs.*` settings, off by default; World stays shown (docs/streams/cut-list.md). A scene that shows a hidden one (`relay`, `share-*`, `team-ask`, `memory`, or an account menu with nobody signed in) calls `window.canvas.settings.set('labs.<id>', true)` before it frames, the way scenes already set `shell.inspectorOpen`. The World scenes need nothing.
 - Status: open
+
+### Q-004 · `relay.bp.2` sizes its stall in fixed megabytes, which Linux's socket buffers swallow
+- From: A · To: D
+- File: scripts/verify-relay.cjs
+- Smallest change: the backpressure block pumps a fixed 5 MB (`n = 320` chunks of 16 KB) past a paused viewer. The relay only marks a viewer lagging once the kernel stops taking its bytes and its queue passes HIGH, then the viewer must fall a ring (1 MB) further for a resync. A Linux loopback absorbed about 3.7 MB, so the viewer never lagged far enough: bp.2 fails 5 of 5 there and flaked once on the Mac gate (PR #54). Measure what the loopback absorbs first and size the stream at twice that plus HIGH plus twice the ring (never under 5 MB), with the two waits scaled to the stream. The check's condition is unchanged. A ready patch, 5 of 5 green on Linux: /mnt/project-files/notes/stream-a/relay-bp2-fix.patch.
+- Status: open
