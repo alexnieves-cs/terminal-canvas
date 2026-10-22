@@ -13,6 +13,7 @@ Five streams run at once on separate branches, each opened as its own PR against
 | D | Reach | M487–M494 | `tc mcp` server, then phone alerts |
 | E | Cut and untangle | M495–M509 | Cut list, Follow, `Canvas.tsx` split, memory cap, command panels |
 | F | Visual and motion polish | M510–M519 | State at a glance, one motion system, layout fixes; plan in [polish.md](polish.md) |
+| G | Borrowed ideas | M530–M539 | The gaps a scan of similar apps found: more agents built in, answers from the phone, allow every pending read, exact Claude states; plan in [borrow.md](borrow.md) |
 
 ## Setting your lane
 

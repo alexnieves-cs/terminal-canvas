@@ -383,7 +383,8 @@ export interface AgentStepView {
  * built (M48), so the step never asks for a second discovery. A report that
  * has not arrived, or whose shell did not answer, is a TIMEOUT for every row
  * — "discovery did not answer", never "not installed". An agent the report
- * does not cover (gemini) has no probe at all, which reads the same way.
+ * does not cover has no probe at all, which reads the same way; since M531
+ * the report covers gemini, so its row answers like the other two.
  */
 export function probesFromReport(report: EnvReport | null): AgentProbe[] {
   const answered = report !== null && report.shell.ok && report.probe?.timedOut !== true

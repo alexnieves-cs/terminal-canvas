@@ -86,6 +86,7 @@
     "verify:panels:orchestrate": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels-orchestrate.cjs",
     "verify:panels:flowchart": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels-flowchart.cjs",
     "verify:onboarding": "node scripts/verify-onboarding.cjs",
+    "verify:borrow": "node scripts/verify-borrow.cjs",
     "verify:orchestration": "node scripts/verify-orchestration.cjs",
     "verify:first-run": "node scripts/verify-first-run.cjs",
     "verify:primitives": "node scripts/verify-primitives.cjs",
