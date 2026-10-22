@@ -764,8 +764,14 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           clientX: rA.left + rA.width / 2, clientY: rA.top + rA.height / 2,
           deltaY: 120, deltaMode: 0
         }))
-        await new Promise((res) => setTimeout(res, 200))
-        const afterMeta = read()
+        // Polled, not one 200ms look: the zoom is applied on a later frame
+        // than a pan, and the contended runner read the unchanged matrix at
+        // 200ms in two runs of three. Up to 2s for the camera to change.
+        let afterMeta = read()
+        for (let t = 0; t < 40 && afterMeta === beforeMeta; t++) {
+          await new Promise((res) => setTimeout(res, 50))
+          afterMeta = read()
+        }
 
         return {
           before, overFocused, overBackground, overUnfocused,
