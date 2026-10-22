@@ -15,7 +15,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <a href="#prerequisites"><img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS-lightgrey.svg"></a>
   <img alt="Electron app" src="https://img.shields.io/badge/built%20with-Electron-47848f.svg">
-  <img alt="Version 6.0.0" src="https://img.shields.io/badge/version-6.0.0-5edce6.svg">
+  <img alt="Version 6.0.1" src="https://img.shields.io/badge/version-6.0.1-5edce6.svg">
 </p>
 
 <p align="center">
@@ -36,14 +36,14 @@
   Every screen below is from the same set; none is a recording of a live session.
 </sub></p>
 
-> **Status: `v6.0.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v6.0.1`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story;
 > what it cannot prove is listed, by item, at the end
-> of [docs/load-bearing.md](docs/load-bearing.md). The redesign goldens are
-> not rebaselined in this release, and the DMG follows a Mac package pass
-> ([notes](docs/release-notes/6.0.0.md)).
+> of [docs/load-bearing.md](docs/load-bearing.md). The DMG on the release
+> page is the one that passed `verify:packaged` on the macOS runner
+> ([notes](docs/release-notes/6.0.1.md)).
 
 ## Why
 
