@@ -2851,6 +2851,17 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const rawOut = gid ? await scrollbackLog.readAll(String(gid)) : ''
       const ctxSeq = (rawOut.match(/\x1b\[\?[0-9;]+[hl]|\x1b\]133;[A-D][^\x07\x1b]{0,60}/g) ?? []).slice(-24).map((q) => q.replace(/\x1b/g, 'ESC'))
       const ctxTail = gid ? await scrollbackLog.tail(String(gid), 6) : []
+      // And tmux's own view of the pane: the raw log shows tmux's attach
+      // sequence turning the outer mouse modes ON, which tmux does only for
+      // its `mouse` option or a pane whose program asked for the mouse.
+      let ctxTmux = null
+      try {
+        const tmuxBin = findTmux()
+        if (tmuxBin && gid) {
+          const q = (args) => { try { return execFileSync(tmuxBin, ['-L', PANELS_SOCKET, ...args], { encoding: 'utf8', timeout: 3000 }).trim() } catch (e) { return 'ERR ' + String(e.message).slice(0, 80) } }
+          ctxTmux = { mouse: q(['show-options', '-gv', 'mouse']), pane: q(['display-message', '-p', '-t', '=' + gid, '#{pane_current_command} pid=#{pane_pid} any=#{mouse_any_flag} std=#{mouse_standard_flag} btn=#{mouse_button_flag} sgr=#{mouse_sgr_flag} created=#{session_created} att=#{session_attached}']), sessions: q(['list-sessions', '-F', '#{session_name}']).split('\n').length }
+        }
+      } catch (e) { ctxTmux = 'threw ' + String(e && e.message).slice(0, 80) }
       if (body !== null) await click(body.x, body.y, 'right')
       await sleep(200)
       const ctxRead = () => wc.executeJavaScript(`(() => { const m = document.querySelector('[data-context-for] [data-context-menu]'); if (!m) return null
@@ -2865,7 +2876,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('ctx.panel.1 a real right-click on a terminal opens its context menu: Copy and Paste first, then exactly the ⋯ menu\'s rows (one list), then Close; the keyboard stays in the terminal and Escape closes it',
         ctxP !== null && ctxP.for === gid && ctxP.ids[0] === 'edit.copy' && ctxP.ids[1] === 'edit.paste' && ctxP.ids[ctxP.ids.length - 1] === 'sel.close' &&
           dots.length > 0 && JSON.stringify(shared) === JSON.stringify(dots) && !ctxP.focusInMenu && ctxGone === null,
-        JSON.stringify({ dots, ctxP, ctxGone, ctxHit, ctxSeq, ctxTail, rawLen: rawOut.length }))
+        JSON.stringify({ dots, ctxP, ctxGone, ctxHit, ctxTmux, ctxSeq, ctxTail, rawLen: rawOut.length }))
 
       // ctx.paste.1 — its Paste is the ⌘V route (xterm's paste, bracketed),
       // never a raw write: the text reaches the shell's line.
