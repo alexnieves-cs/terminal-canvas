@@ -510,6 +510,8 @@ export interface PaletteActions {
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteTint(panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   addImage(path: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M535 (G5). `file-open <absolute path>`: the file panel a drop on the canvas opens. */
+  openFilePath(path: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   replaceImage(panelId: string, path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   openPreview(url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   setPreviewWidth(device: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }

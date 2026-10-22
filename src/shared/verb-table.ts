@@ -214,6 +214,10 @@ export const VERBS: readonly VerbDef[] = [
   // M186. A picture in, and a picture repaired. Both take a path, and both go
   // through the store, so an agent's picture has the same identity a person's
   // dropped one has.
+  // M535 (G5). `tc view <path>` lands here: the file panel a drop on the
+  // canvas already opens, reached from a shell. Absolute paths only, and a
+  // teammate's plan cannot run it (plan.ts: it READS a path the caller names).
+  { id: 'file-open', label: 'Open a file', args: [{ name: 'path', kind: 'text', rest: true }], destructive: false, actions: ['openFilePath'], target: 'canvas', hint: 'open a file by its absolute path as a file panel at the centre of the view' },
   { id: 'image-add', label: 'Image: add a picture', args: [{ name: 'path', kind: 'text' }], destructive: false, actions: ['addImage'], target: 'canvas', hint: 'take a PNG, JPEG, GIF or WebP into this canvas and place it' },
   { id: 'image-replace', label: 'Image: replace a picture', args: [{ name: 'panel', kind: 'panel' }, { name: 'path', kind: 'text' }], destructive: false, actions: ['replaceImage'], target: 'panel', hint: 'point an existing picture panel at different bytes — the repair for a missing one' },
   // M185. The preview's four. `preview-open` takes an OPTIONAL url: with one
@@ -555,6 +559,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'flowchart-import': { canvas: 'paste Mermaid text on the canvas — ⌘V with no panel focused', palette: 'flowchart.import', agent: 'tc plan flowchart-import /tmp/auth.mmd', workflow: 'an action node whose line is: flowchart-import /tmp/auth.mmd' },
   'flowchart-export': { canvas: "Export on the Shape section of a selected shape's inspector", palette: 'flowchart.export.mermaid', agent: 'tc plan flowchart-export mermaid', workflow: 'an action node whose line is: flowchart-export svg' },
   'flowchart-plan': { canvas: "Start work… on the Shape section of a selected shape's inspector, and the pill's Start work on a selected chart", palette: 'flowchart.plan', agent: 'tc plan flowchart-plan nt1', workflow: 'an action node whose line is: flowchart-plan nt1' },
+  'file-open': { canvas: 'drop a file on the canvas', palette: 'panel.open-file', agent: 'tc plan file-open /tmp/notes.txt', workflow: 'an action node whose line is: file-open /tmp/notes.txt' },
   'image-add': { canvas: 'drop a picture on the canvas, or paste one with no agent to take it', palette: 'image.add', agent: 'tc plan image-add /tmp/shot.png', workflow: 'an action node whose line is: image-add /tmp/shot.png' },
   'image-replace': { canvas: 'Replace on a picture panel', palette: 'image.replace', agent: 'tc plan image-replace img1 /tmp/other.png', workflow: 'an action node whose line is: image-replace img1 /tmp/other.png' },
   'preview-open': { canvas: 'Find the project on the preview pane, and a candidate in its list', palette: 'preview.open', agent: 'tc plan preview-open', workflow: 'an action node whose line is: preview-open' },

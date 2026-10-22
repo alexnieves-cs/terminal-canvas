@@ -52,6 +52,7 @@ export type ObjectsActions = Pick<PaletteActions,
   | 'setNoteText'
   | 'setNoteTint'
   | 'addImage'
+  | 'openFilePath'
   | 'replaceImage'
   | 'openPreview'
   | 'bindPreview'
@@ -69,7 +70,7 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     exportPackFile, importPackFile, importSamplePackFile, addNote, setNoteText, setNoteTint,
     addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow,
     capturePreviewNow, startDevServerNow, registry, panelsRef, selectedIdsRef, setInputMode,
-    self
+    openFilePanel, worldCentre, self
   } = ctx
   /**
    * M255. The ONE selected panel's draft path, or the named reason there is
@@ -192,6 +193,14 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     setNoteText: (panelId, text) => setNoteText(panelId, text),
     setNoteTint: (panelId, tint) => setNoteTint(panelId, tint),
     addImage: (path) => addImageFromPath(path),
+    // M535 (G5). Absolute only: a relative path would resolve against wherever
+    // the app was launched, never the shell that asked (`tc view` resolves it).
+    openFilePath: (path) => {
+      const p = path.trim()
+      if (!p.startsWith('/')) return { kind: 'refused', reason: 'file-open takes an absolute path — tc view resolves one from your shell' }
+      openFilePanel(p, worldCentre())
+      return { kind: 'ran', note: `opened ${p}` }
+    },
     replaceImage: (panelId, path) => replaceImagePanel(panelId, path),
     openPreview: (url) => openPreviewNow(url),
     bindPreview: () => bindPreviewNow(),

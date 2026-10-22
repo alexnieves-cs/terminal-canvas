@@ -14,6 +14,7 @@
  *   tc accounts | tc use <github-login>
  *   tc shares | tc share [--org <org-id>] | tc open-share <share-id>
  *   tc share-role <share-id> <login|user-id> <editor|viewer|none>
+ *   tc view <file|url>   (M535 — a plan line: create-browser, image-add or file-open)
  *   tc mcp   (M487 — mcp.ts; tc-main.ts starts it, buildRequest never sees it)
  *
  * Exit 0 on ok, 1 on a refusal (the app answered no), 2 when nothing is
@@ -47,6 +48,7 @@ export const USAGE = [
   '       tc accounts | tc use <github-login>',
   '       tc shares | tc share [--org <org-id>] | tc open-share <share-id>',
   '       tc share-role <share-id> <login|user-id> <editor|viewer|none>',
+  '       tc view <file|url>   (open it on the canvas: a page as a browser panel, a picture as an image, anything else as a file panel)',
   '       tc mcp   (an MCP server on stdio, for Claude Code or any MCP client)',
   '       tc phone-test   (one test push to the ntfy topic in Settings)',
   '       tc hook waiting|done|busy   (run by a claude panel\'s own hooks; needs TC_PANEL_ID and TC_HOOK_SECRET)',
@@ -74,6 +76,43 @@ export function socketCandidates(env: Record<string, string | undefined>): strin
     out.push(`${home}/Library/Application Support/terminal-canvas/control.sock`)
   }
   return out
+}
+
+/** M535. Lexical: `.` and `..` folded against the shell's directory, never the disk. */
+function absolute(path: string, base: string): string {
+  const parts: string[] = []
+  for (const seg of (path.startsWith('/') ? path : `${base}/${path}`).split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') parts.pop()
+    else parts.push(seg)
+  }
+  return `/${parts.join('/')}`
+}
+
+/**
+ * M535 (G5) — `tc view`, Wave Terminal's `wsh view`. It adds no channel: it
+ * WRITES a plan line from verbs that already have their four doors, so an
+ * agent's `tc view` is refused exactly where its `tc plan` would be. A page
+ * becomes a browser panel, a picture an image, anything else a file panel.
+ */
+export function viewPlan(target: string, env: Record<string, string | undefined>): { kind: 'ok'; line: string } | { kind: 'usage'; error: string } {
+  // `;` would start a second plan step, and the plan splits words on runs of
+  // whitespace, so neither can ride inside one argument.
+  if (target.includes(';') || /\s\s|[\t\r\n]/.test(target)) return { kind: 'usage', error: 'tc view cannot pass a path or URL holding ; or a run of spaces — rename it, or open it from the canvas' }
+  if (/^https?:\/\//i.test(target)) {
+    if (/\s/.test(target)) return { kind: 'usage', error: 'a URL has no spaces — quote-encode them as %20' }
+    return { kind: 'ok', line: `create-browser ${target}` }
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return { kind: 'usage', error: 'tc view opens http and https pages, or a file' }
+  const base = env['PWD'] ?? env['TC_PANEL_CWD']
+  if (!target.startsWith('/') && (base === undefined || !base.startsWith('/'))) return { kind: 'usage', error: 'tc view needs an absolute path here (no PWD to resolve against)' }
+  const path = absolute(target, base ?? '/')
+  if (/\.(png|jpe?g|gif|webp)$/i.test(path)) {
+    // image-add takes ONE word; the file panel takes the rest of the line.
+    if (/\s/.test(path)) return { kind: 'usage', error: 'a picture whose path has a space cannot go through a plan line — drop it on the canvas instead' }
+    return { kind: 'ok', line: `image-add ${path}` }
+  }
+  return { kind: 'ok', line: `file-open ${path}` }
 }
 
 export function buildRequest(argv: readonly string[], env: Record<string, string | undefined> = {}): { kind: 'ok'; line: string } | { kind: 'usage'; error?: string } {
@@ -280,6 +319,14 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     case 'ping':
     case 'phone-test':
       return rest.length === 0 ? { kind: 'ok', line: JSON.stringify({ verb }) } : { kind: 'usage', error: `${verb} takes no arguments` }
+    case 'view': {
+      if (rest.length !== 1 || rest[0] === '') return { kind: 'usage', error: 'view takes one file path or URL' }
+      const plan = viewPlan(rest[0]!, env)
+      if (plan.kind === 'usage') return plan
+      // The panel's token rides, as for `tc plan`: a teammate's view is refused where its plan would be.
+      const token = env['TC_PANEL_TOKEN']
+      return { kind: 'ok', line: JSON.stringify({ verb: 'plan', line: plan.line, ...(token === undefined || token === '' ? {} : { token }) }) }
+    }
     case 'hook': {
       // M534 (G4). Run by claude's hooks inside a panel, never by hand: the
       // panel id and secret come only from the env pty-manager gave it.

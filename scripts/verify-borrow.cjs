@@ -322,6 +322,50 @@ ok('borrow.hooks.5 pty-manager mints the hook secret per spawn only for a claude
   /control !== null && spec\.agent === 'claude-code' \? randomBytes\(16\)\.toString\('hex'\)/.test(hookSrc) && /timingSafeEqual\(got, want\)/.test(hookSrc) && /agentArgs\(spec, sessionId \?\? '', hookSecret !== undefined\)/.test(hookSrc),
   'pty-manager.ts no longer reads as the check expects')
 
+// ── G5 (M535): tc view ──
+check('borrow.view.1 tc view writes a plan line: a page is create-browser, a picture image-add, anything else file-open, each path made absolute against the shell', tcMod, (T) => {
+  const env = { PWD: '/Users/a/repo', TC_PANEL_TOKEN: 'tok' }
+  const line = (t) => { const r = T.buildRequest(['view', t], env); return r.kind === 'ok' ? JSON.parse(r.line) : r }
+  const page = line('https://localhost:5173/x')
+  const pic = line('shots/a.png')
+  const file = line('../other/README.md')
+  const abs = line('/etc/hosts')
+  const pass = page.verb === 'plan' && page.line === 'create-browser https://localhost:5173/x' && page.token === 'tok' &&
+    pic.line === 'image-add /Users/a/repo/shots/a.png' && file.line === 'file-open /Users/a/other/README.md' && abs.line === 'file-open /etc/hosts'
+  return { pass, detail: { page, pic, file, abs } }
+})
+check('borrow.view.2 tc view refuses what would break the plan line or reach past a page: a ;, a run of spaces, another scheme, no target, a relative path with no PWD', tcMod, (T) => {
+  const env = { PWD: '/Users/a/repo' }
+  const kinds = [
+    T.buildRequest(['view', 'a.txt; reset-canvas'], env),
+    T.buildRequest(['view', 'two  spaces.txt'], env),
+    T.buildRequest(['view', 'file:///etc/passwd'], env),
+    T.buildRequest(['view', 'javascript:alert(1)'], env),
+    T.buildRequest(['view'], env),
+    T.buildRequest(['view', 'a.txt'], {}),
+    T.buildRequest(['view', 'my shot.png'], env)
+  ].map((r) => r.kind)
+  return { pass: kinds.every((k) => k === 'usage'), detail: kinds }
+})
+const verbsMod = load('src/shared/verb-table.ts', 'verb-table')
+const planMod = load('src/shared/plan.ts', 'plan')
+check('borrow.view.3 file-open is a verb with all four doors, its palette door is the existing Open file… row, and a teammate\'s plan cannot run it', planMod, (P) => {
+  const V = verbsMod.mod
+  const def = V.VERBS?.find?.((v) => v.id === 'file-open') ?? Object.values(V).flat().find?.((v) => v && v.id === 'file-open')
+  const doors = V.V9_DOORS?.['file-open']
+  const palette = require('node:fs').readFileSync(join(ROOT, 'src/renderer/palette/commands.ts'), 'utf8')
+  const refusal = P.agentDoorRefusal({ verb: 'file-open', args: { path: '/etc/hosts' } }, { panels: [] }, { panelId: 'p', teammateId: 't' })
+  const person = P.agentDoorRefusal({ verb: 'file-open', args: { path: '/etc/hosts' } }, { panels: [] }, { panelId: 'p' })
+  const pass = def !== undefined && doors !== undefined && ['canvas', 'palette', 'agent', 'workflow'].every((k) => typeof doors[k] === 'string') &&
+    doors.palette === 'panel.open-file' && palette.includes("id: 'panel.open-file'") && typeof refusal === 'string' && person === null
+  return { pass, detail: { def: def?.id, doors, refusal, person } }
+})
+const objSrc = require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/palette-actions/objects.ts'), 'utf8')
+const execSrc = require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/palette-actions/executor.ts'), 'utf8')
+ok('borrow.view.4 file-open runs openFilePath, which refuses a relative path and opens an absolute one as the drop\'s file panel',
+  /case 'file-open': return self\.openFilePath\(/.test(execSrc) && /if \(!p\.startsWith\('\/'\)\) return \{ kind: 'refused'/.test(objSrc) && /openFilePanel\(p, worldCentre\(\)\)/.test(objSrc),
+  'executor.ts or objects.ts no longer reads as the check expects')
+
 ;(async () => {
   const p3 = await phone3.catch((e) => ({ error: e.message }))
   if (p3) {
