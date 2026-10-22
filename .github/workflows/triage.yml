@@ -38,8 +38,12 @@ jobs:
         # (never committed) turns the renderer's minifier off.
         run: |
           perl -0pi -e 's/(renderer: \{.*?build: \{)/$1 minify: false,/s' electron.vite.config.ts
-          grep -n 'minify: false' electron.vite.config.ts
-          NODE_ENV=development npx electron-vite build
+          # NODE_ENV alone left React's production build in (electron-vite builds for
+          # production): define it, so react-dom's development build is what bundles.
+          perl -0pi -e 's/(renderer: \{)/$1 define: { "process.env.NODE_ENV": JSON.stringify("development") },/s' electron.vite.config.ts
+          grep -nE 'minify: false|NODE_ENV' electron.vite.config.ts
+          npx electron-vite build
+          grep -c 'Maximum update depth exceeded' out/renderer/assets/index-*.js || true
       - name: Run suite three times
         env:
           TC_WATCHDOG_SCALE: '2'

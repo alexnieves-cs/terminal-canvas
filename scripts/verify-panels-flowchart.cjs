@@ -878,6 +878,9 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       for (const [i, s] of pick.entries()) await press(s.cx, s.cy, i === 0 ? [] : ['shift'])
       const selectedIds = (await shapes()).filter((s) => s.selected).map((s) => s.id)
       const manyBefore = await rectOf(pick.map((s) => s.id))
+      // The thrown error's own stack, as console text the recorder above keeps:
+      // the console line alone carries only the message.
+      await js(`(() => { window.addEventListener('error', (e) => { console.error('[stack] ' + String(e.error && e.error.stack || e.message)) }); return true })()`)
       const many = await dragFrames(lead, '200 shapes · drag a 40-shape selection (multi-move)')
       // A condition, not the drag's one settle(): two of three CI runs read
       // every member 'missing' after the multi-move commit, so the read waits
