@@ -13391,4 +13391,22 @@ tr[data-session-row]:focus-within .sessions-world,
   .sessions-state[data-tone="working"]::before,
   .sessions-state[data-tone="starting"]::before { animation: none; }
 }
+/* M516. PRESS FEEDBACK. A click used to answer only when its result arrived,
+   so a control that takes a beat (a spawn, a save) read as a missed click.
+   Every control now gives way the instant it is pressed, before any work
+   runs: a 3% scale-down applied with no transition, so it lands on the very
+   frame of the press, and released on --dur-1. It is transform-only, so it
+   runs on the compositor, never re-lays out a row, and never stops
+   pointer events. The whole rule sits at ZERO specificity
+   (:where), so a control that already positions itself with a transform
+   (a centred switch, a dragged handle) keeps its own transform and simply
+   does not take part, rather than jumping. */
+:where(button, [role="button"], [role="tab"], [role="menuitem"], summary) { transition: transform var(--dur-1) var(--ease); }
+:where(button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active, [role="tab"]:active, [role="menuitem"]:active, summary:active) {
+  transform: scale(.97);
+  transition-duration: 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active, [role="tab"]:active, [role="menuitem"]:active, summary:active) { transform: none; filter: brightness(.88); }
+}
 /* ── /st:F ── */

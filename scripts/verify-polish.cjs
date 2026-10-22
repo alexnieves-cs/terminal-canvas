@@ -66,6 +66,29 @@ ok('polish.topbar.1 the top bar search is capped at the page switch\'s right edg
     /\.rd-empty__minimap\s*\{\s*bottom:\s*calc\([^;]*--nav-hud-h/.test(rules),
   'st:F rules')
 
+// polish.react.1 — press feedback (M516). It must stay at zero specificity
+// (or it overrides a control's own positioning transform and the control
+// jumps on press), land with no transition, and be transform-only so it never
+// re-lays out or blocks input.
+{
+  const press = rules.match(/:where\(button:not\(:disabled\):active[^{]*\)\s*\{([^}]*)\}/)
+  const zero = press !== null && !/\)\s*:active/.test(press[0].split('{')[0].replace(/^:where\([\s\S]*\)\s*$/, ''))
+  const body = press ? press[1] : ''
+  const instant = /transform:\s*scale\(\.9\d\)/.test(body) && /transition-duration:\s*0s/.test(body) && !/pointer-events/.test(body)
+  const reduce = /prefers-reduced-motion:\s*reduce\)\s*\{\s*:where\(button:not\(:disabled\):active[^{]*\{\s*transform:\s*none/.test(rules)
+  ok('polish.react.1 every control gives way on the frame it is pressed: a zero-specificity, transform-only press with no transition in, and a reduced-motion branch',
+    zero && instant && reduce, JSON.stringify({ zero, instant, reduce }))
+}
+
+// polish.react.2 — nothing this lane animates may cost a frame or hold input:
+// no `transition: all` (it animates layout properties nobody named) and no
+// rule that pairs an animation with pointer-events: none.
+{
+  const all = /transition(?:-property)?:\s*all\b/.test(rules)
+  const blocking = [...rules.matchAll(/\{([^{}]*)\}/g)].some((m) => /\banimation:\s*(?!none)/.test(m[1]) && /pointer-events:\s*none/.test(m[1]))
+  ok('polish.react.2 st:F never transitions `all` and never pairs an animation with pointer-events: none', !all && !blocking, JSON.stringify({ all, blocking }))
+}
+
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
 if (results.some((r) => !r.pass)) process.exitCode = 1
