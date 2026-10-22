@@ -75,7 +75,11 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
   const installLoopTrap = () => js(`(() => { if (window.__loopTrap) return true; window.__loopTrap = true
     const orig = console.error.bind(console)
     console.error = (...args) => { const head = String(args[0]); if (head.includes('Maximum update depth')) orig(head + ' [stack] ' + String(new Error().stack)); else orig(...args) }
-    window.addEventListener('error', (e) => { orig('[stack] ' + String(e.error && e.error.stack || e.message)) })
+    window.addEventListener('error', (e) => {
+      orig('[stack] ' + String(e.error && e.error.stack || e.message))
+      // The triage build's probe (absent elsewhere): which components' external stores forced the last re-renders.
+      if (Array.isArray(window.__fsr)) { const n = {}; for (const c of window.__fsr) n[c] = (n[c] || 0) + 1; orig('[fsr] ' + JSON.stringify(n) + ' last ' + JSON.stringify(window.__fsr.slice(-8))) }
+    })
     return true })()`).catch(() => false)
   const reload = async () => { await reloadWithin(wc); await settle(); await installLoopTrap() }
   const press = async (x, y, modifiers = []) => {
