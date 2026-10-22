@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ['panels:agents', 'panels:product', 'panels:kinds']
+        suite: ['panels:core', 'panels:shell', 'panels:kinds', 'panels:agents', 'panels:product', 'panels:orchestrate', 'panels:flowchart']
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
