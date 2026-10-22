@@ -202,14 +202,25 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             if (p === null) return null
             const r = p.getBoundingClientRect()
             const host = document.querySelector('.canvas').getBoundingClientRect()
-            const el = document.elementFromPoint(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2))
             // WHO OWNS THE PIXEL. The packet's own hit stroke sitting over it
             // is fine — it is transparent and exists only to take a pointer.
             // A PANEL over it is not: that is the failure this arm exists for,
             // and a rect-inside-the-host test alone reports it as a pass.
-            const covered = el !== null && el.closest('.panel') !== null
+            // The stack is walked rather than its top read, because a
+            // terminal's name strip stands 16px proud of its frame, right over
+            // the north port an edge ends on, and paints nothing between its
+            // parts (styles.css, M397 A4): it takes the hit while the packet
+            // shows through. A panel box that paints nothing is looked
+            // through; the first one that paints, or anything not a panel's
+            // (the packet, the link layer, the world), owns it.
+            const paints = (q) => { const cs = getComputedStyle(q); return q.classList.contains('panel') || cs.backgroundImage !== 'none' || (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') }
+            const cx = Math.round(r.x + r.width / 2), cy = Math.round(r.y + r.height / 2)
+            const stack = document.elementsFromPoint(cx, cy)
+            const top = document.elementFromPoint(cx, cy)
+            const el = stack.find((q) => q.closest('.panel') === null || paints(q)) ?? top
+            const covered = el !== null && el.closest('.link-layer') === null && el.closest('.panel') !== null
             const by = covered ? el.closest('.panel') : null
-            const coverBy = by ? { hit: el.tagName + '.' + String(el.className.baseVal ?? el.className).slice(0, 60), hitOpacity: getComputedStyle(el).opacity, hitVis: getComputedStyle(el).visibility, id: by.getAttribute('data-panel-id'), z: getComputedStyle(by).zIndex, rect: (() => { const q = by.getBoundingClientRect(); return [Math.round(q.x), Math.round(q.y), Math.round(q.width), Math.round(q.height)] })(), layerZ: getComputedStyle(document.querySelector('.link-layer')).zIndex } : null
+            const coverBy = by ? { top: top ? top.tagName + '.' + String(top.className.baseVal ?? top.className).slice(0, 40) : null, hit: el.tagName + '.' + String(el.className.baseVal ?? el.className).slice(0, 60), hitOpacity: getComputedStyle(el).opacity, hitVis: getComputedStyle(el).visibility, id: by.getAttribute('data-panel-id'), z: getComputedStyle(by).zIndex, rect: (() => { const q = by.getBoundingClientRect(); return [Math.round(q.x), Math.round(q.y), Math.round(q.width), Math.round(q.height)] })(), layerZ: getComputedStyle(document.querySelector('.link-layer')).zIndex } : null
             return { coverBy, w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
               display: getComputedStyle(p).display, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches,
               inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)
