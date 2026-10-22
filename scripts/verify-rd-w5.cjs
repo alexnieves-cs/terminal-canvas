@@ -104,10 +104,12 @@ ok('rd-w5.walk.1 World Cmd+J and the 2D walk pick the same next id — one rule,
 
 const flightSrc = read('src/renderer/world/world-flight.ts')
 const viewSrc = read('src/renderer/world/WorldView.tsx')
-const canvasJump = read('src/renderer/canvas/Canvas.tsx')
+// M507. The jump moved with the panel gestures; Canvas still calls them.
+const canvasOwn = read('src/renderer/canvas/Canvas.tsx')
+const canvasJump = /= usePanelGestures\(\{/.test(canvasOwn) ? read('src/renderer/canvas/usePanelGestures.ts') : ''
 ok('rd-w5.walk.3 the canvas jump and the world walk share one attention cursor',
   /attentionCursor\(\)/.test(canvasJump) && /setAttentionCursor\(id\)/.test(canvasJump) &&
-  !/jumpCursorRef/.test(canvasJump) &&
+  !/jumpCursorRef/.test(canvasOwn + canvasJump) &&
   (canvasJump.match(/setAttentionCursor\(id\)/g) ?? []).length >= 2 &&
   /cursor = id/.test(flightSrc) && /export function attentionCursor/.test(flightSrc))
 

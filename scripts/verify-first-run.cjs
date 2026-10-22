@@ -339,7 +339,10 @@ check(HUD, 'revamp.create.1 the canvas\'s one Create door sits inside the HUD be
   const vp = { x: 0, y: 0, scale: 1 }
   const html = renderToStaticMarkup(createElement(m.CanvasHud, { viewport: vp, onZoomBy: noop, onFit: noop, fitTask: { run: noop }, create: { onOpen: noop } }))
   const empty = renderToStaticMarkup(createElement(m.CanvasHud, { viewport: vp, onZoomBy: noop, onFit: noop, fitTask: { run: noop }, empty: true }))
-  const canvas = require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  // M507. The HUD's mount moved to HostOverlays.tsx, which Canvas calls; the
+  // canvas's source is both files, so "mounted nowhere else" covers both.
+  const canvasOwn = require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  const canvas = canvasOwn + (/\brenderHostOverlays\(\{/.test(canvasOwn) ? '\n' + require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/HostOverlays.tsx'), 'utf8') : '')
   const once = (html.match(/data-create-open/g) ?? []).length === 1
   const first = html.indexOf('data-create-open') > -1 && html.indexOf('data-create-open') < html.indexOf('data-hud-zoom-out')
   return { pass: /^<div class="canvas-hud"[ >]/.test(html) && once && first && /data-hud-fit\b/.test(html) &&
