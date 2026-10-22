@@ -55,6 +55,17 @@ export const BUILT_IN_PRESETS: Preset[] = [
   { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [], agent: 'codex' },
   // M118. The probe the chat doors read for copilot's availability (codex's rule), and a terminal running the interactive CLI.
   { id: 'copilot', name: 'Copilot', cwd: '~', command: 'copilot', args: [], agent: 'copilot' },
+  // M531 (G1). More agents in the box: TermCanvas and Superset ship these,
+  // and onboarding has offered Gemini since M180 with no way to start it.
+  // Plain commands with no `agent` kind — AgentKind drives cost and
+  // transcript parsing, which none of these have measured — so each is a
+  // terminal running the CLI's own interactive mode. Disabled in the menu
+  // and hidden in the palette until the CLI is on the login PATH.
+  { id: 'gemini', name: 'Gemini CLI', cwd: '~', command: 'gemini', args: [] },
+  { id: 'opencode', name: 'OpenCode', cwd: '~', command: 'opencode', args: [] },
+  { id: 'cursor-agent', name: 'Cursor Agent', cwd: '~', command: 'cursor-agent', args: [] },
+  { id: 'amp', name: 'Amp', cwd: '~', command: 'amp', args: [] },
+  { id: 'kimi', name: 'Kimi CLI', cwd: '~', command: 'kimi', args: [] },
   // M37. The feature's door without a preset editor: presets are captured
   // from panels and there is no form, so a built-in is how a new user finds
   // "spawn in a fresh worktree" at all. `~` is the same cwd every built-in

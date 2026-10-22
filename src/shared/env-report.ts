@@ -4,8 +4,23 @@
  * this file imports nothing, like every other shared contract, so the web
  * project can name the type without reaching into main.
  */
-export type CliName = 'claude' | 'codex' | 'git'
-export const REPORTED_CLIS: readonly CliName[] = ['claude', 'codex', 'git']
+export type RequiredCli = 'claude' | 'codex' | 'git'
+/**
+ * M531 (G1). Agent CLIs a built-in preset runs, probed so their presets and
+ * onboarding rows can say installed or not. OPTIONAL, unlike the three above:
+ * most people have none of them, so a missing one is listed as missing and
+ * never folded into probeOutcome's "not found — install it" sentence, which
+ * would tell every user to install five tools they never asked for.
+ */
+export type AgentCli = 'gemini' | 'opencode' | 'cursor-agent' | 'amp' | 'kimi'
+export type CliName = RequiredCli | AgentCli
+export const REQUIRED_CLIS: readonly RequiredCli[] = ['claude', 'codex', 'git']
+export const AGENT_CLIS: readonly AgentCli[] = ['gemini', 'opencode', 'cursor-agent', 'amp', 'kimi']
+export const REPORTED_CLIS: readonly CliName[] = [...REQUIRED_CLIS, ...AGENT_CLIS]
+
+export function isRequiredCli(name: string): name is RequiredCli {
+  return (REQUIRED_CLIS as readonly string[]).includes(name)
+}
 
 export interface EnvReport {
   probedAt: number
@@ -40,7 +55,8 @@ export type ProbeOutcome =
  */
 export function probeOutcome(report: EnvReport): ProbeOutcome {
   const found = report.clis.filter((c) => c.path !== null).map((c) => c.name)
-  const missing = report.clis.filter((c) => c.path === null).map((c) => c.name)
+  // M531. Only a required CLI can be missing in this sentence; an absent optional agent is not a fault.
+  const missing = report.clis.filter((c) => c.path === null && isRequiredCli(c.name)).map((c) => c.name)
   const shells = report.probe?.shells ?? (report.shell.path === '' ? [] : [report.shell.path])
   const folders = report.probe?.folders ?? report.pathEntries
   const asked = `asked ${shells.length === 0 ? 'no shell' : shells.join(', ')} · checked ${folders.length} folder${folders.length === 1 ? '' : 's'}`

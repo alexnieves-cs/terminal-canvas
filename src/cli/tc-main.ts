@@ -25,6 +25,10 @@ if (process.argv[2] === 'mcp') {
     process.exitCode = 2
   })
 } else {
+  // M534 (G4). `tc hook` runs inside claude's Stop and Notification hooks,
+  // which wait for it: an app that stops answering must not hold claude's
+  // turn. Two seconds, then a silent exit 0 (the bell still works).
+  if (process.argv[2] === 'hook') setTimeout(() => process.exit(0), 2000).unref()
   void runCli(process.argv.slice(2), process.env, connect, {
     stdout: (s) => process.stdout.write(s),
     stderr: (s) => process.stderr.write(s)

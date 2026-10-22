@@ -13439,3 +13439,6 @@ tr[data-session-row]:focus-within .sessions-world,
   :where(button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active, [role="tab"]:active, [role="menuitem"]:active, summary:active) { transform: none; filter: brightness(.88); }
 }
 /* ── /st:F ── */
+
+/* ── st:G ── */
+/* ── /st:G ── */

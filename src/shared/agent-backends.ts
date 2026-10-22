@@ -72,6 +72,13 @@ export interface BackendDef {
   appendsPrompt: boolean
   /** M119. The process speaks a handshake before its first prompt (ACP's initialize → session/new); the manager holds the first send until it answers. */
   handshake: boolean
+  /**
+   * M533 (G3). Its permission requests name Claude Code's own tools — `Read`,
+   * `Grep`, `Glob`, `LS`, `NotebookRead` — with Claude's input keys, so ⌘⌥Y
+   * can tell a read from anything else. A row whose tools are named by
+   * another vocabulary (ACP kinds, a vendor's own) is never batched.
+   */
+  batchesReads: boolean
   /** M120. The tool-denying argv for a chat with no folder. Absent means the row DECLINES chat mode by name (`reasons.noSandbox`). */
   sandboxArgs?: readonly string[]
   /** M120. A closed list of model names where the CLI has one; absent means free text. */
@@ -116,6 +123,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     adoptsThreadId: false,
     appendsPrompt: true,
     handshake: false,
+    batchesReads: true,
     // Plan mode: read-only, no edits, no shell writes — the one flag that makes a chat with no folder safe.
     sandboxArgs: ['--permission-mode', 'plan'],
     reasons: {
@@ -144,6 +152,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     adoptsThreadId: true,
     appendsPrompt: false,
     handshake: false,
+    batchesReads: false,
     sandboxArgs: ['--sandbox', 'read-only'],
     reasons: {
       noCli: 'codex was not found on the login PATH — install it, or check the environment report',
@@ -178,6 +187,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     adoptsThreadId: false,
     appendsPrompt: false,
     handshake: false,
+    batchesReads: false,
     // Denial rules outrank --allow-all-tools (`copilot help permissions`).
     sandboxArgs: ['--deny-tool', 'shell', '--deny-tool', 'write'],
     // The fixtures' own `availableModels`; `auto` (the CLI's router) is what NO `--model` means, so it is the empty choice, not a second row.
@@ -216,6 +226,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     adoptsThreadId: true,
     appendsPrompt: false,
     handshake: true,
+    batchesReads: false,
     reasons: {
       noCli: 'copilot was not found on the login PATH — install it, or check the environment report',
       noInterrupt: 'nothing is answering — there is no turn to cancel',

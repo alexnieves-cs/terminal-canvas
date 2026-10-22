@@ -30,3 +30,15 @@ Format:
 - File: scripts/shot-scenes/** (and scripts/shot.cjs if a seed is simpler)
 - Smallest change: M496 hides six surfaces behind `labs.*` settings, off by default; World stays shown (docs/streams/cut-list.md). A scene that shows a hidden one (`relay`, `share-*`, `team-ask`, `memory`, or an account menu with nobody signed in) calls `window.canvas.settings.set('labs.<id>', true)` before it frames, the way scenes already set `shell.inspectorOpen`. The World scenes need nothing.
 - Status: done in #53 (B): the six account, share and relay scenes switch the two labs on, and off again after `shared-offline`
+
+### Q-005 · Exact Claude states from claude's own hooks (ownership exception)
+- From: G · To: D, E (both finished and resolved)
+- File: src/main/pty-manager.ts, src/main/control-protocol.ts, src/main/control-handler.ts, src/cli/** (and the unowned agent-args.ts, agent-state.ts, control-wiring.ts, session-backend.ts, tmux-args.ts)
+- Smallest change: a claude panel spawned with the control socket gets a per-spawn secret in `TC_HOOK_SECRET` and `--settings` carrying Notification (questions only), Stop and UserPromptSubmit hooks that run `tc hook waiting|done|busy`. A socket-only `hook` verb applies the matching detector event when panel and secret match (constant-time); `done` is a new event that ends a busy turn at once and leaves wants-you sticky. Under tmux the two values ride `new-session -e` (tmux 3.2+; older tmux gets no hooks), because a tmux pane inherits the server's env, not its client's; the secret is kept per panel so a Cmd+R reattach still matches. Taken by G because D and E are finished, the way lane A took Q-004.
+- Status: done (M534, lane G): `verify:borrow hooks.*`.
+
+### Q-006 · `tc view <file|url>` (ownership exception)
+- From: G · To: D (finished and resolved)
+- File: src/cli/** (and the unowned verb-table.ts, plan.ts, palette-actions/objects.ts and executor.ts, palette/commands.ts)
+- Smallest change: `tc view` writes a plan line from verbs that already have four doors: a page is `create-browser`, a picture `image-add`, anything else a new `file-open <absolute path>` verb whose doors are the drop on the canvas, the Open file… row, the agent line and a workflow node. `file-open` joins the teammate's refused verbs (it reads a path the caller names, like `import-docx`).
+- Status: done (M535, lane G): `verify:borrow view.*`.

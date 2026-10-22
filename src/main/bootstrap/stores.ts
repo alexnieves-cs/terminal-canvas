@@ -23,6 +23,10 @@ import { createLastExitStore, type LastExitStore } from '../last-exit'
 import { createJobStore, type JobStore } from '../job-store'
 import { createAttentionUnion } from '../approvals'
 import { createPhoneAlerts, type PhoneAlerts } from '../phone-alerts'
+import { createPhoneAnswers, POLL_MAX_CHARS } from '../phone-answers'
+import { recordDecision } from '../decision-audit'
+import { randomBytes } from 'node:crypto'
+import { denyMessageFor, type PermissionAnswer } from '../../shared/transcript'
 import { FileWatchers } from '../file-watch'
 import { ToolboxCache } from '../toolbox-cache'
 import { forgetTrail } from '../skill-trail-read'
@@ -83,6 +87,21 @@ export interface Stores {
   lastExit: LastExitStore
   /** M316. The pool's job journal; a saved `running` is converted to interrupted at construction. */
   jobs: JobStore
+}
+
+/** M532. A response body as text, read until `max` characters and then cancelled. */
+async function readCapped(r: Response, max: number): Promise<string> {
+  const reader = r.body?.getReader()
+  if (reader === undefined) return ''
+  const decoder = new TextDecoder()
+  let text = ''
+  while (text.length < max) {
+    const { done, value } = await reader.read()
+    if (done) break
+    text += decoder.decode(value, { stream: true })
+  }
+  void reader.cancel().catch(() => {})
+  return text.slice(0, max)
 }
 
 export function createStores(state: MainState): Stores {
@@ -232,7 +251,47 @@ export function createStores(state: MainState): Stores {
   // nobody is at the Mac. It rides the OS notification's own call — the one
   // moment both trackers say "entered, and the window is not in front" — and
   // decides the rest itself (phone-alerts.ts). Settings read at each call.
+  // M532 (G2). The phone's answers: Allow once / Deny on a chat's push, read
+  // back from the answers topic. The answer takes the PERSON's path, exactly
+  // as the MCP door does (control-wiring.ts): the team router first, then the
+  // process, with the canvas's own deny words, and no session grant.
+  const phoneSettings = (): { topic: string; server: string; idleMinutes: number; answers: boolean } => ({
+    topic: String(layoutStore.getSetting('remote.ntfyTopic' as never) ?? ''),
+    server: String(layoutStore.getSetting('remote.ntfyServer' as never) ?? ''),
+    idleMinutes: Number(layoutStore.getSetting('remote.alertIdleMinutes' as never)),
+    answers: layoutStore.getSetting('remote.phoneAnswers' as never) === true
+  })
+  const phoneAnswers = createPhoneAnswers({
+    settings: phoneSettings,
+    now: () => Date.now(),
+    code: () => randomBytes(12).toString('hex'),
+    // The body is read as a stream and cut at the cap, so a hostile server cannot make main buffer more.
+    get: async (url, init) => {
+      const r = await net.fetch(url, init)
+      return { ok: r.ok, status: r.status, text: () => readCapped(r, POLL_MAX_CHARS) }
+    },
+    pending: (panelId) => (state.agents?.list() ?? []).find((s) => s.id === panelId)?.pending.map((p) => ({ requestId: p.requestId, toolName: p.toolName, input: p.input })) ?? [],
+    answer: (panelId, requestId, allow, toolName) => {
+      const answer: PermissionAnswer = allow ? { allow: true } : { allow: false, message: denyMessageFor(toolName) }
+      const routed = state.teamAsks?.localAnswer(panelId, requestId, answer) ?? 'not-routed'
+      if (routed === 'waiting') return 'waiting'
+      if (routed === 'decided') return 'answered'
+      return state.agents?.answerPermission(panelId, requestId, answer) === true ? 'answered' : 'gone'
+    },
+    record: (row) => {
+      void recordDecision(runLedger, decisionAudit, {
+        kind: 'event', runId: `phone-${row.requestId}`, at: Date.now(), event: 'permission', source: 'person', panelId: row.panelId,
+        // A team past its spend line counts the press as one vote: nothing is decided yet, so the row says so.
+        title: row.outcome === 'waiting' ? `Counted a phone vote to ${row.allow ? 'allow' : 'deny'} ${row.toolName}` : `${row.allow ? 'Allowed once' : 'Denied'} ${row.toolName}, from the phone`,
+        detail: `request ${row.requestId} · Settings allowed phone answers`
+      })
+    },
+    log: (line) => console.warn(line)
+  })
+  // Polls only while a code is live, so a canvas with no question out reads nothing.
+  setInterval(() => { if (phoneAnswers.live() > 0) void phoneAnswers.poll() }, 10_000).unref()
   const phoneAlerts = createPhoneAlerts({
+    actions: (panelId) => phoneAnswers.actionsFor(panelId),
     settings: () => ({
       topic: String(layoutStore.getSetting('remote.ntfyTopic' as never) ?? ''),
       server: String(layoutStore.getSetting('remote.ntfyServer' as never) ?? ''),

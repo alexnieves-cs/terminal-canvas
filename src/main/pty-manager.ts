@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import type { ReviewIdentity } from '../shared/review-identity'
 import { createOutputCapture, mintCheckRunId, type CheckOutputRecord, type OutputCapture } from '../shared/check-output'
-import { agentArgs } from './agent-args'
+import { agentArgs, CLAUDE_STATE_HOOKS } from './agent-args'
 import { AGENT_CAPABILITIES, type AgentKind } from '../shared/cost'
 import {
   closeSync,
@@ -342,6 +342,8 @@ interface Session {
   agent: PanelSpec['agent']
   /** M398 (A3). Whether the last tick fed this session to the watcher, so leaving it can clear the card. */
   watched: boolean
+  /** M534 (G4). The secret `tc hook` must carry to set this panel's state; absent when no hooks were passed. */
+  hookSecret?: string
 }
 
 /** M52. The run ledger and the shell-integration directory, injected. */
@@ -436,6 +438,8 @@ export class PtyManager {
    * deliberately leaves open.
    */
   private readonly firstSpawnedAt = new Map<PanelId, number>()
+  /** M534 (G4). The hook secret a panel's claude was started with; outlives a reattach, cleared with firstSpawnedAt. */
+  private readonly hookSecrets = new Map<PanelId, string>()
 
   /**
    * The config stat vector taken when a panel's agent actually SPAWNED.
@@ -787,7 +791,25 @@ export class PtyManager {
       sessionId = randomUUID()
       this.setPinnedSession(spec.panelId, sessionId)
     }
-    const args = spawnArgs ?? agentArgs(spec, sessionId ?? '')
+    // M534 (G4). A claude panel gets its state from claude's own hooks
+    // (agent-args.ts CLAUDE_STATE_HOOKS), which prove which panel they speak
+    // for with a secret in the panel's env. Only when the backend can give
+    // that env to THIS panel alone (tmux before 3.2 cannot), and only when
+    // the hooks were really appended — a person's own `--settings` wins.
+    // Kept per panel id, so a Cmd+R reattach to the still-running claude
+    // carries the secret it was started with; cleared where firstSpawnedAt
+    // is. Same-user processes can still read a process's env: the secret
+    // keeps OTHER panels and stray clients out, not the user's own tools.
+    const hooked = control !== null && spawnArgs === null && spec.agent === 'claude-code' && this.getBackend().sessionEnv
+      ? agentArgs(spec, sessionId ?? '', true)
+      : null
+    const args = spawnArgs ?? hooked ?? agentArgs(spec, sessionId ?? '')
+    let hookSecret: string | undefined
+    if (hooked !== null && hooked.includes(CLAUDE_STATE_HOOKS)) {
+      hookSecret = this.hookSecrets.get(spec.panelId) ?? randomBytes(16).toString('hex')
+      this.hookSecrets.set(spec.panelId, hookSecret)
+      spawnEnv = { ...spawnEnv, TC_PANEL_ID: spec.panelId, TC_HOOK_SECRET: hookSecret }
+    }
 
     // BEFORE the spawn, not after. `new-session -A` creates the session if it
     // is missing, so a probe taken afterwards answers true unconditionally and
@@ -857,7 +879,8 @@ export class PtyManager {
       run: null,
       spawnedAt,
       agent: spec.agent,
-      watched: false
+      watched: false,
+      ...(hookSecret !== undefined ? { hookSecret } : {})
     }
     this.sessions.set(spec.panelId, session)
     // Only ever ticks while something is in the map; see startIdleTick.
@@ -915,6 +938,7 @@ export class PtyManager {
         // path. A per-panel map that only some exits clear is the shape the
         // recycled-id failure keeps arriving in.
         this.firstSpawnedAt.delete(spec.panelId)
+        this.hookSecrets.delete(spec.panelId)
         this.configStamps.delete(spec.panelId)
       }
       // AFTER the flush above and before the exit is announced. Order matters
@@ -1035,6 +1059,7 @@ export class PtyManager {
       this.lastLive.delete(panelId)
       this.subagentWatch.drop(panelId)
       this.firstSpawnedAt.delete(panelId)
+      this.hookSecrets.delete(panelId)
       this.configStamps.delete(panelId)
       this.recordUsage(panelId)
       dropUsage(this.usageState, panelId)
@@ -1064,6 +1089,7 @@ export class PtyManager {
     this.lastLive.delete(panelId)
     this.subagentWatch.drop(panelId)
     this.firstSpawnedAt.delete(panelId)
+    this.hookSecrets.delete(panelId)
     this.configStamps.delete(panelId)
     this.recordUsage(panelId)
     dropUsage(this.usageState, panelId)
@@ -1171,6 +1197,23 @@ export class PtyManager {
     const session = this.sessions.get(panelId)
     if (!session) return
     this.applyEvent(session, { kind: 'acknowledge' })
+  }
+
+  /**
+   * M534 (G4). A claude panel's own hook reporting its state (`tc hook`).
+   * Answers false, and changes nothing, unless the secret is the one minted
+   * for this panel's claude (kept across a reattach) — a killed panel has
+   * none, and an answer of false is all a caller learns. waiting is a bell (wants-you),
+   * busy is output, done is the exact end of a turn (agent-state.ts).
+   */
+  hook(panelId: PanelId, secret: string, state: 'waiting' | 'done' | 'busy'): boolean {
+    const session = this.sessions.get(panelId)
+    if (!session || session.killed || session.hookSecret === undefined) return false
+    const want = Buffer.from(session.hookSecret)
+    const got = Buffer.from(secret)
+    if (got.length !== want.length || !timingSafeEqual(got, want)) return false
+    this.applyEvent(session, { kind: state === 'waiting' ? 'bell' : state === 'busy' ? 'output' : 'done' })
+    return true
   }
 
   private startIdleTick(): void {

@@ -1,5 +1,5 @@
 import { updateSentence, type UpdateState } from '@renderer/session/update-store'
-import type { EnvReport } from '@shared/env-report'
+import { isRequiredCli, type EnvReport } from '@shared/env-report'
 import type { Command } from '../palette-model'
 import { withReason } from './with-reason'
 
@@ -15,6 +15,18 @@ import { withReason } from './with-reason'
  */
 export const REASON_NO_ENV_REPORT = 'the environment has not been read yet'
 
+/**
+ * M531. The door's count. Optional agents (gemini, opencode…) are counted
+ * apart: "3 of 8 CLIs found" would read as five things wrong on a machine
+ * that is set up exactly as it needs to be.
+ */
+export function environmentCount(report: EnvReport): string {
+  const required = report.clis.filter((c) => isRequiredCli(c.name))
+  const agents = report.clis.filter((c) => !isRequiredCli(c.name) && c.path !== null).length
+  const base = `${required.filter((c) => c.path !== null).length} of ${required.length} CLIs found`
+  return agents === 0 ? base : `${base} · ${agents} more agent${agents === 1 ? '' : 's'}`
+}
+
 export function buildEnvironmentRows(report: EnvReport | null, update: UpdateState | null = null): Command[] {
   const rows: Command[] = []
   const info = (id: string, title: string, subtitle: string, searchText: string): Command => ({
@@ -27,7 +39,7 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
         title: 'Environment…',
         subtitle: report === null
           ? 'what the app found at startup'
-          : `${report.clis.filter((c) => c.path !== null).length} of ${report.clis.length} CLIs found · ${report.tmux.kind === 'tmux' ? 'tmux' : 'no tmux'}`,
+          : `${environmentCount(report)} · ${report.tmux.kind === 'tmux' ? 'tmux' : 'no tmux'}`,
         group: 'manage',
         entersScope: 'environment',
         searchText: 'environment path claude codex git tmux shell found not found install report',
@@ -46,7 +58,13 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
   const INSTALL: Record<string, string> = {
     claude: 'install the Claude Code CLI so `claude` is on your PATH',
     codex: 'install the Codex CLI so `codex` is on your PATH',
-    git: 'install git (Xcode command line tools, or Homebrew)'
+    git: 'install git (Xcode command line tools, or Homebrew)',
+    // M531. Optional agents: the subtitle says what installing one gives, not that it is needed.
+    gemini: 'optional — install Gemini CLI to get its preset',
+    opencode: 'optional — install OpenCode to get its preset',
+    'cursor-agent': 'optional — install Cursor Agent to get its preset',
+    amp: 'optional — install Amp to get its preset',
+    kimi: 'optional — install Kimi CLI to get its preset'
   }
   for (const cli of report.clis) {
     rows.push(info(`env.cli.${cli.name}`,
