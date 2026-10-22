@@ -3103,7 +3103,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // disk takes). The harness's in-memory store hands the renderer the raw
         // seed unparsed, so the DOM still shows bB here — reported, not asserted.
         const dropped = Array.isArray(parsed.warnings) && parsed.warnings.some((w) => /bB/.test(w) && /http/.test(w))
-        const rail = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rail-list--panels .rail-row[data-rail-row="bA"]'); return r ? { label: r.querySelector('.rail-row__label')?.textContent ?? null } : null })()`)
+        // The dock button TOGGLES the panels rail, and a reload can leave it
+        // open or shut, so the one click above can close it: open it only
+        // while the list is absent, and read the row once it lands.
+        const rail = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('.rail-list--panels .rail-row[data-rail-row="bA"]'); if (r) return { label: r.querySelector('.rail-row__label')?.textContent ?? null }
+          if (!document.querySelector('.rail-list--panels')) { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) }
+          return false })()`), 6000, 1000) || null
         const expectUrl = `http://127.0.0.1:${port}/elsewhere`
         ok(IDS[0],
           live && live.guest === true && live.url === expectUrl && live.address === expectUrl && live.leak === false &&
@@ -3157,7 +3162,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         flushLayoutStore()
         await reloadWithin(wc)
         await settle()
-        const attached = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="pv1"]'); return n && n.getAttribute('data-browser-live') === 'yes' ? { wc: Number(n.getAttribute('data-browser-wc')) } : false })()`), 20000)
+        // Live is not enough: Capture stays disabled until the guest's id is on
+        // the frame (BrowserNode), so a run that pressed early pressed nothing.
+        const attached = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="pv1"]'); return n && n.getAttribute('data-browser-live') === 'yes' && n.getAttribute('data-browser-wc') ? { wc: Number(n.getAttribute('data-browser-wc')) } : false })()`), 20000)
         const chips = await wc.executeJavaScript(`[...document.querySelectorAll('[data-preview-device]')].map((b) => b.getAttribute('data-preview-device')).join(',')`)
         // A shell control acts on CLICK (`shellControl` preventDefaults the
         // mousedown so focus never leaves the terminal's textarea), so a
