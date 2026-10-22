@@ -8,6 +8,8 @@ module.exports = {
   ...require('../src/shared/credential-schema'),
   ...require('../src/renderer/palette/fuzzy'),
   ...require('../src/renderer/palette/palette-model'),
+  /* M509. Command panels: the > query, the row's folder. */
+  ...require('../src/renderer/palette/command-panel'),
   ...require('../src/renderer/palette/commands'),
   /* M65. The spawn sheet's model — pure. */
   ...require('../src/renderer/palette/spawn-sheet'),

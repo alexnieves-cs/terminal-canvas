@@ -3,3 +3,4 @@
    bundle needs no DOM and no Electron. */
 export * from '../src/renderer/session/session-registry'
 export * from '../src/renderer/session/panel-session'
+export * from '../src/renderer/session/memory-ration'

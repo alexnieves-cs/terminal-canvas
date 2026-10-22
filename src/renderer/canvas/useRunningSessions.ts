@@ -4,6 +4,7 @@ import { applyMachineCosts } from '@renderer/session/machine-cost-store'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import { MACHINE_COST_SAMPLE_MS } from './canvas-constants'
 import { railLabel } from '../shell/rail-rows'
+import { RATION_CHECK_MS } from '@renderer/session/memory-ration'
 import type { LinkMode } from './useLinkMode'
 import type { Registry } from '@renderer/session/session-registry'
 
@@ -119,6 +120,16 @@ export function useRunningSessions(deps: UseRunningSessionsDeps) {
     registry.setInputTargets(broadcastTargetIds)
     return () => registry.setInputTargets([])
   }, [broadcastInput, broadcastReady, broadcastTargetIds])
+
+  // M508 (backlog #64). The memory ration's clock: once a minute the registry
+  // trims the scrollback of any session nobody has looked at for half an
+  // hour. A trim, never a dispose (memory-ration.ts); the renderer owns the
+  // schedule for the machine-cost sampler's reason — closing the canvas
+  // should stop it.
+  useEffect(() => {
+    const timer = window.setInterval(() => { registry.rationMemory() }, RATION_CHECK_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
   return { broadcastReady, broadcastTargetIds, linkSourceName }
 }

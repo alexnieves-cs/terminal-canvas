@@ -864,6 +864,62 @@ console.log('\n' + '='.repeat(60))
       JSON.stringify({ can, f1: { size: f1.options.fontSize, refits: f1.refits }, f2: { size: f2.options.fontSize, refits: f2.refits }, f3: f3 && f3.options }))
   }
 
+  // mem.* — M508 (backlog #64), the memory ration. The first registry
+  //     operation that changes a Terminal's contents, so it sits beside 5 and
+  //     15 and asks their question too: a trim must never be a dispose or a
+  //     kill. A controllable clock, because the threshold is half an hour.
+  {
+    const R = require(OUT)
+    const at = 10_000_000
+    const plan = R.rationPlan([
+      { id: 'old', tier: 'card', seenAt: at - R.RATION_AFTER_MS, rationed: false },
+      { id: 'young', tier: 'card', seenAt: at - R.RATION_AFTER_MS + 1, rationed: false },
+      { id: 'onscreen', tier: 'live', seenAt: 0, rationed: false },
+      { id: 'done', tier: 'card', seenAt: 0, rationed: true }
+    ], at)
+    ok('mem.1 the plan trims a session unseen for the threshold, and never a younger one, a live one, or one already trimmed',
+      JSON.stringify(plan) === '["old"]' && R.RATIONED_SCROLLBACK < R.FULL_SCROLLBACK && R.RATION_CHECK_MS < R.RATION_AFTER_MS,
+      JSON.stringify(plan))
+
+    const bridge = fakeBridge()
+    const factory = fakeFactory()
+    let clock = 1000
+    const registry = createRegistry({ bridge, factory, now: () => clock })
+    registry.ensure('m1', { ...SPEC, panelId: 'm1' })
+    registry.ensure('m2', { ...SPEC, panelId: 'm2' })
+    registry.ensure('m3', { ...SPEC, panelId: 'm3' })
+    // m1 was live and spawned, then carded; m2 is live now; m3 was focused late.
+    registry.applyTiers({ m1: 'live', m2: 'live' })
+    registry.attachSlot('m1'); registry.attachSlot('m2')
+    await tick()
+    registry.applyTiers({ m2: 'live' })
+    registry.detachSlot('m1')
+    clock += R.RATION_AFTER_MS - 5
+    registry.focus('m3')
+    clock += 10
+    const before = registry.version()
+    const trimmed = registry.rationMemory()
+    const m1 = factory.made.get('m1'), m2 = factory.made.get('m2'), m3 = factory.made.get('m3')
+    ok('mem.2 rationMemory trims only the unseen card session, by configure, and never disposes, kills or bumps',
+      JSON.stringify(trimmed) === '["m1"]' && m1.options.scrollback === R.RATIONED_SCROLLBACK &&
+        m2.options.scrollback === undefined && m3.options.scrollback === undefined &&
+        !m1.disposed && bridge.calls.kill.length === 0 && registry.get('m1').status.kind === 'running' &&
+        registry.version() === before,
+      JSON.stringify({ trimmed, m1: m1.options, kills: bridge.calls.kill.length, status: registry.get('m1').status.kind }))
+    ok('mem.3 a trimmed session is not trimmed again on the next tick',
+      registry.rationMemory().length === 0)
+    registry.applyTiers({ m1: 'live', m2: 'live' })
+    ok('mem.4 going live restores the full buffer, and resets the clock so it is not trimmed straight back',
+      m1.options.scrollback === R.FULL_SCROLLBACK && registry.get('m1').rationed === false &&
+        (registry.applyTiers({ m2: 'live' }), registry.rationMemory().length === 0),
+      JSON.stringify(m1.options))
+    const src = require('node:fs').readFileSync(join(__dirname, '..', 'src/renderer/session/session-registry.ts'), 'utf8')
+    const body = src.slice(src.indexOf('    rationMemory() {'), src.indexOf('    subscribe(listener) {'))
+    const term = require('node:fs').readFileSync(join(__dirname, '..', 'src/renderer/terminal/create-terminal.ts'), 'utf8')
+    ok('mem.5 the ration body names no dispose or kill, and every terminal starts at the full depth the restore returns to',
+      body.length > 0 && !/dispose|kill/.test(body) && /scrollback: FULL_SCROLLBACK/.test(term) && !/scrollback: \d/.test(term))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

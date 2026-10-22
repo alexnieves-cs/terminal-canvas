@@ -154,6 +154,91 @@ const M = require(OUT)
     `ask=${M.askChip(waiting)} fail=${M.failedLine(failed)}`)
 }
 
+// follow.*. M497 (R-052): Follow beside Work / Plan / Map. The HUD paints it only
+// while the room has registered its camera's follow through follow-door.ts, so
+// the 2D HUD is unchanged. One bundle holds the HUD AND the door, so the
+// registration the check makes is the one the HUD reads.
+{
+  const FOLLOW_OUT = join(ROOT, 'out', 'verify', 'rd-w2-follow.cjs')
+  let F = null
+  let buildError = ''
+  try {
+    buildSync({
+      stdin: {
+        contents: `
+          export { CanvasHud } from '../src/renderer/canvas/CanvasHud'
+          export { registerFollow, getFollow } from '../src/renderer/canvas/follow-door'
+        `,
+        resolveDir: __dirname,
+        sourcefile: 'rd-w2-follow-entry.tsx',
+        loader: 'tsx'
+      },
+      outfile: FOLLOW_OUT,
+      bundle: true,
+      platform: 'node',
+      format: 'cjs',
+      logLevel: 'silent',
+      jsx: 'automatic',
+      external: ['react', 'react/jsx-runtime', 'react-dom'],
+      loader: { '.css': 'empty', '.svg': 'text' },
+      alias: { '@shared': join(ROOT, 'src/shared'), '@renderer': join(ROOT, 'src/renderer') }
+    })
+    F = require(FOLLOW_OUT)
+  } catch (error) { buildError = error.message }
+  const { createElement } = require('react')
+  const { renderToStaticMarkup } = require('react-dom/server')
+  const noop = () => {}
+  const hud = () => renderToStaticMarkup(createElement(F.CanvasHud, { viewport: { x: 0, y: 0, scale: 1 }, onZoomBy: noop, onFit: noop }))
+  const tiers = (html) => {
+    const at = html.indexOf('aria-label="Zoom tier"')
+    return at < 0 ? '' : html.slice(at, html.indexOf('</span>', at))
+  }
+
+  const bare = F === null ? '' : hud()
+  ok('follow.1 with no camera registered the HUD paints no Follow, and the three tiers are unchanged',
+    F !== null && !/data-hud-follow/.test(bare) && (tiers(bare).match(/data-hud-tier=/g) ?? []).length === 3,
+    buildError || bare.slice(0, 200))
+
+  let ran = 0
+  let live = ''
+  let order = false
+  let enabled = false
+  let cleared = ''
+  if (F !== null) {
+    const clear = F.registerFollow({ run: () => { ran++ } })
+    live = hud()
+    const group = tiers(live)
+    order = group.indexOf('data-hud-tier="map"') > -1 && group.indexOf('data-hud-follow') > group.indexOf('data-hud-tier="map"')
+    enabled = /data-hud-follow=""[^>]*title="Follow picked \(F\)"/.test(live) && !/data-hud-follow=""[^>]*disabled/.test(live)
+    F.getFollow().run()
+    clear()
+    cleared = hud()
+  }
+  ok('follow.2 a registered follow paints Follow inside the tier group after Map, enabled and naming its chord, runs the registered follow, and is gone again once cleared',
+    order && enabled && ran === 1 && !/data-hud-follow/.test(cleared),
+    JSON.stringify({ order, enabled, ran, html: tiers(live).slice(0, 400) }))
+
+  let reason = ''
+  let stale = false
+  if (F !== null) {
+    const first = F.registerFollow({ run: noop })
+    const second = F.registerFollow({ run: noop, disabledReason: 'Pick a robot to follow' })
+    reason = hud()
+    first()
+    stale = F.getFollow() !== null
+    second()
+  }
+  ok('follow.3 with nothing picked Follow is present and disabled with the reason (never a dead control), and clearing an older registration never clears the newer one',
+    /data-hud-follow=""[^>]*disabled=""[^>]*title="Pick a robot to follow"/.test(reason) && /aria-label="Follow picked: Pick a robot to follow"/.test(reason) && stale && F.getFollow() === null,
+    reason.slice(reason.indexOf('data-hud-follow') - 40, reason.indexOf('data-hud-follow') + 260))
+
+  const chrome = readFileSync(join(ROOT, 'src', 'renderer', 'world', 'WorldChrome.tsx'), 'utf8')
+  ok('follow.4 the room registers the camera panel\'s own follow (one Follow behaviour, not a second), only when it has a camera (the flat room registers none), and re-registers when the pick changes',
+    /if \(flat\) return undefined\s*return registerFollow\(\{\s*run: \(\) => camRef\.current\.follow\(\)/.test(chrome) &&
+      /picked === null \? \{ disabledReason: 'Pick a robot to follow' \} : \{\}/.test(chrome) && /\}, \[flat, picked\]\)/.test(chrome),
+    'WorldChrome registration')
+}
+
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
 if (results.some((r) => !r.pass)) process.exitCode = 1

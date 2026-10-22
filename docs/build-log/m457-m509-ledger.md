@@ -51,6 +51,7 @@ Ownership: [docs/streams/ownership.json](../streams/ownership.json).
 |---|---|---|---|
 | #34 | M498 (E4) | `CenterPages.tsx`: the Orchestrate, Team, Focus, Sessions and Review pages leave `Canvas.tsx` verbatim. 10,695 → 10,417 lines | blocking `verify` green; four text checks read the new file and require `<CenterPages>` |
 | #37 | M499–M506 (E4) | Eight hook seams (`useSkillsPane`, `useWorkflowVerbs`, `usePreviewVerbs`, `useCreationVerbs`, `useObjectVerbs`, `useChatSwapVerbs`, `useNavigatorModels`, `useAttentionModels`), each a contiguous run at its old position. 10,417 → 8,094 | text checks re-pointed at the new files, each still requiring the call in Canvas |
+| #41 | M507 (E4) | Fourteen more seams: hooks (`useRunRows`, `useTaskLens`, `useAnnotations`, `useShellTail`, `usePanelGestures`, `useShellSettings`, `useShellReads`, `useMainRows`, `useHistoryVerbs`, `useSnapAndAgentLinks`, `useRunningSessions`) and render functions (`renderPanelNode`, `renderHostOverlays`, `renderInspectorPane`, `renderShellChrome`, `renderWorldLayers`), each called at its old position. 8,094 → 3,978, under the 4,000 target | blocking `verify` green; text checks follow the code into the new file only while Canvas still calls it; `memo-stable.1` (lane A) re-pointed in #38 |
 
 ## F — Visual and motion polish (M510–M519)
 
