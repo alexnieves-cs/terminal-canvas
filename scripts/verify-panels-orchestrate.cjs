@@ -368,6 +368,11 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const reading = await waitUntil(() => wc.executeJavaScript(`(() => { const o = document.querySelector('.orch[data-orch-reading]'); const b = document.querySelector('.orch__body'); return o && b && b.getBoundingClientRect().height === 0 ? true : false })()`), 4000)
       // Re-measured after a pause: if the bench's flex is eased in, the first read lands at the start of that ease.
       const readH1 = await benchH()
+      // The ease can stall mid-way on the runner (an offscreen window's frames
+      // are throttled): three equal reads at 242 settled, and the bench stood
+      // at 706 a moment later. So the grown height is waited for, up to 5s,
+      // before the settled read; a bench that never grows still fails on it.
+      await waitUntil(async () => (await benchH()) > restH + 150, 5000)
       const readH = await settledBenchH()
       const readRules = await wc.executeJavaScript(`(() => { const out = []; for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules } catch { continue } for (const r of rules) { if (r.cssText && r.cssText.includes('orch__bench') && /reading|flex/.test(r.cssText) && r.cssText.length < 400) out.push(r.cssText) } } return out.slice(0, 8) })()`)
       // Taken IN reading mode: the numbers that explain a bench that did not take the area.

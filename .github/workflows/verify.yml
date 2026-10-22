@@ -31,7 +31,7 @@ on:
 # name that matches no suite, so a typo cannot drop one from both jobs. Remove a
 # name here when its suite is fixed; when the list is empty, delete the second job.
 env:
-  KNOWN_RED: verify:panels:core,verify:panels:shell,verify:panels:agents,verify:panels:product
+  KNOWN_RED: verify:panels:core,verify:panels:shell,verify:panels:agents,verify:panels:product,verify:panels:orchestrate
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
