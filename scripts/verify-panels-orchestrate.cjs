@@ -20,7 +20,7 @@ const M298_DEFAULT_COMP_PX = 179
 const WATCHDOG_MS = 210000 // measured 2026-09-20 with M301's orch-reconcile.app.1/.2 in (a real chat, a turn, a kill through the runner's exit path and two page re-reads): 163.9 s against the 180 s pin, which put headroom.1 red at 91%; 1.25x the slowest, to the next second. Before M301: 180000, measured 2026-09-20 with M298's orch-fit.app.1 in (five fixture reloads of 0/1/21/61/100 sessions, three window sizes each): 142.8 s with demo captures on at load ~3 against the 145 s pin. Before M298: 145000, measured with Phase D's blocks in: green runs 103.5 s, 106.4 s, 109.2 s at load 20–26. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
 
 runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
-  const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state } = ctx
+  const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state, reloadWithin } = ctx
   // As in `agents`: a renderer reload must DETACH every session, exactly as
   // main/index.ts wires it, or a fixture that expects a dormant panel after a
   // reload finds it live. Installed once, at this part's start.
@@ -44,8 +44,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
     for (let attempt = 0; attempt < 3; attempt++) {
       layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       layoutStore.flushSync()
-      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await re
+      await reloadWithin(wc)
       await settle()
       got = await waitUntil(() => { const ids = layoutStore.initial().panels.map((p) => p.id).sort().join(','); return ids === want ? ids : false }, 3000)
       if (got !== false) return
@@ -286,8 +285,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       flushLayoutStore()
       // The renderer reads the roster at load: a teammate saved behind its back is one it
       // refuses by name (the product suite's recipe, kept).
-      const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reB
+      await reloadWithin(wc)
       await settle()
       const spawnsBefore = chatSpawns.length
       const lanesBefore = layoutStore.worktrees().length
@@ -541,8 +539,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
       })
       layoutStore.flushSync()
-      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await re
+      await reloadWithin(wc)
       await settle()
       // Wake dA through the rail's own start control, then exit 1 through its PTY.
       const woke = await wc.executeJavaScript(`(() => { const b = document.querySelector('.rail-row[data-rail-row="dA"] .rail-row__start'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
@@ -647,8 +644,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       layoutStore.saveTeammate({ id: 'tm-c', name: 'phase-c', brief: 'You are phase-c.', places: [repo], services: [], skills: [], memory: 'phase-c', chats: [], messaging: false, scheduling: false })
       layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       flushLayoutStore()
-      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await re
+      await reloadWithin(wc)
       await settle()
       // Earlier blocks' items would be islands too and would take the primary pick: done, by the board's own verb.
       const leftovers = await wc.executeJavaScript(`(() => { const items = window.__m113.items().filter((i) => i.state === 'working' || i.state === 'review'); for (const i of items) window.__m113.done(i.id); return items.map((i) => i.id) })()`)
@@ -988,8 +984,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
       })
       layoutStore.flushSync()
-      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await re
+      await reloadWithin(wc)
       await settle()
       await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
@@ -1267,8 +1262,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await re
+        await reloadWithin(wc)
         await settle()
         await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
@@ -1648,8 +1642,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
       })
       layoutStore.flushSync()
-      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reloaded
+      await reloadWithin(wc)
       await settle()
       const runtimeHasIt = await wc.executeJavaScript(`Promise.all([window.canvas.agentSession.list(), window.canvas.pty.list()]).then(([a, p]) => a.some((x) => x.id === ${JSON.stringify(restoredId)}) || p.some((x) => x.panelId === ${JSON.stringify(restoredId)}))`)
       await click('[data-seg="orchestration"]:not([aria-pressed="true"])')

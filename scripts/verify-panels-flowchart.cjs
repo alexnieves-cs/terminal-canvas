@@ -28,7 +28,7 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 const WATCHDOG_MS = 47000 // measured 2026-09-29 alone in the Electron tier, two green runs: 37.6 s, 37.4 s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
 
 runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
-  const { IPC_EVENTS, app, attachPtyLifecycle, chatSpawns, fromPanels, flushLayoutStore, join, killedPanelIds, layoutStore, listSessions, mkdtempSync, ok, ptyManager, requestFromRendererWith, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, zoomToScale, state } = ctx
+  const { IPC_EVENTS, app, attachPtyLifecycle, chatSpawns, fromPanels, flushLayoutStore, join, killedPanelIds, layoutStore, listSessions, mkdtempSync, ok, ptyManager, requestFromRendererWith, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, zoomToScale, state, reloadWithin } = ctx
   const { clipboard } = require('electron')
   // A renderer reload must DETACH every session, exactly as main/index.ts
   // wires it (the other parts' first line, for the same reason).
@@ -47,7 +47,7 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const js = (code) => wc.executeJavaScript(code)
-  const reload = async () => { const loaded = new Promise((r) => wc.once('did-finish-load', r)); wc.reload(); await loaded; await settle() }
+  const reload = async () => { await reloadWithin(wc); await settle() }
   const press = async (x, y, modifiers = []) => {
     wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })
     wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })

@@ -12,29 +12,8 @@ const WATCHDOG_MS = 285000 // measured 2026-09-30 (M407): 208.7 s green with ann
 
 const { cameraStill } = require('./lib/place-probe.cjs')
 
-/**
- * M402 follow-up. A reload whose wait is BOUNDED: `once('did-finish-load')`
- * alone waits forever when the load never finishes (a failed load, a renderer
- * that died mid-reload), and the suite then hangs to its watchdog with the
- * cause unnamed — the M402 run hung once awaiting a reload in the D07 block.
- * Resolves true on load, false on a failed main-frame load or after `ms`, so
- * the checks after it fail BY NAME. Used by the D07 and M401 blocks.
- */
-function reloadWithin(wc, ms = 20000) {
-  return new Promise((resolve) => {
-    let done = false
-    const finish = (loaded) => { if (done) return; done = true; clearTimeout(timer); wc.removeListener('did-finish-load', onLoad); wc.removeListener('did-fail-load', onFail); resolve(loaded) }
-    const onLoad = () => finish(true)
-    // -3 is ERR_ABORTED: a reload superseding a load in flight, not a failure.
-    const onFail = (_e, code, _desc, _url, isMainFrame) => { if (isMainFrame !== false && code !== -3) finish(false) }
-    const timer = setTimeout(() => { console.log(`reloadWithin: no did-finish-load in ${ms} ms`); finish(false) }, ms)
-    wc.once('did-finish-load', onLoad)
-    wc.on('did-fail-load', onFail)
-    wc.reload()
-  })
-}
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
-  const { harnessAccount, harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, zoomToScale, state } = ctx
+  const { harnessAccount, harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, zoomToScale, state, reloadWithin } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -92,7 +71,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         })
       }
     }
-    const reload = async () => { const ready = new Promise((r) => wc.once('did-finish-load', r)); wc.reload(); await ready; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const select = async (id) => {
       await dockTo('panels')
       await clickRail(`[data-rail-row="${id}"] .rail-row__main`)
@@ -263,8 +242,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
     let openedId = null
     const reload = async () => {
-      const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await loaded; await settle()
+      await reloadWithin(wc); await settle()
     }
     // Real input plus a hit-test: an off-screen/covered button is not a door.
     const clickVisible = async (selector) => {
@@ -397,7 +375,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     const teammatesBefore = layoutStore.teammates().map((t) => t.id)
     const minted = () => layoutStore.teammates().filter((t) => !teammatesBefore.includes(t.id))
     const chatIds = []
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const clickVisible = async (selector) => {
       const point = await wc.executeJavaScript(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return null; const r = node.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); return node.contains(document.elementFromPoint(x, y)) ? { x, y } : null })()`)
       if (!point) return false
@@ -573,7 +551,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
     let chatId = null
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const clickVisible = async (selector) => {
       const point = await wc.executeJavaScript(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return null; const r = node.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); return node.contains(document.elementFromPoint(x, y)) ? { x, y } : null })()`)
       if (!point) return false
@@ -701,7 +679,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     try {
       const files = prepareStarter(harnessStarterDir)
       layoutStore.save({ panels: [
@@ -741,7 +719,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     try {
       const files = prepareStarter(harnessStarterDir)
       const [capA, capB] = [STARTER_OBJECTS.find((o) => o.key === 'image').caption, STARTER_OBJECTS.find((o) => o.key === 'note').caption]
@@ -819,7 +797,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const ids = () => wc.executeJavaScript(`[...document.querySelectorAll('[data-annotation]')].map((g) => g.getAttribute('data-annotation')).sort()`)
     const click = async (x, y, count = 1) => {
       wc.sendInputEvent({ type: 'mouseMove', x, y })
@@ -959,7 +937,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const TPL = 'tpl-edit-1'
     try {
       layoutStore.saveTemplate({ id: TPL, name: 'edit me', nodes: [
@@ -1024,7 +1002,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const TPL = 'tpl-edit-2'
     try {
       layoutStore.saveTemplate({ id: TPL, name: 'agent edits', nodes: [
@@ -1064,7 +1042,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const TPL = 'tpl-bound-3'
     try {
       layoutStore.saveTemplate({ id: TPL, name: 'bound shape', nodes: [
@@ -1115,7 +1093,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const TPL = 'tpl-lib-1'
     const centreOf = async (selector) => wc.executeJavaScript(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height } })()`)
     const dragTo = async (from, to) => {
@@ -1264,7 +1242,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const TPL = 'tpl-save-1'
     try {
       layoutStore.saveTemplate({ id: TPL, name: 'save me', nodes: [
@@ -1331,7 +1309,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     await settle(); flushLayoutStore()
     const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
     const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
-    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const reload = async () => { await reloadWithin(wc); await settle() }
     const TPL = 'tpl-door-1'
     const BAD = 'tpl-door-bad'
     let copyId
@@ -1412,8 +1390,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // the renderer reloads so its rows pick it up.
         layoutStore.addPreset({ id: 'chat-claude', name: 'Claude (harness)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
         flushLayoutStore()
-        const reP = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reP
+        await reloadWithin(wc)
         await settle()
         const xtermsBefore = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
         const spawnsBefore = chatSpawns.length
@@ -1467,8 +1444,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const persisted = wsNow.panels.find((p) => p.id === chatId)
         agentSessions.dispose(chatId)
         const fileTurns = agentTranscripts.read(chatId).turns.length
-        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reC
+        await reloadWithin(wc)
         await settle()
         const restoredPong = await waitUntil(() => wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-assistant-text]')].map((e) => e.textContent).join('|'); return t.includes('pong') ? t : false })()`), 8000)
         const restoredWord = await wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent ?? null`)
@@ -1543,8 +1519,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reD
+        await reloadWithin(wc)
         await settle()
         // The Files pane, with NOTHING selected.
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="files"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -1567,8 +1542,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await settle()
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reDone
+        await reloadWithin(wc)
         await settle()
         try { rmSync(dirA, { recursive: true, force: true }); rmSync(dirB, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (dErr) {
@@ -1617,8 +1591,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reW = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reW
+        await reloadWithin(wc)
         await settle()
         // The navigator remembers its pane across reloads, and an earlier
         // block left it on Files — the rail clauses below read the Panels
@@ -1669,8 +1642,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reW2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reW2
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await settle()
@@ -1700,8 +1672,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reW3 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reW3
+        await reloadWithin(wc)
         await settle()
         const refused = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="w3"] [data-watcher-disarmed]'); return p ? p.textContent : false })()`), 8000)
         // Disarm, then reload: the pause is a persisted fact.
@@ -1711,8 +1682,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reW4 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reW4
+        await reloadWithin(wc)
         await settle()
         const armLabel = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="w4"] [data-watcher-arm]'); return b ? b.textContent : false })()`), 6000)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="w4"] [data-watcher-arm]'); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
@@ -1739,8 +1709,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
 
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reDoneW = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reDoneW
+        await reloadWithin(wc)
         await settle()
         try { rmSync(wDir, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (wErr) {
@@ -1776,8 +1745,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.setPreference('vault.root', '')
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reV = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reV
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="vault"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const unset = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('[data-vault-arm="unset"]'); return p ? { text: p.textContent, verb: !!p.querySelector('[data-vault-choose]') } : false })()`), 6000)
@@ -1787,8 +1755,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // reload is the honest way to reach the same state a user would.
         layoutStore.setPreference('vault.root', vaultDir)
         flushLayoutStore()
-        const reV2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reV2
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="vault"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const listed = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('[data-vault-note]')].map((r) => ({ path: r.getAttribute('data-vault-note'), title: r.querySelector('[data-vault-title]')?.textContent ?? '' })); return rows.length === 3 ? rows : false })()`), 8000)
@@ -1847,8 +1814,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.setPreference('vault.root', '')
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reVDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reVDone
+        await reloadWithin(wc)
         await settle()
         try { rmSync(vaultDir, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (vErr) {
@@ -1903,8 +1869,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reX = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reX
+        await reloadWithin(wc)
         await settle()
         const sections = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="xr"]'); if (!n) return false; const secs = [...n.querySelectorAll('[data-review-section]')].map((s) => ({ branch: s.getAttribute('data-review-section'), count: s.querySelector('.review-node__section-count')?.textContent ?? '', files: [...s.querySelectorAll('[data-review-node-file]')].map((f) => f.getAttribute('data-review-node-file')) })); return secs.length === 3 ? { secs, blocked: n.querySelector('[data-review-node-commit-blocked]')?.textContent ?? null, summary: n.querySelector('[data-review-node-summary]')?.textContent ?? null } : false })()`), 15000)
         // The terminal: start it, select it, read the context pane.
@@ -1925,8 +1890,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.dropWorktree('xwa'); layoutStore.dropWorktree('xwb')
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reXDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reXDone
+        await reloadWithin(wc)
         await settle()
         try { rmSync(xBase, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (xErr) {
@@ -1959,8 +1923,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reG
+        await reloadWithin(wc)
         await settle()
         const noCred = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="gh1"]'); if (!n) return false; const note = n.querySelector('.github-node__note'); const connect = n.querySelector('[data-github-connect]'); return note && connect ? { note: note.textContent, connect: connect.textContent } : false })()`), 8000)
         state.githubCredentialPresent = true
@@ -1982,8 +1945,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           JSON.stringify({ noCred, listed, spawned, spawnedTitle, killsBeforeG, killsAfterNode, log: gLog.slice(-3) }))
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reGDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reGDone
+        await reloadWithin(wc)
         await settle()
       } catch (gErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(gErr && gErr.message || gErr) + ' | renderer: ' + (gLog.slice(-4).join(' || ') || '(none)'))
@@ -2016,8 +1978,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       try {
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reI
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="integrations"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await settle()
@@ -2074,7 +2035,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.saveTeammate({ id: 'tm-recovery', name: 'recovery', brief: '', places: [repo], services: [], skills: [], memory: 'recovery', chats: [], messaging: false, scheduling: false })
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const ready = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await ready; await settle()
+        await reloadWithin(wc); await settle()
         ipcMain.removeHandler(IPC.AGENT_CREATE)
         ipcMain.handle(IPC.AGENT_CREATE, (event, request) => { createCalls += 1; return refuseCreate ? { kind: 'refused', reason: 'fixture refused conversation' } : originalCreate(event, request) })
         ipcMain.removeHandler(IPC.AGENT_SEND)
@@ -2140,8 +2101,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.addPreset({ id: 'codex-sheet', name: 'Codex (sheet)', cwd: '~', command: '/bin/sh', args: [], agent: 'codex' })
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reC
+        await reloadWithin(wc)
         await settle()
         const codexOnPath = await wc.executeJavaScript(`window.canvas.preset.list().then((rows) => rows.some((r) => r.agent === 'codex' && r.available))`)
         const set = (sel, value) => wc.executeJavaScript(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return false
@@ -2198,8 +2158,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           JSON.stringify({ codexOnPath, option, minted, stored, claudeMinted, log: cLog.slice(-3) }))
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reC2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reC2
+        await reloadWithin(wc)
         await settle()
         try { layoutStore.deletePreset('codex-sheet') } catch {}
       } catch (cErr) {
@@ -2227,8 +2186,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.saveTeammate({ id: 'tm-ada', name: 'ada', brief: 'You are ada.', places: [repoD], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false })
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reD
+        await reloadWithin(wc)
         await settle()
         const chatCount = () => wc.executeJavaScript(`document.querySelectorAll('.panel[data-chat-status]').length`)
         const before = await chatCount()
@@ -2283,8 +2241,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
         try { layoutStore.deleteTeammate('tm-ada') } catch {}
-        const reD2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reD2
+        await reloadWithin(wc)
         await settle()
       } catch (dErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(dErr && dErr.message || dErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
@@ -2336,8 +2293,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.saveTeammate({ id: 'tm-none', name: 'nell', brief: '', places: [], services: [], skills: [], memory: 'nell', chats: [], messaging: false, scheduling: false })
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reS
+        await reloadWithin(wc)
         await settle()
 
         // M403 (B5). The fence's user settings say auto for start.mode.1; the
@@ -2481,8 +2437,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         flushLayoutStore()
         try { layoutStore.deleteTeammate('tm-sw') } catch {}
         try { layoutStore.deleteTeammate('tm-none') } catch {}
-        const reS2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reS2
+        await reloadWithin(wc)
         await settle()
       } catch (sErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(sErr && sErr.message || sErr) + ' | renderer: ' + (sLog.slice(-4).join(' || ') || '(none)'))
@@ -2525,8 +2480,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // machine with the CLI does (the chat doors' ONE fact, lb 3448).
         layoutStore.addPreset({ id: 'ask-claude', name: 'Claude (ask fixture)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
         flushLayoutStore()
-        const reA = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reA
+        await reloadWithin(wc)
         await settle()
         const chatsNow = () => wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.getAttribute('data-panel-id'))`)
         const beforeA = await chatsNow()
@@ -2577,8 +2531,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           ]
         })
         flushLayoutStore()
-        const reR2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reR2
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="board"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-board-row]').length === 2`), 6000)
@@ -2613,8 +2566,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
-        const reR3 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reR3
+        await reloadWithin(wc)
         await settle()
       } catch (e) { for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e)) }
     }
@@ -2627,8 +2579,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       try {
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reL
+        await reloadWithin(wc)
         await settle()
         const seen = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('[data-launcher]'); if (!l) return false
           const presets = [...l.querySelectorAll('[data-launcher-preset] .launcher__verb-name')].map((n) => n.textContent)
@@ -2656,8 +2607,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           { id: 'lkB', x: 900, y: 200, w: 520, h: 340, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }
         ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'lkA', focusedId: 'lkA' })
         flushLayoutStore()
-        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reL
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="lkA"] .panel__slot') !== null`), 8000)
         const openP = async () => {
@@ -2733,8 +2683,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const id of ['lkA', 'lkB']) { try { await ptyManager.kill(id) } catch {} }
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reL2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reL2
+        await reloadWithin(wc)
         await settle()
       } catch (lErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
@@ -2759,8 +2708,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           { id: 'anA', x: 300, y: 300, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }
         ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'anA', focusedId: 'anA' })
         flushLayoutStore()
-        const reA = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reA
+        await reloadWithin(wc)
         await settle()
         // Live, so the drag half drags a panel and not a card that wakes on mousedown.
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="anA"] .panel__slot') !== null`), 8000)
@@ -2858,8 +2806,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: [{ id: 'snA', x: 100, y: 100, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'from the past' }, { id: 'snB', x: 900, y: 100, w: 520, h: 340, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
         const ringBefore = layoutSnapshots.list().length
-        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reS
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-crumb="workspace"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const rows = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('[data-rail-snapshot]')]; return rows.length >= 2 ? rows.map((r) => ({ at: r.getAttribute('data-rail-snapshot'), label: r.querySelector('.rail-row__label')?.textContent ?? '', restore: r.querySelector('[data-rail-snapshot-restore]') !== null })) : false })()`), 6000)
@@ -2892,8 +2839,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const id of ['anA', 'snA', 'snB']) { try { await ptyManager.kill(id) } catch {} }
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reA2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reA2
+        await reloadWithin(wc)
         await settle()
       } catch (aErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(aErr && aErr.message || aErr) + ' | renderer: ' + (aLog.slice(-4).join(' || ') || '(none)'))
@@ -2917,8 +2863,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           { id: 'inkA', x: 700, y: 300, w: 400, h: 300, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }
         ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reI
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
@@ -2977,8 +2922,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await settle(); flushLayoutStore()
         const onDisk = ((JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces || []).find((w) => (w.panels || []).some((p) => p.id === 'inkA')) || { annotations: [] }).annotations || []
         const inkRows = onDisk.filter((a) => a.ink !== undefined)
-        const reI2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reI2
+        await reloadWithin(wc)
         await settle()
         const repainted = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-annotation][data-annotation-ink="true"]').length`), 6000)
         ok('ink.3 in annotate mode the draw tool turns a real drag into one stroke on the layer (world-anchored on the ground, panel-anchored from a panel, painted where it was drawn, which follows the panel), a click on a stroke selects it and Delete removes it, the file carries ink and a reload paints it',
@@ -3000,8 +2944,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // A terminal focused, so the pane's action bar is the full one.
         layoutStore.save({ panels: [{ id: 'rkA', x: 200, y: 200, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'rkA', focusedId: 'rkA' })
         flushLayoutStore()
-        const reR = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reR
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
         await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-inspector-action]').length >= 4`), 6000)
@@ -3033,8 +2976,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const id of ['rkA']) { try { await ptyManager.kill(id) } catch {} }
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reR2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reR2
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-launcher]') !== null`), 6000)
         // M205 (D09). Every door but two now sits in the `More ways to start`
@@ -3072,8 +3014,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const id of ['rkA']) { try { await ptyManager.kill(id) } catch {} }
         layoutStore.save({ panels: [{ id: 'vbA', x: 200, y: 200, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'vbA', focusedId: 'vbA' })
         flushLayoutStore()
-        const reV = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reV
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="vbA"]') !== null`), 6000)
         const openV = async () => {
@@ -3144,8 +3085,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // is dropped BY NAME and its neighbour survives.
         const parsed = parseLayout(readFileSync(LAYOUT_PATH, 'utf8'))
         const parsedIds = parsed.snapshot.workspaces.flatMap((w) => w.panels.map((p) => p.id))
-        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reB
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         // Live: the guest attached (its id on the frame) and the readout ends
@@ -3215,8 +3155,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           { id: 'pv1', kind: 'browser', x: 60, y: 60, w: 720, h: 520, z: 1, url: `http://127.0.0.1:${port}/` }
         ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'pv1', focusedId: 'pv1' })
         flushLayoutStore()
-        const rePv = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await rePv
+        await reloadWithin(wc)
         await settle()
         const attached = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="pv1"]'); return n && n.getAttribute('data-browser-live') === 'yes' ? { wc: Number(n.getAttribute('data-browser-wc')) } : false })()`), 20000)
         const chips = await wc.executeJavaScript(`[...document.querySelectorAll('[data-preview-device]')].map((b) => b.getAttribute('data-preview-device')).join(',')`)
@@ -3341,8 +3280,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           { id: 'pvS', kind: 'browser', x: 500, y: 380, w: 420, h: 300, z: 4, url: S.url, preview: { root: rootS } }
         ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'pvA', focusedId: 'pvA' })
         flushLayoutStore()
-        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reB
+        await reloadWithin(wc)
         await settle()
         const live = await waitUntil(() => wc.executeJavaScript(`(() => ['pvA','pvB','pvU','pvS'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]')?.getAttribute('data-browser-live') === 'yes'))()`), 20000)
         const opened = { A: A.state.loads, B: B.state.loads, U: U.state.loads, S: S.state.loads }
@@ -3404,7 +3342,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // otherwise every later check in the part runs with four watchers armed
         // on directories that no longer exist.
         try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
-        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        try { await reloadWithin(wc); await settle() } catch { /* nothing to drain */ }
         for (const server of servers) { try { server.close(); server.closeAllConnections?.() } catch { /* already closed */ } }
         for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
@@ -3473,8 +3411,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           { id: 'pvC', x: 620, y: 40, w: 520, h: 380, z: 2, kind: 'browser', url }
         ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'ch1', focusedId: null })
         flushLayoutStore()
-        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reC
+        await reloadWithin(wc)
         await settle()
         const live = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="pvC"]')?.getAttribute('data-browser-live') === 'yes'`), 20000)
         // Every renderer read answers DATA rather than throwing: a null node
@@ -3542,7 +3479,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr))
       } finally {
         try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
-        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        try { await reloadWithin(wc); await settle() } catch { /* nothing to drain */ }
         for (const server of servers) { try { server.close(); server.closeAllConnections?.() } catch { /* already closed */ } }
         for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
@@ -3578,8 +3515,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       wf(one, PNG_1x1); wf(two, PNG_1x1); wf(notPicture, Buffer.from('not a picture at all', 'utf8'))
       layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       flushLayoutStore()
-      const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reI
+      await reloadWithin(wc)
       await settle()
       // THE STORE IS CONTENT-ADDRESSED, WHICH MEANS IT OUTLIVES THIS RUN.
       // Two of this check's arms are about a FIRST write — the note says
@@ -3605,8 +3541,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // The bytes are gone: the panel stays, says so, and offers Replace.
       const victim = images[0]
       if (victim) ul(victim.image.path)
-      const reJ = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reJ
+      await reloadWithin(wc)
       await settle()
       const gone = victim ? await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}]'); if (!n) return false
         const arm = n.getAttribute('data-image-arm'); if (arm !== 'missing') return false
@@ -3650,8 +3585,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         { id: 'ntOver', kind: 'note', x: 180, y: 180, w: 440, h: 340, z: 1, note: { form: 'frame', text: 'release work' } }
       ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       flushLayoutStore()
-      const reN = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reN
+      await reloadWithin(wc)
       await settle()
       const sticky = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add sticky' }, null, 4000)
       const freeText = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add text' }, null, 4000)
@@ -3758,8 +3692,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const reloadWith = async (panels, first) => {
         layoutStore.save({ panels, camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await re
+        await reloadWithin(wc)
         await settle()
         const up = await waitUntil(() => js(`document.querySelector('.panel[data-panel-id=${JSON.stringify(first)}]') !== null`), 8000)
         if (up !== true) throw new Error(`fixture ${first} never rendered`)
@@ -4041,8 +3974,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       flushLayoutStore()
       const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
       const diskIds = onDisk.workspaces.map((w) => `${w.id}${w.id === onDisk.activeWorkspaceId ? '*' : ''}:${w.panels.map((p) => p.id).join('|')}`).join(' ; ')
-      const rePt = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await rePt
+      await reloadWithin(wc)
       await settle()
       const spawnsBefore = (await listSessions(wc)).length
       // The workspace this check leaves the app in is EVERY later check's
@@ -4116,8 +4048,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           await wc.executeJavaScript(`window.canvas.workspace.activate(${JSON.stringify(before)})`)
           await settle()
           await wc.executeJavaScript(`window.canvas.workspace.remove(${JSON.stringify(after)})`)
-          const reBack = new Promise((resolve) => wc.once('did-finish-load', resolve))
-          wc.reload(); await reBack
+          await reloadWithin(wc)
           await settle()
         }
       } catch { /* the checks below will say so */ }
@@ -4146,7 +4077,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const seedCanvas = async () => {
           layoutStore.save({ panels: [{ id: 'tl1', kind: 'file', x: 200, y: 200, w: 400, h: 300, z: 1, source: { path: join(dir, 'seed.md') } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'tl1', focusedId: null })
           flushLayoutStore()
-          const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re
+          await reloadWithin(wc)
           await settle()
           // The seeded canvas and ONLY it: a panel that was already there would
           // pass a presence test on a canvas this check did not write.
@@ -4397,8 +4328,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       ], edges: [] })
       layoutStore.save({ panels: [{ id: 'wfn', kind: 'workflow', x: 40, y: 40, w: 760, h: 520, z: 1, title: 'nodes', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfn', focusedId: 'wfn' })
       flushLayoutStore()
-      const reNd = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reNd
+      await reloadWithin(wc)
       await settle()
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="a1"]') !== null`), 5000)
       const before = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
@@ -4435,8 +4365,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       try {
         layoutStore.save({ panels: [{ id: 'hdA', x: 100, y: 100, w: 320, h: 240, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'review: a very long title that would truncate to Revie in a narrow frame' }, { id: 'hdB', x: 500, y: 100, w: 520, h: 340, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'worker b' }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'hdA', focusedId: 'hdA' })
         flushLayoutStore()
-        const reH = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reH
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] .pf__title') !== null`), 6000)
         const header = await wc.executeJavaScript(`(() => {
@@ -4622,8 +4551,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           ]
         })
         flushLayoutStore()
-        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reB
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="board"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const pane = await waitUntil(() => wc.executeJavaScript(`(() => {
@@ -5051,8 +4979,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           workItems: [{ id: 'wi-d08', source: 'typed', title: 'Frame the task', state: 'working', teammateId: 'nobody', panelId: 't8C', worktreeId: 'wt-d08', createdAt: 10, updatedAt: 20 }]
         })
         flushLayoutStore()
-        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reD
+        await reloadWithin(wc)
         await settle()
         const plan = (line) => ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line }, null, 3000)
         // Restored panels are DORMANT. Wake the conversation so a real PTY is
@@ -5129,7 +5056,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } finally {
         try { layoutStore.dropWorktree('wt-d08') } catch { /* nothing recorded */ }
         try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
-        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        try { await reloadWithin(wc); await settle() } catch { /* nothing to drain */ }
         for (const d of [laneD, elseD]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
     }
@@ -5177,8 +5104,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           workItems: [{ id: 'wi-d08b', source: 'typed', title: 'Light the task', state: 'working', teammateId: 'nobody', panelId: 't9C', worktreeId: 'wt-d08b', anchor: { panelId: 't9C', dx: 800, dy: 0 }, createdAt: 10, updatedAt: 20 }]
         })
         flushLayoutStore()
-        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reD
+        await reloadWithin(wc)
         await settle()
         const plan = (line) => ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line }, null, 3000)
         await plan('start t9C')
@@ -5298,7 +5224,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } finally {
         try { layoutStore.dropWorktree('wt-d08b') } catch { /* nothing recorded */ }
         try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
-        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        try { await reloadWithin(wc); await settle() } catch { /* nothing to drain */ }
         for (const d of [repoD, laneD, elseD]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
     }
@@ -5341,8 +5267,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: 'skT', focusedId: 'skT'
         })
         flushLayoutStore()
-        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reS
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="skT"]') !== null`), 8000)
 
@@ -5459,8 +5384,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: 'edT', focusedId: 'edT'
         })
         flushLayoutStore()
-        const reE = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reE
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="edT"]') !== null`), 8000)
 
@@ -5650,8 +5574,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reS
+        await reloadWithin(wc)
         await settle()
         const shSel = '.panel[data-panel-id="shF"]'
         await waitUntil(() => wc.executeJavaScript(
@@ -5756,8 +5679,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         })
         layoutStore.saveShelf({ columns: [{ id: 'doors-col', title: 'doors', keys: [JSON.stringify(['project', 'renameable'])] }] })
         flushLayoutStore()
-        const reN = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reN
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => nsJs(`document.querySelector('.panel[data-panel-id="nsT"]') !== null`), 8000)
 
@@ -5946,8 +5868,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: 'trT', focusedId: 'trT'
         })
         flushLayoutStore()
-        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reT
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="trT"]') !== null`), 8000)
 
@@ -6088,8 +6009,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const onDiskMark = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
         const wsMark = onDiskMark.workspaces.find((w) => w.id === onDiskMark.activeWorkspaceId) || onDiskMark.workspaces[0]
         const recMark = wsMark && wsMark.panels.find((p) => p.id === 'trT')
-        const reT2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reT2
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="trT"]') !== null`), 8000)
         const afterReload = await wc.executeJavaScript(`(() => ({
@@ -6144,8 +6064,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const x of agentSessions.list()) if (/^c\d+$/.test(x.id)) agentSessions.dispose(x.id)
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reW0 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reW0
+        await reloadWithin(wc)
         await settle()
         // A template with NO parameters, so Run mints without a sheet.
         await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf1', name: 'nightly sweep', nodes: [
@@ -6157,8 +6076,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reW = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reW
+        await reloadWithin(wc)
         await settle()
         const opened = await waitUntil(() => wc.executeJavaScript(`(() => {
           const n = document.querySelector('.panel[data-panel-id="wfA"]'); if (!n) return false
@@ -6284,8 +6202,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reG
+        await reloadWithin(wc)
         await settle()
         const gReady = await waitUntil(() => wc.executeJavaScript(`(() => {
           const b = document.querySelector('.panel[data-panel-id="wfB"] [data-workflow-verb="run"]'); if (!b) return false
@@ -6372,8 +6289,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
           })
           flushLayoutStore()
-          const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
-          wc.reload(); await reO
+          await reloadWithin(wc)
           await settle()
           const spawnsBefore = chatSpawns.length
           const sent = await wc.executeJavaScript(`window.canvas.agentSession.send('orc1', 'who are you?')`)
@@ -6418,8 +6334,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const fireDir = mkdtempSync(join(tmpdir(), 'tc panels wffire-'))
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reF0 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reF0
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf2', name: 'plain sweep', nodes: [
           { key: 'sweep', kind: 'terminal', cwd: ${JSON.stringify(fireDir)}, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: 0, dy: 0 }
@@ -6443,8 +6358,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reF = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reF
+        await reloadWithin(wc)
         await settle()
         // The readouts read the MARK, never `/usr/bin/true` (fix round 1, #2).
         const readouts = await waitUntil(() => wc.executeJavaScript(`(() => {
