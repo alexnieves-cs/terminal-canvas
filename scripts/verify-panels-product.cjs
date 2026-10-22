@@ -774,8 +774,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         return { rect, paints: !shown.equals(hidden), hit, ev: { len: shown.length, a: sum(shown), b: sum(hidden), style } }
       }
       const covered = await paints('cuA')
-      const own = await paints('cuN')
       // An uncovered caption is allowed a few looks: the label eases in, and a slow runner can capture it at the start of that ease.
+      // A person's own note eases in the same way, and the runner once caught
+      // it there (paints false, its label still visibility: hidden), so it is
+      // given the same looks. The covered caption is NOT: it must paint
+      // nothing on every look, and a later look could only hide a leak.
+      let own = await paints('cuN')
+      for (let i = 0; i < 3 && own.paints !== true; i++) { await sleep(500); own = await paints('cuN') }
       let open = await paints('cuB')
       for (let i = 0; i < 3 && open.paints !== true; i++) { await sleep(500); open = await paints('cuB') }
       // Retire: a press on cu1's chrome selects it (the header's beginMove).
