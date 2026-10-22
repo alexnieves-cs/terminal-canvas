@@ -4,6 +4,7 @@ import { useMachineSeries } from '@renderer/session/machine-cost-store'
 import { shellControl } from '@renderer/shell/shell-control'
 import { emptyState } from '@shared/empty-states'
 import { Sparkline } from './Sparkline'
+import { useLab } from '@renderer/labs/useLabs'
 import { bulkBar, bulkEligible, formatRun, formatUsd, groupHeading, groupRows, type SessionFact, type SessionGroup, type SessionSourceTask } from './sessions-model'
 
 const COLUMNS = ['Session', 'Agent', 'Folder', 'Branch', 'State', 'Activity', 'Run', 'Cost', 'Last line'] as const
@@ -24,6 +25,8 @@ function Row({ row, theme, selected, open, onToggle, onOpen, onShowInWorld }: {
   onShowInWorld: (id: string) => void
 }): JSX.Element {
   const samples = samplesOf(row.id, row.activity)
+  // M496. World is one of the cut list's hidden surfaces (`labs.world`).
+  const worldShown = useLab('world')
   const cost = row.costUsd !== null && row.costUsd > 0 ? formatUsd(row.costUsd) : ''
   return (
     <tr data-session-row={row.id} data-selected={selected ? '' : undefined} data-open={open ? '' : undefined} onClick={() => onOpen(row.id)}>
@@ -39,7 +42,7 @@ function Row({ row, theme, selected, open, onToggle, onOpen, onShowInWorld }: {
       </td>
       <td>
         <button type="button" className="sessions-name" data-session-open={row.id} {...shellControl(() => onOpen(row.id))}>{row.name}</button>
-        <button
+        {worldShown && <button
           type="button"
           className="sessions-world"
           data-session-world={row.id}
@@ -49,7 +52,7 @@ function Row({ row, theme, selected, open, onToggle, onOpen, onShowInWorld }: {
             event.stopPropagation()
             onShowInWorld(row.id)
           }}
-        >Show in World</button>
+        >Show in World</button>}
       </td>
       <td>{row.agent}</td>
       <td className="sessions-path">{row.folder}</td>

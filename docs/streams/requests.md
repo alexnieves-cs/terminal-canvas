@@ -24,3 +24,9 @@ Format:
 - File: src/cli/** (the `tc` argument parser)
 - Smallest change: map `tc tonight [stop]` to the existing `tc plan tonight [stop]` line (M480's verb, already bound by `buildPlan` and refused to a teammate caller in plan.ts). No new channel; the agent door already works through `tc plan`.
 - Status: open
+
+### Q-003 · Shot scenes of a hidden surface switch its lab on first
+- From: E · To: B
+- File: scripts/shot-scenes/** (and scripts/shot.cjs if a seed is simpler)
+- Smallest change: M496 hides seven surfaces behind `labs.*` settings, all off by default (docs/streams/cut-list.md). A scene that shows one (the World scenes clicking `.shell__world-toggle`, `account-menu`, `relay`, `share-*`, `team-ask`, `memory`) calls `window.canvas.settings.set('labs.<id>', true)` before it frames, the way scenes already set `shell.inspectorOpen`. The scenes of the canvas at rest lose the 2D | World lens on purpose; that is a golden that changes on purpose, after the owner looks.
+- Status: open
