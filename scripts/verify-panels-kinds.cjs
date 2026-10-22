@@ -2669,7 +2669,14 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       {
         const FIXTURE = join(M22_DIR, 'raced.txt')
         writeFileSync(FIXTURE, 'v1\n')
+        const fileIds = `[...document.querySelectorAll('[data-panel-kind="file"]')].map((n) => n.closest('.panel')?.getAttribute('data-panel-id') ?? null)`
+        const idsBefore139 = await wc.executeJavaScript(fileIds)
         await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+        // The panel this check owns is the one __m13Open ADDS, waited for by
+        // id: "the newest file panel" read at once was still 169's, mid-edit,
+        // so the editor looked up before any press (last=null), the typing
+        // went into 169's draft and its closeDraft took it (draft=null).
+        const id139 = await waitUntil(async () => (await wc.executeJavaScript(fileIds)).find((x) => x !== null && !idsBefore139.includes(x)) ?? false, 8000)
         // Check 138 above exits edit mode on a successful save (closeDraft
         // runs), so ordinarily only one file panel is mid-edit at once — but
         // target the NEWEST file panel explicitly rather than trust that,
@@ -2685,7 +2692,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // went into the wrong editor, the write found this panel clean, and
         // the read came back null once 169's editor unmounted (draft=null on
         // the runner).
-        const NEWEST = `[...document.querySelectorAll('[data-panel-kind="file"]')].pop()`
+        const NEWEST = `[...document.querySelectorAll('[data-panel-kind="file"]')].find((n) => n.closest('.panel')?.getAttribute('data-panel-id') === ${JSON.stringify(String(id139))})`
         // The press is part of the wait. The blocking job once read
         // editorUp=false after 12s with the press sent once, unconditionally,
         // after a wait whose answer nobody read: a press on a button still
@@ -2739,7 +2746,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         `)
         ok('170 a write under a dirty draft raises the conflict banner and does not clobber the draft',
           state139.draft === 'my unsaved work\n' && state139.banner === true,
-          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner} editorUp=${editorUp} typed=${typed} dirty=${dirty} last=${JSON.stringify(pressed139)}`)
+          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner} editorUp=${editorUp} typed=${typed} dirty=${dirty} id=${id139} last=${JSON.stringify(pressed139)}`)
       }
 
       // 140 — THE TRUNCATION BYPASS. buildFileNodeModel refuses to mark a
