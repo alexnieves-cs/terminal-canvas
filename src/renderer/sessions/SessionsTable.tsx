@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import type { PaletteTheme } from '@shared/state-palette'
 import { useMachineSeries } from '@renderer/session/machine-cost-store'
 import { shellControl } from '@renderer/shell/shell-control'
+import { emptyState } from '@shared/empty-states'
 import { Sparkline } from './Sparkline'
 import { bulkBar, bulkEligible, formatRun, formatUsd, groupHeading, groupRows, type SessionFact, type SessionGroup, type SessionSourceTask } from './sessions-model'
 
@@ -108,7 +109,7 @@ export function SessionsTable({ facts, theme, selected, openId, tasks, onToggle,
   return (
     <div className="sessions-table-wrap" data-sessions-table>
       {facts.length === 0 ? (
-        <p className="sessions-empty">No sessions on this canvas — a terminal or a conversation is one.</p>
+        <p className="sessions-empty">{emptyState('sessions').sentence}</p>
       ) : (
         <table className="sessions-table">
           <thead>

@@ -294,7 +294,8 @@ export function RestoreSplash({ facts, rects, onDone, onSkip }: {
                 {line.label}
                 {line.name !== undefined && <span className="rd-splash__name"> · {line.name}</span>}
               </span>
-              {line.detail !== undefined && <span className="rd-splash__detail">{line.detail}</span>}
+              {/* M466. Only the workspace's path is a path; every other detail is a sentence or a count. */}
+              {line.detail !== undefined && <span className="rd-splash__detail">{line.id === 'workspace' && line.phase === 'done' ? <span className="rd-splash__path">{line.detail}</span> : line.detail}</span>}
             </li>
           ))}
         </ol>
