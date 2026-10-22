@@ -1085,6 +1085,12 @@ const SCENES = [
   { name: 'account-menu', intent: 'M336. The account menu open from the top bar\'s last control — the active account\'s initials (`AL`) in a circle. Under `Active account`, the two GitHub accounts signed in on this Mac as a radio set, `ada-lovelace` checked; `Add another account…`; under `Sharing`, `Share this workspace…` and `Open a shared workspace…`; below a rule, `Sign out ada-lovelace`. The menu is the View menu\'s own surface.',
     run: async (k) => {
       await k.emptyCanvas()
+      // M496 hid accounts, sharing and relay behind labs (Q-003). These scenes
+      // ARE those surfaces, so they switch the doors on first, and
+      // shared-offline, the last of them, switches them off again: a scene
+      // after it that frames the palette must see the default rows.
+      await k.js(`window.canvas.settings.set('labs.accounts', true)`)
+      await k.js(`window.canvas.settings.set('labs.relay', true)`)
       k.accountOn()
       for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.shell__account-avatar')`)); i++) await sleep(100)
       const point = await k.js(`(() => { const b = document.querySelector('.shell__account-trigger'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
@@ -1185,6 +1191,8 @@ const SCENES = [
       if (!(await k.js(`(document.querySelector('[data-sync-chip]') || {}).textContent === 'Offline — 3 changes waiting to sync'`))) throw new Error('shared-offline scene: the sync chip did not say the three changes are waiting')
       await sleep(300)
       await k.shot('shared-offline')
+      await k.js(`window.canvas.settings.set('labs.accounts', false)`)
+      await k.js(`window.canvas.settings.set('labs.relay', false)`)
     } },
   { name: 'inspector-caps', intent: 'M350–M352. The context pane, Work tab, on an AGENT CONVERSATION held at its own cap: under Cost, a Caps section reads `Spend $2.10 of $2.00 — this agent\'s cap` and `Context 118k tokens of 150k — Settings cap`; one amber sentence says the agent reached its own $2.00 spend cap ($2.10 reported) and names its fix (raise its own cap here, or cap-agent in the palette); two fields, each named on screen (`Spend cap $` holding the record\'s 2, `Context cap` blank and reading Settings, `k tokens`), beside Set; and the verb\'s own answer from the Set that wrote the cap (`spend cap $2.00`). On the chat itself the state pill reads idle with nothing waiting, and its close reads `end?` because the agent\'s process is still alive (a hold keeps the agent; closing would end it); the auto run\'s resolved chip stays in the header beside the pill and reads `auto stuck` with its dismiss (M356: what the run came to never clips; its reason, `— cap reached`, gives first, and the whole sentence with its mode is the chip\'s title), the Auto… door is hidden while the chip shows, and every control in the header is painted inside the chat\'s frame (the scene hit-tests each). DISCLOSED: the cap was written through the fields and Set (the verb\'s canvas door); the hold is the pushes main\'s agent runtime sends when a result crosses the cap (the status, the stuck run, its dropped continuation and the meter), sent as those pushes. M380: under Context, a `Window` line says what is left of the window the CLI reported (`82k of 200k left — 59% used`), and under the cost a muted sentence says what caching returned at list price (`caching saved $0.06 — …`).',
     run: async (k) => {

@@ -29,4 +29,4 @@ Format:
 - From: E · To: B
 - File: scripts/shot-scenes/** (and scripts/shot.cjs if a seed is simpler)
 - Smallest change: M496 hides six surfaces behind `labs.*` settings, off by default; World stays shown (docs/streams/cut-list.md). A scene that shows a hidden one (`relay`, `share-*`, `team-ask`, `memory`, or an account menu with nobody signed in) calls `window.canvas.settings.set('labs.<id>', true)` before it frames, the way scenes already set `shell.inspectorOpen`. The World scenes need nothing.
-- Status: open
+- Status: done in #53 (B): the six account, share and relay scenes switch the two labs on, and off again after `shared-offline`
