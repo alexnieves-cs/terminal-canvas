@@ -90,6 +90,14 @@ ok('polish.topbar.1 the top bar search is capped at the page switch\'s right edg
   ok('polish.react.2 st:F never transitions `all` and never pairs an animation with pointer-events: none', !all && !blocking, JSON.stringify({ all, blocking }))
 }
 
+// polish.stripe.1 — no coloured left-edge stripe (an inset box-shadow
+// along one side) anywhere in st:F. Alex read it as generic AI styling on the
+// Sessions cards (2026-10-22); state colour lives in hairlines, words and dots.
+{
+  const stripes = [...rules.matchAll(/box-shadow:[^;]*inset\s+-?\d+px\s+0\s+0\s+var\(--[a-z-]+\)/g)].map((m) => m[0])
+  ok('polish.stripe.1 st:F draws no coloured edge stripe (inset Npx 0 0 colour)', stripes.length === 0, JSON.stringify(stripes))
+}
+
 const passed = results.filter((r) => r.pass).length
 console.log('\n' + passed + '/' + results.length + ' passed')
 if (results.some((r) => !r.pass)) process.exitCode = 1
