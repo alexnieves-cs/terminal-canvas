@@ -2717,8 +2717,12 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           `(document.querySelector('[data-review-summary]') || {}).textContent || null`)
         return text && text.includes('file') ? text : false
       }, 5000)
-      const files = await wc.executeJavaScript(
+      // The rows, waited on like the summary: on the runner the summary read
+      // "1 file changed" a frame before its rows rendered (files=[]).
+      const readFiles = () => wc.executeJavaScript(
         `[...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file'))`)
+      await waitUntil(async () => (await readFiles()).includes('agent.txt'), 5000)
+      const files = await readFiles()
       ok('99 the inspector names the file the panel\'s own agent wrote',
         selected && typeof summary === 'string' && summary.includes('1 file') &&
           files.includes('agent.txt'),
@@ -3450,7 +3454,13 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         const beforeIds = await panelIds()
         await waitUntil(async () => wc.executeJavaScript(
           `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
-        await clickShell('[data-inspector-action="review"]')
+        // Evidence for a node that never arrives: whose inspector the button
+        // sits in, and whether the baseline the review needs was there.
+        const atClick = await wc.executeJavaScript(`(async () => ({
+          selected: [...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')),
+          button: !!document.querySelector('[data-inspector-action="review"]'),
+          baseline: ${JSON.stringify(subject ?? null)} === null ? null : await window.canvas.review.baseline(${JSON.stringify(subject ?? '')}).then((b) => b !== null) }))()`)
+        const clicked = await clickShell('[data-inspector-action="review"]')
         const node = await waitUntil(async () => {
           const ids = await panelIds()
           const fresh = ids.filter((id) => !beforeIds.includes(id))
@@ -3494,7 +3504,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           typeof node === 'string' && gone === true && preserved.ok &&
             closedReal === true && kills.includes(subject) === true &&
             kills.includes(node) === false,
-          `node=${node} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
+          `node=${node} subject=${subject} clicked=${clicked} atClick=${JSON.stringify(atClick)} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
       }
 
       // 112. A selected review NODE renders no Changes section at all, and
