@@ -21,6 +21,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Run from main: tag v<package.json version> on this commit and publish it (for a session that cannot push tags)'
+        type: boolean
+        default: false
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -68,6 +73,29 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME but package.json says $want"
             exit 1
           fi
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+
+      # M474. The dispatch door to the same release: a cloud session can merge
+      # to main but its git proxy refuses a tag push, so `release: true` on a
+      # run from main mints the tag here, from package.json, and the publish
+      # step below creates it on this exact commit. Same gate, same DMG. It
+      # refuses another branch and an existing tag: a published version is
+      # never rewritten (v6.0.0 already was one when 6.0.1 shipped).
+      - name: The dispatch names its tag
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::release: true runs only from main (this is $GITHUB_REF)"
+            exit 1
+          fi
+          tag="v$(node -p 'require("./package.json").version')"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists; bump package.json first"
+            exit 1
+          fi
+          echo "TAG=$tag" >> "$GITHUB_ENV"
 
       - name: Package config checks
         run: npm run verify:package
@@ -112,7 +140,7 @@ jobs:
           retention-days: 30
 
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
         env:
           GH_TOKEN: ${{ github.token }}
           DMG: ${{ steps.files.outputs.dmg }}
@@ -132,7 +160,13 @@ jobs:
 
           The packaged app passed \`verify:packaged\` on the build runner before this release was created.
           EOF
-          gh release create "$GITHUB_REF_NAME" "$DMG" release/SHA256SUMS.txt \
-            --title "Terminal Canvas ${GITHUB_REF_NAME#v}" \
+          # The version's own notes, under the install steps, when the repo has them.
+          notes="docs/release-notes/${TAG#v}.md"
+          if [ -f "$notes" ]; then { echo; tail -n +2 "$notes"; } >> notes.md; fi
+          # A tag push already has its tag; a dispatch has it created here, on
+          # the commit that was just packaged and gated.
+          if [ "$GITHUB_REF_NAME" = "$TAG" ]; then verify=--verify-tag; else verify="--target $GITHUB_SHA"; fi
+          gh release create "$TAG" "$DMG" release/SHA256SUMS.txt \
+            --title "Terminal Canvas ${TAG#v}" \
             --notes-file notes.md \
-            --verify-tag
+            $verify
