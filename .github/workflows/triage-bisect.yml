@@ -1,0 +1,62 @@
+# TEMPORARY (Stream A bisect): panels:core with main's shell-integration.ts, to
+# tell whether the login-bash fix leaves ctx.panel.1's terminal in mouse mode.
+# Its own file and group so it does not cancel the triage run. Deleted before merge.
+# Based on triage.yml (Stream A triage): each known-red Electron suite on its own runner, run
+# three times in a row there, so a flake shows as a rate and each failure is read in
+# isolation. One job per suite rather than per run: macOS runners are scarce and
+# shared, and setup is half of each job. Deleted before merge.
+name: triage-bisect
+on:
+  push:
+    branches: [claude/project-thread-gobh8m]
+    # Only what can change a panels suite's result: a CI-only commit must not
+    # cancel and restart twenty-one macOS jobs.
+    paths: ['.github/workflows/triage-bisect.yml']
+  workflow_dispatch:
+concurrency:
+  group: triage-bisect-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  suite:
+    runs-on: macos-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ['panels:core']
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: brew install tmux
+      - run: git checkout origin/main -- src/main/shell-integration.ts && git diff --stat HEAD
+      - run: npm ci
+      - run: node node_modules/electron/install.js
+      - run: npm run build
+      - name: Run suite three times
+        env:
+          TC_WATCHDOG_SCALE: '2'
+        # A hung suite must still report: stop each run at 18 minutes and keep what it logged.
+        run: |
+          for i in 1 2 3; do
+            perl -e 'alarm 1080; exec @ARGV' npm run verify:${{ matrix.suite }} > suite-$i.log 2>&1 || true
+            pkill -f Electron || true
+            echo "=== run $i: $(grep -E '^[0-9]+/[0-9]+ passed' suite-$i.log | tail -1)"
+          done
+      - name: Failures only
+        run: |
+          for i in 1 2 3; do
+            echo "=== ${{ matrix.suite }} run $i"
+            grep -E '^[0-9]+/[0-9]+ passed' suite-$i.log | tail -1 || true
+            grep -E '^(FAIL|\s*FAIL)' suite-$i.log | cut -c1-2500 || true
+            grep -nE 'watchdog — run did not finish' suite-$i.log || true
+            echo "--- tail"; tail -8 suite-$i.log | cut -c1-300
+          done
+      # Red unless all three runs reported and none failed: the job's colour is the verdict.
+      - name: Verdict
+        run: |
+          for i in 1 2 3; do
+            grep -qE '^[0-9]+/[0-9]+ passed' suite-$i.log || { echo "run $i: no summary"; exit 1; }
+            ! grep -qE '^FAILED|^FAIL ' suite-$i.log || { echo "run $i: failed"; exit 1; }
+          done
