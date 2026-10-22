@@ -30,6 +30,11 @@ jobs:
       - run: npm ci
       - run: node node_modules/electron/install.js
       - run: npm run build
+      # Flowchart only, while perf.2's lost page is diagnosed: the renderer again
+      # as a development build, unminified, so React names the component behind
+      # the "maximum update depth" error (#185) the runner hit after a 40-shape move.
+      - if: matrix.suite == 'panels:flowchart'
+        run: NODE_ENV=development npx electron-vite build --minify false
       - name: Run suite three times
         env:
           TC_WATCHDOG_SCALE: '2'
@@ -48,6 +53,7 @@ jobs:
             grep -E '^(FAIL|\s*FAIL)' suite-$i.log | cut -c1-2500 || true
             grep -nE 'watchdog — run did not finish' suite-$i.log || true
             grep -nE 'reloadWithin:|^\[106\]' suite-$i.log | cut -c1-600 || true
+            grep -nE '^\[renderer-error\]' suite-$i.log | cut -c1-4000 || true
             echo "--- tail"; tail -30 suite-$i.log | cut -c1-300
           done
       # Red unless all three runs reported and none failed: the job's colour is the verdict.

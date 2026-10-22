@@ -59,7 +59,11 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
   wc.on('console-message', (e, level, message) => {
     const lv = typeof level === 'number' ? level : (e && e.level)
     const msg = typeof message === 'string' ? message : (e && e.message)
-    if (lv === 3 || lv === 'error') rendererErrors.push(String(msg).slice(0, 300))
+    if (lv !== 3 && lv !== 'error') return
+    rendererErrors.push(String(msg).slice(0, 300))
+    // Whole, on its own line: a development build's component stack is
+    // what names the component behind a render loop.
+    console.log(`[renderer-error] ${String(msg).slice(0, 4000).replace(/\n/g, ' | ')}`)
   })
   wc.on('render-process-gone', (_e, details) => rendererErrors.push(`render-process-gone ${JSON.stringify(details)}`))
 
