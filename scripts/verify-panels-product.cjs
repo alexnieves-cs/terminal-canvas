@@ -951,7 +951,16 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // screen delta is the drag's own — which the SVG, rescaling as its
       // extent grew, could not promise.
       const rectOf = (key) => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="${key}"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, ax: r.left, ay: r.top } })()`)
-      const before = await waitUntil(() => rectOf('n2'), 4000)
+      // Read once the mount fit has LANDED: the flow fits a beat after the
+      // block first appears, and a press aimed at the pre-fit box hit empty
+      // flow on the runner (nothing selected, the block 1.2x bigger after).
+      let lastBox = null
+      const before = await waitUntil(async () => {
+        const r = await rectOf('n2')
+        const same = r && lastBox && Math.abs(r.x - lastBox.x) < 0.5 && Math.abs(r.y - lastBox.y) < 0.5 && Math.abs(r.w - lastBox.w) < 0.5
+        lastBox = r
+        return same ? r : false
+      }, 6000, 250) || lastBox
       const before1 = await rectOf('n1')
       const drag = async (from, dx, dy) => {
         const x = Math.round(from.x + from.w / 2), y = Math.round(from.y + from.h / 2)
