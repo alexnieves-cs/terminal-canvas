@@ -13,6 +13,7 @@ import { clearToolbox } from '@renderer/session/toolbox-store'
 import { clearUsage, getUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
+import { claimBootSpawns } from '@renderer/session/boot-spawns'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { createHistory, undoHistory, redoHistory } from '@renderer/panels/history'
 import type { PaletteActions } from '@renderer/palette/commands'
@@ -92,13 +93,17 @@ export function useHistoryVerbs(deps: UseHistoryVerbsDeps) {
   // the create-then-assign shape M28's hook split records.
   const paletteActionsRef = useRef<PaletteActions | null>(null)
   useEffect(() => {
-    const offSpawn = window.canvas.preset.onSpawn((template) => {
+    const spawnPushed = (template: PresetTemplate): void => {
       // M65. A template from the sheet carries its title and asks for focus;
       // a menu template carries neither and spawns exactly as before.
       onSpawn(worldCentre(), template, template.title === undefined && template.focus === undefined
         ? undefined
         : { ...(template.title === undefined ? {} : { title: template.title }), ...(template.focus === undefined ? {} : { focus: true as const }) })
-    })
+    }
+    const offSpawn = window.canvas.preset.onSpawn(spawnPushed)
+    // Subscribed THEN claimed, in one task: a push that arrived before this
+    // effect ran was queued at boot, and from here on it reaches spawnPushed.
+    for (const template of claimBootSpawns()) spawnPushed(template)
     // M65. The menu's ⌘⇧N asks the renderer for the sheet. Through a ref:
     // paletteActions is built far below this effect.
     const offSheet = window.canvas.spawn.onOpenSheet((which) => {
