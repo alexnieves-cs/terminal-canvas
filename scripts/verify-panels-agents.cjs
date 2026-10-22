@@ -1142,7 +1142,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
 
         // composer.2 — the real drop verb, at the panel's centre.
         await typeInto('')
-        const centre = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2 - host.left, y: r.top + r.height / 2 - host.top } })()`)
+        // CLIENT coordinates: __m59Drop subtracts the host's origin itself, as
+        // the real onDrop does. Host-relative ones were subtracted twice, and
+        // the drop landed host.left px left of the centre — inside the chat
+        // only while it was wide enough (dropped "opened" on the runner; the
+        // shot scene hit the same thing and says so).
+        const centre = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
         const dropped = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'pic.png'))}, ${centre.x}, ${centre.y})`)
         const chip = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-attachment="pic.png"]')} !== null`), 4000)
         const droppedText = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'notes.txt'))}, ${centre.x}, ${centre.y})`)
