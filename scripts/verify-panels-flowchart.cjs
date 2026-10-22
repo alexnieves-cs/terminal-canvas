@@ -50,6 +50,19 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
     ptyManager.create = (spec) => { createdPanelIds.push(spec && spec.panelId); return realCreate(spec) }
   }
 
+  // Renderer errors, kept for perf.2's `lost` evidence: a run read NO .shape
+  // and no workspace title after the 40-shape commit, which is what an
+  // uncaught render error looks like with no error boundary at the root.
+  // Electron has passed console-message both as (event, level, message) and
+  // as one details object; read either.
+  const rendererErrors = []
+  wc.on('console-message', (e, level, message) => {
+    const lv = typeof level === 'number' ? level : (e && e.level)
+    const msg = typeof message === 'string' ? message : (e && e.message)
+    if (lv === 3 || lv === 'error') rendererErrors.push(String(msg).slice(0, 300))
+  })
+  wc.on('render-process-gone', (_e, details) => rendererErrors.push(`render-process-gone ${JSON.stringify(details)}`))
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   const js = (code) => wc.executeJavaScript(code)
   const reload = async () => { await reloadWithin(wc); await settle() }
@@ -872,7 +885,13 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       const countAfter = (await shapes()).length
       // Evidence for the run that read 0 shapes after the commit (the 5 s wait
       // above did not bring them back): what the page was showing instead.
-      const lost = countAfter === 200 ? null : await js(`({ panels: document.querySelectorAll('.panel[data-panel-id]').length, shapeKind: document.querySelectorAll('[data-panel-kind="shape"]').length, world: document.querySelector('.world') !== null, behindWorld: document.querySelector('.canvas--behind-world') !== null, scale: window.__m4aScale ? window.__m4aScale() : null, workspace: document.querySelector('.shell__workspace')?.getAttribute('title') ?? null, dialog: [...document.querySelectorAll('[role="dialog"]')].map((d) => (d.getAttribute('aria-label') || d.textContent || '').slice(0, 60)) })`)
+      const lost = countAfter === 200 ? null : await js(`({ panels: document.querySelectorAll('.panel[data-panel-id]').length, shapeKind: document.querySelectorAll('[data-panel-kind="shape"]').length, world: document.querySelector('.world') !== null, behindWorld: document.querySelector('.canvas--behind-world') !== null, scale: window.__m4aScale ? window.__m4aScale() : null, workspace: document.querySelector('.shell__workspace')?.getAttribute('title') ?? null, dialog: [...document.querySelectorAll('[role="dialog"]')].map((d) => (d.getAttribute('aria-label') || d.textContent || '').slice(0, 60)), canvas: document.querySelectorAll('.canvas').length, root: (document.getElementById('root') || document.body).childElementCount, text: (document.body.innerText || '').slice(0, 160) })`)
+      if (lost) {
+        // Whether the loss is the page's or the layout's: the saved panel
+        // count main holds, and every renderer error since the suite began.
+        try { const saved = layoutStore.load(); lost.saved = saved && Array.isArray(saved.panels) ? saved.panels.length : null } catch (err) { lost.saved = `load threw ${err && err.message}` }
+        lost.errors = rendererErrors.slice(-6)
+      }
       const deltas = pick.map((s) => manyBefore[s.id] && manyAfter[s.id] ? `${Math.round(manyAfter[s.id].x - manyBefore[s.id].x)},${Math.round(manyAfter[s.id].y - manyBefore[s.id].y)}` : 'missing')
       const oneDelta = new Set(deltas)
       const unselectedStill = (await shapes()).filter((s) => !pick.some((p) => p.id === s.id)).length
