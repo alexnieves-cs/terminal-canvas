@@ -80,22 +80,6 @@ module.exports = [
         }
       }
       await sleep(400)
-      // M463. Picking an agent before the room's own fit has run lets the fit
-      // win: one run in three held the overview (map tier) under the open
-      // sheet instead of the close-up the scene is named for. The camera in
-      // is the tier leaving `map`; an agent picked while it still reads `map`
-      // is cleared and picked again, up to four times.
-      const tier = () => k.js(`document.querySelector('[data-world-camera]')?.getAttribute('data-camera-tier') ?? null`)
-      for (let attempt = 0; attempt < 4; attempt++) {
-        let t = null
-        for (let i = 0; i < 20; i++) { t = await tier(); if (t !== null && t !== 'map') break; await sleep(150) }
-        if (t !== null && t !== 'map') break
-        console.log(`[shot] rd-world-focus: the camera is still at the ${t} tier after the pick (try ${attempt + 1}); picking again`)
-        await k.js(`window.__rdW4.focus(null)`)
-        await sleep(400)
-        await k.js(`window.__rdW4.focus(${JSON.stringify(pending?.id ?? '')})`)
-        await sleep(800)
-      }
       await sleep(400)
       await k.shot('rd-world-focus')
     }
