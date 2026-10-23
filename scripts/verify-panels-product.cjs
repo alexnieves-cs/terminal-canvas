@@ -587,6 +587,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         cameraStill: (await wc.executeJavaScript(`getComputedStyle(document.querySelector('.world')).transform`)) === cam0 }
       ok('launcher.wheel.1 a real wheel over the first-run card scrolls the CARD — its Starter canvas line comes into reach below the fold — and never pans the canvas behind it',
         wheel.reached === true && wheel.notches > 0 && wheel.scrollTop > 0 && wheel.cameraStill === true, JSON.stringify(wheel))
+      // A wheel notch scrolls the card over several frames, so the line can be
+      // hit-testable mid-scroll and gone from under the press a frame later: the
+      // click then lands on nothing and no starter is laid (one #38 run, the
+      // later `again` laying all five). Press only once the line holds still.
+      let lastTop = null
+      await waitUntil(async () => {
+        const top = await wc.executeJavaScript(`document.querySelector('[data-launcher-starter]')?.getBoundingClientRect().top ?? null`)
+        const still = top !== null && top === lastTop
+        lastTop = top
+        return still
+      }, 1500, 100)
       const started = primary === true && await clickVisible('[data-launcher-starter]')
       const kinds = started ? await waitUntil(() => wc.executeJavaScript(`(() => { const k = [...document.querySelectorAll('.panel[data-panel-kind]')].map((p) => p.getAttribute('data-panel-kind')).sort(); return k.length >= 5 ? k.join(',') : false })()`), 6000) : false
       chatId = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? null`)
