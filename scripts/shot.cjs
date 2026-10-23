@@ -1014,6 +1014,19 @@ const SCENES = [
         await sleep(1150)
         const painted = await k.js(`(() => { const r = document.querySelector('[data-orch-live]'); return r ? { towers: r.dataset.orchLiveTowers, events: r.dataset.orchLiveEvents } : null })()`)
         if (!painted || Number(painted.towers) < 3) throw new Error(`orchestration-watch: expected at least 3 towers, got ${JSON.stringify(painted)}`)
+        // M463. The Watch layer is WebGL too: on a runner it sometimes holds a
+        // blank frame (3.7% off the golden, the towers and HUD gone). A blank
+        // layer is remounted through Tasks and Watch again, as the Scene scene
+        // does; the towers come back from the stored events, the in-flight arc
+        // does not, and the arc was never pinned by this image.
+        for (let attempt = 0; attempt < 4 && !(await k.paintedWithin('[data-orch-live] canvas', 0.04)); attempt++) {
+          console.log(`[shot] orchestration-watch: the 3D layer is blank (look ${attempt + 1}); remounting the Watch lens`)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="tasks"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await sleep(500)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="watch"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          for (let i = 0; i < 40 && !(await k.js(`!!document.querySelector('[data-orch-live] canvas')`)); i++) await sleep(100)
+          await sleep(1200)
+        }
         await changesRead(k, 'orchestration-watch')
         await k.shot('orchestration-watch')
       } finally {
@@ -1103,6 +1116,12 @@ const SCENES = [
         throw new Error(`starter scene: the arrangement is not on screen (${kinds}) ${why} pressed ${JSON.stringify(pressed)} said ${JSON.stringify(said)}`)
       }
       await sleep(800)
+      // M463. The shot lands in one of two end states (the map overlay in and
+      // the camera framed 80px further right, or neither), 9.9% apart. Say
+      // which, so a run that flips names its own cause.
+      await k.layoutStill()
+      await k.cameraLog('starter')
+      console.log(`[shot] starter: minimap ${await k.js(`(() => { const m = document.querySelector('[data-minimap]'); if (!m) return 'absent'; const r = m.getBoundingClientRect(); return JSON.stringify({ w: Math.round(r.width), x: Math.round(r.x), op: getComputedStyle(m).opacity, presence: m.getAttribute('data-presence') || m.className }) })()`)}`)
       await k.shot('starter')
     } },
   // M336–M338. After the starter, on purpose: these turn the harness's account
