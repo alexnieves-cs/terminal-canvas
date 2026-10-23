@@ -925,6 +925,20 @@ const SCENES = [
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
         if (!(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`))) throw new Error('orchestration-working: no 3D cube painted')
+        // M463. As in the orchestration scene: the canvas exists on every run
+        // and the islands on most; a blank layer is remounted, not captured.
+        let workingPainted = false
+        for (let attempt = 0; attempt < 5 && !workingPainted; attempt++) {
+          await sleep(800)
+          workingPainted = await k.paintedWithin('.orch__cube-canvas canvas', 0.12)
+          if (workingPainted) break
+          console.log(`[shot] orchestration: the 3D layer is blank (look ${attempt + 1}, working); remounting the Scene lens`)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="tasks"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await sleep(500)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
+        }
+        if (!workingPainted) throw new Error('orchestration-working: the 3D layer stayed blank through five looks and four remounts')
         await k.theme('dark')
         await k.js(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await sleep(300)
@@ -1056,6 +1070,11 @@ const SCENES = [
       // state (the recent folders the sheet's WHERE reads) that shifted four
       // later scenes past their budgets when it ran second.
       await k.emptyCanvas()
+      // M463. applyStarter frames from the canvas box the instant it runs, and
+      // on a loaded runner that box was still settling after the reload: the
+      // camera landed at x -206 instead of -56 (9.9% apart). Let the layout
+      // stop moving BEFORE the press, so the framing it computes is the same.
+      await k.layoutStill()
       // REAL clicks (a dispatched click never reaches shellControl's
       // mousedown; the product suite's own lesson): M205 moved the starter
       // off the primary and into the disclosure, so open it, then press the line.
@@ -1122,13 +1141,6 @@ const SCENES = [
       // which, so a run that flips names its own cause.
       await k.layoutStill()
       await k.cameraLog('starter')
-      // The framing applyStarter lands depends on the canvas box the instant
-      // it ran (x of -56 on some runs, -206 on others, 9.9% apart). Fit all
-      // (Cmd+1, the product's own door) frames what is on the canvas NOW, so
-      // the picture no longer depends on that instant.
-      await k.press('1', { metaKey: true })
-      await sleep(900)
-      await k.cameraLog('starter-fitted')
       console.log(`[shot] starter: minimap ${await k.js(`(() => { const m = document.querySelector('[data-minimap]'); if (!m) return 'absent'; const r = m.getBoundingClientRect(); return JSON.stringify({ w: Math.round(r.width), x: Math.round(r.x), op: getComputedStyle(m).opacity, presence: m.getAttribute('data-presence') || m.className }) })()`)}`)
       await k.shot('starter')
     } },
