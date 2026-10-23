@@ -51,7 +51,7 @@ module.exports = [
       await enter(k, 550)
       const host = await k.js(`(() => { const c = document.querySelector('.canvas'); if (!c) return null; return { mounted: c.isConnected, inert: c.inert, panels: document.querySelectorAll('.panel').length } })()`)
       if (host === null || host.mounted !== true || host.panels < 1) throw new Error(`rd-world-transition: the canvas unmounted during the move (${JSON.stringify(host)})`)
-      await k.shot('rd-world-transition')
+      await k.shot('rd-world-transition', { still: false })
     }
   },
   { name: 'rd-world-transition-rm', reference: ['docs/redesign/mockups/10-world-transition.png'], intent: 'The same move under reduced motion: a 120ms cross-fade, frozen at mid-fade, no dolly.',
@@ -67,7 +67,7 @@ module.exports = [
       await enter(k, 60)
       const tilt = await k.js(`document.querySelector('.canvas')?.style.transform ?? ''`)
       if (typeof tilt === 'string' && /rotateX\(/.test(tilt)) throw new Error(`rd-world-transition-rm: reduced motion tilted the plan (${tilt})`)
-      await k.shot('rd-world-transition-rm')
+      await k.shot('rd-world-transition-rm', { still: false })
     }
   }
 ]

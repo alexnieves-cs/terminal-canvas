@@ -109,8 +109,11 @@ function clockAt(h, m) {
 // out, and a caption that never resolves is a thrown scene, not a golden.
 async function changesRead(k, scene) {
   const loading = `[...document.querySelectorAll('.orch__caption[role="status"]')].some((p) => p.textContent.trim() === 'Reading changes…')`
-  for (let i = 0; i < 50 && (await k.js(loading)); i++) await sleep(100)
-  if (await k.js(loading)) throw new Error(`${scene}: the Changes pane still says "Reading changes…" after 5s, so the shot would pin a loading caption`)
+  // M463. 30s, not 5: a hosted runner reading git under a full paint run took
+  // longer than 5s once in three (orchestration-watch), and a scene thrown for
+  // a slow disk is a red check about the machine, not the app.
+  for (let i = 0; i < 300 && (await k.js(loading)); i++) await sleep(100)
+  if (await k.js(loading)) throw new Error(`${scene}: the Changes pane still says "Reading changes…" after 30s, so the shot would pin a loading caption`)
 }
 
 // Never touch the real store: this harness spawns real shells.
@@ -452,9 +455,12 @@ const SCENES = [
       // rewrote palette, search and every other scene that lists bookmarks —
       // a scene must not change the fixture other scenes are shot against.
       await kit.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
+      await kit.layoutStill()
       await kit.goTo('worker a')
-      await kit.zoom(0.5)
+      await kit.cameraLog('goto')
+      await kit.zoom(0.5, true)
       await sleep(400)
+      await kit.cameraLog('zoomed')
       // Fire, then freeze 80% of the way across (720 of EDGE_FIRE_MS's 900).
       // Order matters: the freeze must land after the fire's timestamp or the
       // packet sits at t = 0. And 80%, not the more natural 40%: this edge
@@ -484,9 +490,12 @@ const SCENES = [
   { name: 'edge-waiting', intent: 'M233. A join that is waiting: the worker\'s edge has DELIVERED into `claude — api (2)` and rests at the accent with no packet — the travel is over, the join is not. Captured after the breath has finished: the waiting edge breathes three times and then rests, because nothing on this canvas animates forever (M111\'s rule, applied to an edge), and the resting value is what a person who waits a minute actually sees — and what a reduced-motion user sees from the start. It differs from `edge-firing` by the absence of the packet, which is deliberate and is the point: the two states differ by whether something is CROSSING, not by how the edge is coloured.',
     run: async (kit) => {
       await kit.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
+      await kit.layoutStill()
       await kit.goTo('worker a')
-      await kit.zoom(0.5)
+      await kit.cameraLog('goto')
+      await kit.zoom(0.5, true)
       await sleep(400)
+      await kit.cameraLog('zoomed')
       await kit.js(`(() => { window.__m233Flow('arrived', 'groupA', 'twin'); window.__m233Flow('waiting', '', 'twin', ['chat']); return true })()`)
       // Past the arrival flash (EDGE_ARRIVE_MS) and past three breaths of
       // --dur-breath, so the capture is of the RESTING waiting state and does
@@ -837,6 +846,22 @@ const SCENES = [
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
         if (!(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`))) throw new Error('orchestration scene: no 3D cube painted')
+        // M463. The canvas EXISTS on every run and holds islands on two in
+        // three; the third holds a blank layer for as long as it is looked at.
+        // A blank layer is remounted (Tasks, then Scene again), up to four
+        // times, and a scene that never paints is a thrown scene by name.
+        let painted = false
+        for (let attempt = 0; attempt < 5 && !painted; attempt++) {
+          await sleep(800)
+          painted = await k.paintedWithin('.orch__cube-canvas canvas', 0.12)
+          if (painted) break
+          console.log(`[shot] orchestration: the 3D layer is blank (look ${attempt + 1}); remounting the Scene lens`)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="tasks"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await sleep(500)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
+        }
+        if (!painted) throw new Error('orchestration scene: the 3D layer stayed blank through five looks and four remounts')
         // The fixture has a focused task, which ghosts every non-member cube and
         // hides its card — a golden of ghosts pins no glass and no depth. Show the
         // whole ring, then select one plain satellite so an EXPANDED callout (the
@@ -900,6 +925,20 @@ const SCENES = [
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
         if (!(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`))) throw new Error('orchestration-working: no 3D cube painted')
+        // M463. As in the orchestration scene: the canvas exists on every run
+        // and the islands on most; a blank layer is remounted, not captured.
+        let workingPainted = false
+        for (let attempt = 0; attempt < 5 && !workingPainted; attempt++) {
+          await sleep(800)
+          workingPainted = await k.paintedWithin('.orch__cube-canvas canvas', 0.12)
+          if (workingPainted) break
+          console.log(`[shot] orchestration: the 3D layer is blank (look ${attempt + 1}, working); remounting the Scene lens`)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="tasks"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await sleep(500)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
+        }
+        if (!workingPainted) throw new Error('orchestration-working: the 3D layer stayed blank through five looks and four remounts')
         await k.theme('dark')
         await k.js(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await sleep(300)
@@ -988,7 +1027,21 @@ const SCENES = [
         turn('chat', 'w-l3', [{ type: 'tool_use', id: 'wl3', name: 'Edit', input: { file_path: f('server.ts'), old_string: 'const tick = 2000', new_string: 'const tick = watchdogBudget(load)\nlog.debug(tick)' } }])
         await sleep(1150)
         const painted = await k.js(`(() => { const r = document.querySelector('[data-orch-live]'); return r ? { towers: r.dataset.orchLiveTowers, events: r.dataset.orchLiveEvents } : null })()`)
+        console.log(`[shot] orchestration-watch: live ${JSON.stringify(painted)}`)
         if (!painted || Number(painted.towers) < 3) throw new Error(`orchestration-watch: expected at least 3 towers, got ${JSON.stringify(painted)}`)
+        // M463. The Watch layer is WebGL too: on a runner it sometimes holds a
+        // blank frame (3.7% off the golden, the towers and HUD gone). A blank
+        // layer is remounted through Tasks and Watch again, as the Scene scene
+        // does; the towers come back from the stored events, the in-flight arc
+        // does not, and the arc was never pinned by this image.
+        for (let attempt = 0; attempt < 4 && !(await k.paintedWithin('[data-orch-live] canvas', 0.04)); attempt++) {
+          console.log(`[shot] orchestration-watch: the 3D layer is blank (look ${attempt + 1}); remounting the Watch lens`)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="tasks"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await sleep(500)
+          await k.js(`(() => { const b = document.querySelector('[data-orch-lens="watch"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          for (let i = 0; i < 40 && !(await k.js(`!!document.querySelector('[data-orch-live] canvas')`)); i++) await sleep(100)
+          await sleep(1200)
+        }
         await changesRead(k, 'orchestration-watch')
         await k.shot('orchestration-watch')
       } finally {
@@ -1017,6 +1070,11 @@ const SCENES = [
       // state (the recent folders the sheet's WHERE reads) that shifted four
       // later scenes past their budgets when it ran second.
       await k.emptyCanvas()
+      // M463. applyStarter frames from the canvas box the instant it runs, and
+      // on a loaded runner that box was still settling after the reload: the
+      // camera landed at x -206 instead of -56 (9.9% apart). Let the layout
+      // stop moving BEFORE the press, so the framing it computes is the same.
+      await k.layoutStill()
       // REAL clicks (a dispatched click never reaches shellControl's
       // mousedown; the product suite's own lesson): M205 moved the starter
       // off the primary and into the disclosure, so open it, then press the line.
@@ -1078,6 +1136,12 @@ const SCENES = [
         throw new Error(`starter scene: the arrangement is not on screen (${kinds}) ${why} pressed ${JSON.stringify(pressed)} said ${JSON.stringify(said)}`)
       }
       await sleep(800)
+      // M463. The shot lands in one of two end states (the map overlay in and
+      // the camera framed 80px further right, or neither), 9.9% apart. Say
+      // which, so a run that flips names its own cause.
+      await k.layoutStill()
+      await k.cameraLog('starter')
+      console.log(`[shot] starter: minimap ${await k.js(`(() => { const m = document.querySelector('[data-minimap]'); if (!m) return 'absent'; const r = m.getBoundingClientRect(); return JSON.stringify({ w: Math.round(r.width), x: Math.round(r.x), op: getComputedStyle(m).opacity, presence: m.getAttribute('data-presence') || m.className }) })()`)}`)
       await k.shot('starter')
     } },
   // M336–M338. After the starter, on purpose: these turn the harness's account
@@ -2085,6 +2149,29 @@ app.whenReady().then(async () => {
   // The kit every scene drives the renderer through.
   // ---------------------------------------------------------------------
   const js = (code) => wc.executeJavaScript(code)
+  // M463. See kit.shot. True when two bitmaps differ in under 0.02% of pixels
+  // by more than the channel tolerance the visual suite itself uses (24 of 255).
+  const HOLD_STILL_LOOKS = 25
+  const sameFrame = (a, b) => {
+    if (a.length !== b.length) return false
+    const pixels = a.length / 4
+    let differing = 0
+    for (let i = 0; i < a.length; i += 4) {
+      if (Math.abs(a[i] - b[i]) > 24 || Math.abs(a[i + 1] - b[i + 1]) > 24 || Math.abs(a[i + 2] - b[i + 2]) > 24) differing += 1
+    }
+    return differing / pixels < 0.0002
+  }
+  /** Looks at the page until two consecutive captures agree. Returns the look that agreed, or -1 past the bound. */
+  const holdStill = async () => {
+    let prev = null
+    for (let i = 0; i < HOLD_STILL_LOOKS; i++) {
+      const frame = (await wc.capturePage()).toBitmap()
+      if (prev !== null && sameFrame(prev, frame)) return i
+      prev = frame
+      await sleep(200)
+    }
+    return -1
+  }
   const kit = {
     js,
     // M345. The shared-workspace scenes turn the share on through these.
@@ -2092,8 +2179,27 @@ app.whenReady().then(async () => {
     // M149. The window's webContents, for the scenes that set a REAL
     // condition through the DevTools protocol (media, device scale).
     wc,
-    shot: async (name) => {
+    // `still: false` is for a scene whose picture IS a moment (a transition frozen mid-way): holding still would wait it out.
+    shot: async (name, opts = {}) => {
       await sleep(250)
+      // M463. The top bar's "N sessions" label counts the terminal and chat
+      // panels on a 1 s tick (TopBar's useObservedSessionCount), so a capture
+      // within a second of a panel arriving or leaving reads the PREVIOUS
+      // count, and the label's width moves the search field with it: both
+      // pictures are stable, 0.58% apart, which no hold-still can tell
+      // apart. Wait for the label to say what is on the canvas (silence for
+      // none), then capture. A scene whose top bar is not mounted is left alone.
+      for (let i = 0; i < 40; i++) {
+        const settled = await js(`(() => {
+          if (!document.querySelector('.shell__top')) return true
+          const n = document.querySelectorAll('[data-panel-kind="terminal"], [data-panel-kind="chat"]').length
+          const l = document.querySelector('[data-session-count]')
+          const want = n <= 0 ? '' : n === 1 ? '1 session' : n + ' sessions'
+          return (l ? l.textContent.trim() : '') === want
+        })()`)
+        if (settled) break
+        await sleep(100)
+      }
       // M410. No capture names this Mac. The PNGs are committed and handed to
       // critics, and a live shell's row 0 once printed the developer's
       // `user@host ~ %` (flowchart-dark). Every terminal's rows and the
@@ -2109,6 +2215,15 @@ app.whenReady().then(async () => {
         const where = await js(`(() => { const t = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const w = ${JSON.stringify(leaks[0])}; const i = t.indexOf(w); return i < 0 ? '' : t.slice(Math.max(0, i - 60), i + w.length + 40).replace(/\\s+/g, ' ') })()`)
         throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name, in "${where}"`)
       }
+      // M463. A picture is taken once the page HOLDS STILL: two captures 200ms
+      // apart that agree. Six scenes painted one of two pictures from run to
+      // run on a hosted runner (the top bar before and after its layout, a
+      // WebGL layer before and after its first frame, a camera mid-flight),
+      // because each waited a fixed time for something whose time is the
+      // machine's. A page that never holds still (a cube bobbing, an arc in
+      // flight) is captured after the bound, as before, and says so in the log.
+      const looks = opts.still === false ? 0 : await holdStill()
+      if (looks < 0) console.log(`[shot] ${name}: never held still in ${HOLD_STILL_LOOKS} looks; captured as it was`)
       // M466. Two captures, the first thrown away. The window is hidden, so
       // nothing asks the compositor for a frame between gestures, and the
       // first capturePage after a change hands back the LAST frame it made
@@ -2213,7 +2328,47 @@ app.whenReady().then(async () => {
         const r = s.getBoundingClientRect(); s.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
       await sleep(300)
     },
-    zoom: async (target) => {
+    // M463. True when `selector`'s box, as the window shows it, is more than
+    // `minFraction` pixels unlike its own top-left corner. The orchestration
+    // scene's WebGL layer came up blank on one run in three (the DOM around it
+    // painted), and a blank layer holds perfectly still, so a hold-still look
+    // cannot tell it from a finished one.
+    paintedWithin: async (selector, minFraction) => {
+      const box = await js(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } })()`)
+      if (box === null || box.width < 8 || box.height < 8) return false
+      const img = await wc.capturePage(box)
+      const { width, height } = img.getSize()
+      const px = img.toBitmap()
+      const base = [px[0], px[1], px[2]]
+      let unlike = 0
+      for (let i = 0; i < px.length; i += 4) {
+        if (Math.abs(px[i] - base[0]) > 40 || Math.abs(px[i + 1] - base[1]) > 40 || Math.abs(px[i + 2] - base[2]) > 40) unlike += 1
+      }
+      return unlike / (width * height) > minFraction
+    },
+    // M463. The camera, named in the run's log: a scene that flips between two
+    // cameras is diagnosed from the numbers, not from two pictures.
+    cameraLog: async (label) => console.log(`[shot] camera ${label} ${await js('JSON.stringify(window.__m4aViewport())')}`),
+    // M463. Waits until the canvas host's box stops changing (three looks
+    // 120ms apart). A pane closed a moment ago re-lays the canvas out after
+    // the setting lands; a goTo centred on the OLD width bakes that width into
+    // the camera, which is the other half of the edge scenes' two pictures.
+    layoutStill: async () => {
+      let prev = ''
+      let agreed = 0
+      for (let i = 0; i < 50 && agreed < 3; i++) {
+        const box = await js(`(() => { const r = document.querySelector('.canvas')?.getBoundingClientRect(); return r ? [r.x, r.y, r.width, r.height].map(Math.round).join(',') : '' })()`)
+        agreed = box === prev ? agreed + 1 : 0
+        prev = box
+        await sleep(120)
+      }
+    },
+    // M463. `strict` lands within 0.4% of the target instead of 4%. The loose
+    // window stops at whichever pinch step first falls inside it, and a camera
+    // still easing from the previous goTo moves that step between runs: the two
+    // edge scenes painted their panels about 60px apart on a loaded runner.
+    zoom: async (target, strict = false) => {
+      const window4 = strict ? 0.004 : 0.04
       // A pinch is a wheel with ctrlKey (canvas-input.ts); step until the
       // scale lands within a few percent of the target.
       // M410. The pinch lands on OPEN canvas: at the host's centre it could
@@ -2231,13 +2386,20 @@ app.whenReady().then(async () => {
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`
       for (let i = 0; i < 120; i++) {
         const scale = await js(`window.__m4aScale()`)
-        if (Math.abs(scale - target) / target < 0.04) break
+        if (Math.abs(scale - target) / target < window4) break
         // A pinch step is exp(-deltaY × 0.01) with deltaY clamped to ±25
         // (canvas-input.ts): a fixed ±60 always moved a whole ×0.78 step,
         // which can straddle the 4% window forever from some starting scales.
         // The last step asks for exactly the remaining factor.
         const deltaY = Math.max(-25, Math.min(25, Math.log(scale / target) / 0.01))
-        const at = await js(openPoint)
+        // M463. Strict: the host's centre, always. The open-point search moves
+        // with whatever the hit-test finds under each grid cell, and one grid
+        // step is about the 60px the edge scenes' panels sat apart between
+        // runs; after a goTo the panel under the camera is centred, and the
+        // canvas takes a pinch over a sleeping card all the same.
+        const at = strict
+          ? await js(`(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
+          : await js(openPoint)
         await js(`(() => { const host = document.querySelector('.canvas')
           host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: ${deltaY}, deltaMode: 0, clientX: ${at.x}, clientY: ${at.y} })); return true })()`)
         await sleep(40)

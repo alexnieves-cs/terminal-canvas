@@ -202,6 +202,9 @@ app.whenReady().then(async () => {
   const dir = SHOT_DIR_KEEP !== null ? (mkdirSync(SHOT_DIR_KEEP, { recursive: true }), SHOT_DIR_KEEP) : mkdtempSync(join(tmpdir(), 'tc visual '))
   console.log(`[verify:visual] painting into ${dir}${UPDATE ? ' (UPDATING GOLDENS)' : ''}`)
   const shot = await runShot(dir)
+  // M463. The scenes that never held still are named in the run's own log, so
+  // a flip is read from the job and not only from the pictures it left.
+  for (const line of shot.out.split('\n')) if (line.includes('never held still') || line.includes('[shot] camera') || line.includes('[shot] starter: minimap') || line.includes('[shot] orchestration-watch:') || line.includes('the 3D layer is blank') || line.includes('rd-world-focus: the camera')) console.log(line.trim())
   const manifestPath = join(dir, 'manifest.json')
   if (shot.code !== 0 || !existsSync(manifestPath)) {
     ok('harness the shot harness painted its scenes and wrote a manifest', false, `exit ${shot.code}; tail: ${shot.out.slice(-600)}`)
