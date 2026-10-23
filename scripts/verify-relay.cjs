@@ -563,7 +563,22 @@ function connect(port, tok, opts = {}) {
       return { pos, data: Buffer.concat(bytes) }
     }
     const matches = ({ pos, data }) => pos + data.length === total && data.every((x, i) => x === stream[(pos + i) % stream.length])
-    await until(() => matches(screen(fast, fastMark, stream.length)) && matches(screen(slow, slowMark, stream.length)), 15000)
+    // The poll must stay cheap: screen() concatenates everything the client has
+    // received since its mark, and after a long second pump that is hundreds of
+    // MB. Doing it every 5 ms starves the very event loop that has to deliver
+    // the tail, so the bytes are only assembled once their count says they are
+    // all there, and the window is sized for a slow runner.
+    const received = (c, fromIndex) => {
+      let n = 0
+      for (let i = c.log.length - 1; i >= fromIndex; i--) {
+        const e = c.log[i]
+        if (e.m && e.m.t === 'resync') return n + e.m.offset
+        if (e.b) n += e.b.length
+      }
+      return n + stream.length
+    }
+    await until(() => received(fast, fastMark) === total && received(slow, slowMark) === total &&
+      matches(screen(fast, fastMark, stream.length)) && matches(screen(slow, slowMark, stream.length)), 60000)
     ok('relay.bp.4 …resumed once they drain; each client ends on exactly the stream\'s tail (the gap, or a resync from the ring)',
       p.resumes >= 1 && !p.paused && matches(screen(fast, fastMark, stream.length)) && matches(screen(slow, slowMark, stream.length)))
     fast.ws.terminate(); slow.ws.terminate()
