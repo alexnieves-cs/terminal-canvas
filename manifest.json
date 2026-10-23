@@ -1,0 +1,460 @@
+[
+  {
+    "file": "launcher.png",
+    "intent": "The empty canvas a fresh install sees: the launcher of real verbs, nothing else on the canvas."
+  },
+  {
+    "file": "kinds.png",
+    "intent": "One of every panel kind side by side on the light theme at 100 %: a live claude terminal, a dormant tests card, a review, a source file, a note, a toolbox, a work card and a chat — every header at rest a glyph, a title and one state; the bodies in the UI face with code and paths in mono."
+  },
+  {
+    "file": "kinds-dark.png",
+    "intent": "The same panel kinds on the dark theme; the terminal well and every surface should follow the theme with the same hierarchy."
+  },
+  {
+    "file": "trail.png",
+    "intent": "The live skill trail: a lane of cards to the right of a selected agent panel, each card the skill's name and its phase as a sentence, the host's `hide 4 skills` capsule in its chrome; the dashed tether on the host's edge."
+  },
+  {
+    "file": "skills.png",
+    "intent": "M127. The Skills pane: the navigator over the Skills section with a column per shelf placement, each card the skill's name on the pane's type scale, a note and its facts, the column's count beside its `⋯`; the search field above."
+  },
+  {
+    "file": "chat.png",
+    "intent": "A chat panel beside the live terminal: a restored transcript with the user's turn as a soft bubble on the right, the assistant's answer as unboxed prose in the UI face at the measure, a collapsed tool row, the state pill reading asleep, a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled (M167)."
+  },
+  {
+    "file": "integrations.png",
+    "intent": "The Integrations page: the navigator's Connections pane (headed CONNECTIONS), every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker's audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place."
+  },
+  {
+    "file": "github.png",
+    "intent": "The GitHub work panel: the issues assigned to you and the pull requests waiting on your review as one list, each item led by its owner/repo#N in mono with its state, the title, the body's first line dim, and two verbs — Start session, which spawns an agent with the item as its opening context, and open on GitHub. Jira's shape reached by a second service, through the broker, so the panel's reads sit in the same audit as the agents' own calls."
+  },
+  {
+    "file": "across.png",
+    "intent": "A review of every worktree of one repository, in one panel: the main tree first, then a section per worktree lane with its branch, each file a card with its counts as pills; Commit and discard are the frame's verbs and refuse by name across lanes."
+  },
+  {
+    "file": "vault.png",
+    "intent": "The vault: the navigator's Notes pane (headed `NOTES · notes`, the vault folder's name) lists a folder of markdown notes by title, newest first, and the open note paints its `[[links]]` as links — a resolved one in the accent, an unresolved one dashed and offering to be created — with a Backlinks section beneath naming the notes that point here and the line. A note is still a file panel; a vault is many of them plus an index."
+  },
+  {
+    "file": "watcher.png",
+    "intent": "A watcher: a node that runs a command when something changes. The chrome row says WHEN in the same words everywhere (`on a change in src`), the body is the last run's output and one line saying how it ended, and the state is the ordinary vocabulary — a passing watcher reads `idle` in green on its own edge, in the rail and in the minimap, with no word invented for it."
+  },
+  {
+    "file": "browser.png",
+    "intent": "The browser pane beside the terminal that started its dev server: a live page painted INSIDE the panel frame, panned and clipped with the world like every other node. The chrome reads the page's real address (`http://127.0.0.1:…`, from the guest itself — never the page's title) beside one labelled verb, `Open in browser`; below it the app's own bar — `Back`, `Forward`, `Reload` as words, disabled with their reasons, and the address input — and then the page. A ruled edge from the dev server says `on exit 0`: the page reloads when the server comes back. Beside the width chips and Capture, the pane says which work it is a preview OF — `source · repo`, with `Change source` next to it (M195): a file change under that folder reloads THIS pane and no other project's. The kind word `browser` sits in the rail and on the frame; no state is invented for a document."
+  },
+  {
+    "file": "teammate.png",
+    "intent": "M100. The Teammates pane: the roster as rail rows (`ada · 1 place · 1 service · scheduled`, `bo · 0 places · 0 services · messaging`) with ada's record open beneath — her brief, her one place as a mono path with `remove` and `add a place…` (a folder dialog, never a typed path), the services with `grant`/`revoke` per service and `not connected` said where it is, the two permission checkboxes as separate controls, and `Chat as ada` / `Delete`. An identity with an explicit scope, three permissions kept apart."
+  },
+  {
+    "file": "routine.png",
+    "intent": "M101. The same record's routines: `nightly review · every 10m` whose row says `missed at <time> — the app was closed` because its due tick fell while the app was closed and it was NOT fired, and `weekly tidy · every 1h · paused`; each with `Run now`, `Pause`/`Resume`, `Open last` (disabled by name when no run opened a chat) and `Delete`; the section header says `runs while the app is open — not while it is closed`; the form beneath to add one, its Add button enabled because ada may be scheduled."
+  },
+  {
+    "file": "board.png",
+    "intent": "M116. The Board pane: four columns (todo · working · review · done), each with its count, a card under todo with its key and Show on canvas, the dispatched card under working with its teammate and lane, the two empty columns saying what sets them; the drop edge appears on a drag."
+  },
+  {
+    "file": "chat-copilot.png",
+    "intent": "M118/M120. The spawn sheet on the copilot row under the harness's stripped PATH: `what` reads `chat with copilot — not on PATH` (the disabled arm, by name, like the codex scene), the how row says `no mode flag` and `no effort flag` because copilot has neither, the model field is a SELECT whose empty choice is `auto (the CLI's default)` over the row's closed list, and the preview names the engine with its capability sentence (runs every tool on its own policy · no interrupt · no images · a read-only mode). A third engine is a row, not a new surface."
+  },
+  {
+    "file": "memory.png",
+    "intent": "The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind's own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene's chat already has a history, so the note is not in frame.)"
+  },
+  {
+    "file": "supervisor.png",
+    "intent": "The spawn sheet's supervisor row: `what` reads `supervisor of this canvas` and the preview says what it is — a chat that reads this canvas with `tc status`. One per canvas; the row says so when there already is one."
+  },
+  {
+    "file": "templates.png",
+    "intent": "The spawn sheet opened on a template: `what` names `review this repository`, ONE field per parameter is asked (`repository`), and the preview line counts the shape it will make (`2 panels · 1 edge`). A shape of work, started with one thing filled in."
+  },
+  {
+    "file": "runs.png",
+    "intent": "A run that already happened: the Workspaces pane lists it under RUNS with its panel count, duration and state and a Run again verb; the selected run's panels are in frame beneath."
+  },
+  {
+    "file": "graph.png",
+    "intent": "The task graph: two ruled edges into the second panel drawn as lines with their rule words, the target's inspector open on the edge's fields; the chat behind carries the join's first arrival."
+  },
+  {
+    "file": "edge-firing.png",
+    "intent": "M233. An edge in flight: the worker's ruled edge into `claude — api (2)` FIRING — the line and its arrowhead lifted to the accent, with a bright packet part-way along it placed by the same analytic Bézier the label uses. An edge animates ONLY when something crosses it; at rest it is the quiet grey line every other edge on this canvas is showing. (Two disclosures. The harness freezes the clock at a chosen instant so the packet lands in the same place every capture — that is the one thing faked, and the real reducer computes the real t. And the join's SECOND edge, from the chat, is not in this frame: the fixture stacks three panels over its short path, and moving them to expose it would move five other goldens. The lit/quiet contrast is therefore carried by this scene against `graph`, and the regression guarantee is `edge.paint.1`, not this image.)"
+  },
+  {
+    "file": "edge-waiting.png",
+    "intent": "M233. A join that is waiting: the worker's edge has DELIVERED into `claude — api (2)` and rests at the accent with no packet — the travel is over, the join is not. Captured after the breath has finished: the waiting edge breathes three times and then rests, because nothing on this canvas animates forever (M111's rule, applied to an edge), and the resting value is what a person who waits a minute actually sees — and what a reduced-motion user sees from the start. It differs from `edge-firing` by the absence of the packet, which is deliberate and is the point: the two states differ by whether something is CROSSING, not by how the edge is coloured."
+  },
+  {
+    "file": "composer.png",
+    "intent": "The chat panel's composer at work: a dropped image as a dim mono line above the textarea (its name and a labelled `remove`), and the `@` file list open under a half-typed reference — rows in mono, directories first, the same hairline family as the frame; nothing floats over the canvas."
+  },
+  {
+    "file": "tool-objects.png",
+    "intent": "A tool call as an object: in the chat, the Edit row's `diff` verb is open and shows the hunk against the chat's baseline in the review node's own line idiom; the context pane's Changes section answers for the chat; a review node opened from it lists server.ts with `· 2 tool calls` and, expanded, the Read and the Edit that touched it. One vocabulary for what happened to a file, whichever surface says it."
+  },
+  {
+    "file": "approval.png",
+    "intent": "An agent asking permission, seen from afar: the attention badge on the dock's bell and the popover naming the chat with a jump verb; the review node in front, its file cards and pills at rest; the chat's own card is behind it."
+  },
+  {
+    "file": "verbs.png",
+    "intent": "M96. The verb line: the palette in text mode on `Run a verb…` after a typed step was refused — the refusal and its fix on the palette's own feedback line (`step 1: no panel is called zz9 — name a panel by its id…`), the typed line kept for correction. A plan is shown and refused by name before anything runs."
+  },
+  {
+    "file": "auto.png",
+    "intent": "M97. A chat wearing a running auto chip beside its state pill (`auto · complete · 0/8` with a ring) after the chat's `auto` verb opened the palette on the Auto rows and Complete was chosen; the opening prompt drew a permission question, so the approval card is up with its verbs — Allow, Allow for session, Deny. The chip is a projection of main's count; the card is the same question every attention surface answers."
+  },
+  {
+    "file": "subagents.png",
+    "intent": "Two live agent sessions in one repository, made in open canvas: the app cannot tell their subagents apart, so beside them a SUBAGENTS card says `2 panels share this repository, so their subagents cannot be told apart` — a deliberate card on clear canvas, nothing over it, not a rendering error."
+  },
+  {
+    "file": "palette.png",
+    "intent": "The command palette at rest (Cmd+K) over the canvas: sections, rows, disabled rows with their reasons, and the footer."
+  },
+  {
+    "file": "palette-query.png",
+    "intent": "The palette filtered by the word \"group\": matching rows with highlighted matches, and any disabled row naming why."
+  },
+  {
+    "file": "lineup.png",
+    "intent": "M104. The spawn sheet opened on `lineup: Workbench` with worktrees asked (the `lanes` checkbox): under the ordinary preview line, the LINEUP PREVIEW — `3 sessions will open · 1 agent`, then every seat with its role, kind and place (`worker · agent`, `dev server · shell`, `preview · browser · http://localhost:3000/`) — shown BEFORE Enter mints anything; with worktrees asked, only the agent seat says `in a worktree` and the others `in the checkout`. A ceiling line appears only when agents would queue."
+  },
+  {
+    "file": "header.png",
+    "intent": "M106. Header discipline on a 320px frame with a long title (`review: the health check wiring for the api repository`): the title is ellipsised whole-words-first while the kind mark, the state pill and every chrome control (`fill`, `⋯`, `×`) stay whole inside the frame; the full title lives in the title attribute and at the top of the ⋯ menu, which is open."
+  },
+  {
+    "file": "flip.png",
+    "intent": "M106. Flip Terminals: every terminal turned over to its far-view summary — the work title large with the state word beneath — while chats, files and the review node stay as they were; M57's far view invoked deliberately by the Workspace menu (or the palette row), not by camera distance. A second flip turns them back."
+  },
+  {
+    "file": "spawn-sheet.png",
+    "intent": "The spawn sheet (New panel…): what, where with its suggestions, title, and for an agent preset its mode, effort and model; a preview line and the keys in the foot."
+  },
+  {
+    "file": "start-work.png",
+    "intent": "M400 (B1). The New task sheet, the one form behind every start door: the task first, then the repository — live at open with every placed teammate's repositories and Choose…, never gated on the agent — then who as one closed line (the teammate whose place holds the folder, or a new one for exactly it) with Change, the triple stated in the foot before anything is minted. Swarm, recipe and criteria sit under Options."
+  },
+  {
+    "file": "palette-dark.png",
+    "intent": "The palette at rest on the dark theme."
+  },
+  {
+    "file": "search.png",
+    "intent": "Search across every panel (Cmd+F) for \"FAIL\": hits from the durable log, each naming its panel, with the matching line. M122: the scope now reads BOTH durable logs — the scrollback logs and the chat transcript logs — and what the answer left out comes first (the cap line, the redaction count), each only when non-zero."
+  },
+  {
+    "file": "search-empty.png",
+    "intent": "The same search with a term nothing said: an empty state that names the term and says there were no matches, not a blank list."
+  },
+  {
+    "file": "inspector-detail.png",
+    "intent": "The context pane open on a live terminal whose well may be blank in the fixture (its shell prints nothing): the Detail tab's command, the full cwd wrapped, the Machine section's figure, the action bar with its one filled Restart."
+  },
+  {
+    "file": "inspector-work.png",
+    "intent": "The context pane, Work tab: what the panel has changed, run and cost — every section either answers, says nothing to show, or says it is still asking."
+  },
+  {
+    "file": "inspector-tools.png",
+    "intent": "The context pane, Tools tab: what this panel's agent can do — permissions and commands from its toolbox."
+  },
+  {
+    "file": "inspector-activity.png",
+    "intent": "M279. The context pane, Activity tab: what this panel has DONE, newest first — its agent-state transitions as rows (a dot in the tone, the panel's name, an age, one line of detail), from the same ring buffer the orchestration page reads; or the empty sentence when nothing has happened to it yet."
+  },
+  {
+    "file": "navigator-panels.png",
+    "intent": "The dock's Panels pane: one row per panel with its state, the selected row marked."
+  },
+  {
+    "file": "navigator-workspaces.png",
+    "intent": "The Workspaces pane opened from the top bar's workspace switcher (the `api ⌄` crumb): the two canvases, api and docs, with their panel counts and the active one marked; the merged view row; the RUNS beneath."
+  },
+  {
+    "file": "navigator-files.png",
+    "intent": "The dock's Files pane: a file tree rooted on the selected panel's directory."
+  },
+  {
+    "file": "attention.png",
+    "intent": "A panel rang its bell: the dock badge counts one, and the popover lists the waiting panel with a way to jump to it."
+  },
+  {
+    "file": "overview.png",
+    "intent": "The minimap in the top-right corner at 100%: one block per panel in its state colour — the waiting panel amber — and the camera as an iris rectangle; the status board while working."
+  },
+  {
+    "file": "group.png",
+    "intent": "A named, coloured group frame around two panels, with its label, member count, and its card and remove controls in the header."
+  },
+  {
+    "file": "group-collapsed.png",
+    "intent": "The same group carded: its live member is now a card inside a dashed frame, and nothing was closed."
+  },
+  {
+    "file": "merged.png",
+    "intent": "The merged view: every workspace's panels at once, the api lane in frame with its header, the read-only chip in the top bar, the HUD pill at 22 %."
+  },
+  {
+    "file": "zoomed-out.png",
+    "intent": "The canvas pulled back to about a fifth of the size: every card is its kind glyph, its name (large enough to read, clipped only at its end) and its state on a tone wash; with everything in view the minimap stays hidden (M395)."
+  },
+  {
+    "file": "zoomed-out-dark.png",
+    "intent": "The zoomed-out canvas on the dark theme."
+  },
+  {
+    "file": "compact.png",
+    "intent": "The shell at its compact breakpoint (1000px wide): the navigator and context become drawers, the canvas keeps the width."
+  },
+  {
+    "file": "workflow.png",
+    "intent": "The workflow panel: a template drawn as a block diagram (scan, workers, judge, report) with the edge words between them; the verb row with Run ENABLED (the pool has its caller since M138), Triggers, Stop (disabled — no pool is running), Save (disabled — the draft is kept on the panel; Save on the diagram arrives with M184), Delete and Build with AI; the Definition tab selected."
+  },
+  {
+    "file": "workflow-edit.png",
+    "intent": "M183. The workflow panel as an EDITOR: the node library opened from its `Add node…` disclosure (an entry per kind, each a name, one sentence and an example, with its own Add control), the diagram beside it with a port on every block, the `scan` block selected with the accent stroke, and the context pane on Detail showing that node's own fields from its kind's schema — folder, title, command, arguments, preset, first message — as editable inputs with a Done verb; Save still disabled with the sentence naming M184; nothing running."
+  },
+  {
+    "file": "wide.png",
+    "intent": "The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them."
+  },
+  {
+    "file": "reduced-motion.png",
+    "intent": "M149. The camera with `prefers-reduced-motion: reduce` on: a palette jump to a far panel lands INSTANTLY — the frame captured a beat after Enter already shows the target framed and selected, with no mid-flight blur or trail — the M56 rule under the real media query, not the test override."
+  },
+  {
+    "file": "ink.png",
+    "intent": "M155. Ink on the annotation layer: annotate mode with the DRAW tool pressed on the strip, one stroke drawn across the ground and one drawn from a panel (it belongs to the panel and moves with it), the strokes in the label's own colour at a world width, the last one selected; the strip names the gesture (`drag to draw`)."
+  },
+  {
+    "file": "orchestration.png",
+    "intent": "M271/M274/M275, cubes on an R3F island since the diorama R3F pass. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, real-lit WebGL agent cubes (a shared light rig and shadow-catching ground, one stage tilt) standing on an elliptical ground plane, the hub painted behind the near satellites (a real depth buffer, not painter's order), upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run, and so are the System card's CPU/Memory numbers and their two sparklines — those are a REAL sample of this machine's process table, so they differ between two runs a minute apart (measured 2 MB against 1 MB), and the memory tile is the one that failed the dark golden's tile budget at 81%. The cards, labels and geometry are unmasked; only the live values are. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.",
+    "reference": [
+      "docs/design-reference.png",
+      "docs/design/orchestrate-preview.png"
+    ]
+  },
+  {
+    "file": "orchestration-dark.png",
+    "intent": "Command deck in dark mode: blue-black ground, glass cubes, role-tinted platforms, mono labels and separate state dots. Same selection as the light scene; clocks, greeting and the live machine readouts masked (see the light scene's disclosure) and reduced motion enabled.",
+    "reference": [
+      "docs/design-reference.png",
+      "docs/design/orchestrate-preview.png"
+    ]
+  },
+  {
+    "file": "orchestration-working.png",
+    "intent": "M280. The ring with work ACTUALLY RUNNING, which is the state the rest of the diorama is designed for and the one no other scene shows: three agents busy and one waiting on a person, so the bloom tiers, the role-coloured halos and the ground pools under lit nodes are all in frame at once. The companion to `orchestration-dark`, which is the same ring with everything idle — that scene pins that idle does NOT bloom (a dark floor and unlit slabs), this one pins that working does. DISCLOSED, and the only thing faked: the fixture spawns no real agent, so the harness sends the same `agent:state` transitions main would have sent for four of the fixture's own panels, addressed by the `data-node` each cube carries; every pixel after that is the real model, the real material and the real composer. Dark theme and reduced motion, so a mid-bob cube cannot move a tile between runs; clocks, greeting and the live machine readouts masked as in the pair above.",
+    "reference": [
+      "docs/design-reference.png",
+      "docs/design/orchestrate-preview.png"
+    ]
+  },
+  {
+    "file": "orchestration-watch.png",
+    "intent": "M304. The Watch lens with work ACTUALLY HAPPENING: the dark theme, every roster session on its island platform — the focused task centre, the rest ringing it — two chats working (spinning iris cores with orbit rings), the files they touched standing as towers of green (added) and red (removed) slabs labelled with the lines written, the file both chats wrote wearing an amber ring, a write in flight as a light arc carrying its real code token, and the working chat's callout typing that token. Seeded through real `agent:event` turns — the same door a live session uses — and captured mid-flight WITHOUT reduced motion, so the one thing this image cannot pin is the exact frame of the arc; the towers, labels, callout and HUD are the regression surface.",
+    "reference": [
+      "docs/design-reference.png",
+      "docs/design/orchestrate-preview.png"
+    ]
+  },
+  {
+    "file": "file-missing.png",
+    "intent": "M149. A file panel whose file was deleted from disk under it: the watcher's push reaches the panel and it says so in words (`not found`), keeps its title and its chrome, and offers the reload — the error arm every three-state result must have, never a blank body."
+  },
+  {
+    "file": "starter.png",
+    "intent": "M181/M205. The starter canvas the OPTIONAL `Starter canvas…` line (inside the launcher's `More ways to start`, reached by wheeling the card until the line is on screen) lays out: the agent (an asleep chat, its composer the first thing to type into) at working size in the middle, and to its right and below a captioned example of each kind — a dormant terminal card, a note over a real Markdown file, open in its editor, the editor filling the body below its strip (never 0px, A1), its path the starter folder and never ~/.claude (A2), a workflow projecting the built-in template, an image showing real pixels — in a group named Examples; every caption a sentence under its object; nothing running, no process spawned; the launcher gone."
+  },
+  {
+    "file": "account-menu.png",
+    "intent": "M336. The account menu open from the top bar's last control — the active account's initials (`AL`) in a circle. Under `Active account`, the two GitHub accounts signed in on this Mac as a radio set, `ada-lovelace` checked; `Add another account…`; under `Sharing`, `Share this workspace…` and `Open a shared workspace…`; below a rule, `Sign out ada-lovelace`. The menu is the View menu's own surface."
+  },
+  {
+    "file": "share-dialog.png",
+    "intent": "M337. The share dialog over a dimmed canvas, for a workspace that is not shared yet: `Share “Main”` as its title; one sentence saying exactly what crosses (cards: place, kind, a scrubbed title and owner) and what never does (no command, folder or transcript); an `Organization` select reading `Acme`; the note that you become its owner and nobody is in until you add them; the primary `Share`, and `Done` at the foot."
+  },
+  {
+    "file": "relay.png",
+    "intent": "M338. A relay terminal on an otherwise empty canvas: a panel that KEEPS its header — the relay glyph, `relay · shell` as its title and the kind word `relay` — over the M335 attachment. The strip reads `You are in control` with the program `shell` in mono and one verb, `End session`; below it the remote shell's screen (`ada@relay:~$ uptime`, a load line, an `ls` of the deploy folder) in the terminal well, cursor live because this person is the one typing."
+  },
+  {
+    "file": "shared-canvas.png",
+    "intent": "M343–M345. A SHARED workspace from its owner's seat, with a teammate (sam) working in it from another Mac. The roster strip shows sam in sam's colour, and (M349) sam's one agent beside sam as a smaller CIRCLE of its own (people are rounded squares): a dashed ring in sam's colour, never filled (a filled tile is a person), its initial in the working tone, named in full on hover (`claude — tests — sam's agent, working`). sam's cursor sits on the canvas with a name tag. Beneath the owner's own relay terminal, two of sam's panels stand as inert placeholders, each header wearing sam's colour and name: sam's RELAY terminal reads `sam's terminal on the team relay · shell` and offers Attach (the session id crossed the doc; the relay still decides by role), and sam's terminal reads `Terminal on sam's machine — nothing runs here`. Nothing of sam's runs here, and nothing is started by showing it. DISCLOSED: the view and the roster are the pushes main's canvas-sync and presence hub would send, sent as those pushes — no doc and no network in the harness."
+  },
+  {
+    "file": "share-members.png",
+    "intent": "M337/M345. The share dialog on a workspace that IS shared, opened by its owner: the title `“api” is shared`, the owner's one-sentence role, and the Members list of the share's organization — `ada-lovelace (you)` as owner with no picker on themselves, `sam` with an Editor picker, `lin` with a Viewer picker and `octocat`, in the organization but not in the share, with the picker at Not in. One opaque card over a dimmed canvas; nothing changes until a person picks."
+  },
+  {
+    "file": "shared-offline.png",
+    "intent": "M348. The same shared workspace with its collab server gone: under the roster strip (sam, as before), one amber chip says `Offline — 3 changes waiting to sync` — the provider's own count of edits the server has not acknowledged. sam's tile dims, and sam's cursor and sam's agent tile are gone: offline, this seat cannot know where sam is or what sam's agents are doing. The canvas stays editable, sam's placeholders stay where they were, and nothing claims the changes are lost (main keeps them; they go when the server is back). DISCLOSED: the roster is the push main's presence hub would send for a disconnected room, sent as that push."
+  },
+  {
+    "file": "inspector-caps.png",
+    "intent": "M350–M352. The context pane, Work tab, on an AGENT CONVERSATION held at its own cap: under Cost, a Caps section reads `Spend $2.10 of $2.00 — this agent's cap` and `Context 118k tokens of 150k — Settings cap`; one amber sentence says the agent reached its own $2.00 spend cap ($2.10 reported) and names its fix (raise its own cap here, or cap-agent in the palette); two fields, each named on screen (`Spend cap $` holding the record's 2, `Context cap` blank and reading Settings, `k tokens`), beside Set; and the verb's own answer from the Set that wrote the cap (`spend cap $2.00`). On the chat itself the state pill reads idle with nothing waiting, and its close reads `end?` because the agent's process is still alive (a hold keeps the agent; closing would end it); the auto run's resolved chip stays in the header beside the pill and reads `auto stuck` with its dismiss (M356: what the run came to never clips; its reason, `— cap reached`, gives first, and the whole sentence with its mode is the chip's title), the Auto… door is hidden while the chip shows, and every control in the header is painted inside the chat's frame (the scene hit-tests each). DISCLOSED: the cap was written through the fields and Set (the verb's canvas door); the hold is the pushes main's agent runtime sends when a result crosses the cap (the status, the stuck run, its dropped continuation and the meter), sent as those pushes. M380: under Context, a `Window` line says what is left of the window the CLI reported (`82k of 200k left — 59% used`), and under the cost a muted sentence says what caching returned at list price (`caching saved $0.06 — …`)."
+  },
+  {
+    "file": "queue-hold.png",
+    "intent": "M355/M357. The Needs you popover with an agent main HOLDS at the spend cap every agent shares: the conversation's row is a hold, not a question — it reads that the agent is held at its $2.00 spend cap ($2.10 reported) — with whose cap it is as its context (`Settings cap · agents.nodeCapUsd`), its task group saying the task is stopped on it with `Raise … cap` as the next step, how long it has waited, what raising it affects, and its two answers beside Snooze: `Allow $2.00 more` and a red-outlined `Stop`. The Inspector's band and the resume card say the same hold (M367): the next action is to allow it more from Needs you or raise its cap on the Work tab, and the open blocker is the agent held at its $2.00 spend cap — never \"needs you at its keyboard\". The earlier `Before the restart` row is the fixture's own lost decision from the scenes before. DISCLOSED: the hold is the meter main's agent runtime sends when a result crosses the cap, and the `wants-you` its approval tracker says for it, sent as those two pushes. The scene then CLICKS `Allow $2.00 more`, which runs the real cap-agent verb as a person, and asserts that the agent's own cap on its record became $4.10 (the Work tab's Spend cap field reads it); the shot is taken before the click."
+  },
+  {
+    "file": "plan-approval.png",
+    "intent": "M358. PLAN BEFORE EXECUTION. An agent in plan mode has finished its plan and asks to start: in the chat's composer well the request is a plan, not a tool call — \"claude has a plan and starts on it only when you approve it\", the plan rendered as Markdown in its own scroll (a heading, a numbered list, inline code), and two answers, `Approve plan` and `Keep planning`, with NO \"for session\" grant. The Needs you pane shows the same request expanded: the headline says the agent asks to start on this plan, the plan in a bordered scroll, `Approve plan` and `Keep planning`, and a sentence saying what each does (the detail is scrolled so its answers are in view). The chat's stuck auto chip from the caps scenes is dismissed first, as a person would. Everywhere else the request waits it is a plan, never the tool's name (M359): the Inspector's band says to read the plan and approve it or keep planning, its blocker line and `Waiting on you: plan · …` name the plan by its first line, its foot button reads `Read the plan`, and the resume card's open blocker says a plan waits for your approval. The queue's own row and task group (a plan to approve, `Read … plan`) are scrolled above the detail in this shot; `verify:rail plan.queue.1` pins their words. DISCLOSED: the request is the permission request main forwards when claude calls ExitPlanMode, and the wants-you its approval tracker says, sent as those two pushes; it is dropped after the shot, so nothing is answered."
+  },
+  {
+    "file": "team-ask.png",
+    "intent": "M375–M378. A TEAMMATE'S AGENT ASKING, in this person's Needs you: below whatever waits on this machine, a section `Your team is asking · 2`. Each row names WHOSE agent (`sam's agent · tests — api`, `sam's agent · relay · shell`) with a jump, the WHOLE line it would run in mono, wrapped and never cut (`Bash — npm test -- --watch=false`; the second a curl whose bearer token reads `[redacted bearer token]`), how far the answers have got (`one person's allow decides it`; `1 of 2 allowed — spend past the team's line needs two people`), `1 secret hidden before it left their machine` on the second, how long it has waited, and two answers — `Allow once` and `Deny`, never a standing grant. The dock's badge counts them. DISCLOSED: the two rows are main's `team:asks-changed` push as a shared workspace's doc would produce it; nobody answers, and the list is emptied after the shot."
+  },
+  {
+    "file": "replay.png",
+    "intent": "M381–M383. THE REPLAY SHEET over a dimmed canvas: two conversations side by side, each on the same point in its own run — `3m in`: the left scrubbed BACK from its latest (a rewind, `turn 8 of 12 · 3m in`, the fixture's own later turns not yet reached), the right at its latest because this run is all it holds (`turn 6 of 6 · 3m in · latest`). Left, `claude — api (chat)`: its last words, then FILES BY THEN — `src/health.ts` known whole · 1 change, `src/routes.ts` known whole · 1 change, `src/server.ts` NOT known whole · 1 change (the agent edited it without the transcript ever showing it whole) in amber, with that file open below as its edit in order (the old text struck, the new text inserted), and the amber note that one shell command had run by then and may have changed files the replay cannot see. Right, `codex — api thread`: its own files (two known whole, `src/server.ts` not), with `src/routes.ts` open showing its whole content. Beneath both, FILES, SIDE BY SIDE: `src/health.ts` the same (both ended at the same text by different routes — an edit on a read base, and a whole write), `src/routes.ts` different (amber), and `src/server.ts` cannot tell — one side is not known whole (both edited it without reading it). A `Compare with` picker and `Done` sit in the header. DISCLOSED: both runs are transcript turns sent to the renderer as the agent manager would (placed hours before the fixture's own turns, so they are each chat's first moments); nothing ran, and the sheet reads them without writing anything."
+  },
+  {
+    "file": "flowchart.png",
+    "intent": "M388–M390. A flowchart built from the keyboard on an empty canvas: Start (a start/end stadium) → Read the request → Is it valid? (a decision diamond) whose `no` branch runs right to Ask for a fix and whose `yes` continues down to Build the change → Done (a stadium). Connectors are elbow lines with arrowheads leaving and entering at the shapes' ports; the two out of the decision carry their words on ground-coloured chips; every shape at rest shows its label only, in the UI face, centred, with no chrome."
+  },
+  {
+    "file": "flowchart-dark.png",
+    "intent": "M388–M393. The flowchart on the dark theme with the decision `Is it valid?` selected: eight square handles on its box, its four ports, the inspector floating on the right with the Shape section (form swatches drawn as the outlines themselves, fill tints, line colours, text strength, and the Chart row — Start work…, Lay out, Mermaid…, SVG…). A live terminal to the chart's right is joined by a connector to `Build the change`, which wears a ring in the terminal's state tone and a chip with the rail's own word for it."
+  },
+  {
+    "file": "flowchart-far.png",
+    "intent": "M388. The same chart zoomed far out (about 12%): every shape still its own silhouette — stadium, box, diamond — with outlines and connectors thickened to read at this size, labels gone because they could no longer be read, the terminal a block in its state tone beside it; nothing turned into a generic card."
+  },
+  {
+    "file": "rd-splash.png",
+    "intent": "Launch restore frozen at reattaching tmux 3 of 5, over the ghosted layout.",
+    "reference": [
+      "docs/redesign/mockups/01-splash.png"
+    ]
+  },
+  {
+    "file": "rd-onboarding.png",
+    "intent": "Onboarding step 2, codex found and gemini missing, with the state-colour preview.",
+    "reference": [
+      "docs/redesign/mockups/02-onboarding.png"
+    ]
+  },
+  {
+    "file": "rd-empty.png",
+    "intent": "The empty canvas: one primary verb, quick spawns, three inert starter layouts.",
+    "reference": [
+      "docs/redesign/mockups/03-empty-state.png"
+    ]
+  },
+  {
+    "file": "rd-workspace.png",
+    "intent": "The Work-tier canvas: a task region, a needs-you panel, a handoff and the inspector.",
+    "reference": [
+      "docs/redesign/mockups/04-main-workspace.png"
+    ]
+  },
+  {
+    "file": "rd-arrange.png",
+    "intent": "Mid-drag with smart guides, the marquee toolbar up, and the connected spawn menu open.",
+    "reference": [
+      "docs/redesign/mockups/05-create-arrange.png"
+    ]
+  },
+  {
+    "file": "rd-plan-palette.png",
+    "intent": "Plan tier at 34 percent with the palette open, grouped, on a task query.",
+    "reference": [
+      "docs/redesign/mockups/06-navigate-palette.png"
+    ]
+  },
+  {
+    "file": "rd-map.png",
+    "intent": "Map tier: task territories and state dots. The same mockup, read for the tier not the palette.",
+    "reference": [
+      "docs/redesign/mockups/06-navigate-palette.png"
+    ]
+  },
+  {
+    "file": "rd-sessions.png",
+    "intent": "Sessions triage: attention cards, a table grouped by task, three rows selected, Claude on ledger-export open.",
+    "reference": [
+      "docs/redesign/mockups/07-sessions.png"
+    ]
+  },
+  {
+    "file": "rd-settings-keys.png",
+    "intent": "Settings Keyboard while a shortcut is being re-recorded, with the Cmd-K conflict banner.",
+    "reference": [
+      "docs/redesign/mockups/08-settings-keyboard.png"
+    ]
+  },
+  {
+    "file": "rd-recovery.png",
+    "intent": "Host loss paused-not-lost, a crashed session with one fix, and reattaching skeletons.",
+    "reference": [
+      "docs/redesign/mockups/09-error-disconnected.png"
+    ]
+  },
+  {
+    "file": "rd-world-night.png",
+    "intent": "The World at Plan tier in the night studio, state colour only, agents at their tasks.",
+    "reference": [
+      "docs/redesign/mockups/11-world-main.png"
+    ]
+  },
+  {
+    "file": "rd-world-transition.png",
+    "intent": "Canvas to World, frozen at 550ms, with the cancel chip, the filmstrip and the 2D | World lens.",
+    "reference": [
+      "docs/redesign/mockups/10-world-transition.png"
+    ]
+  },
+  {
+    "file": "rd-world-transition-rm.png",
+    "intent": "The same move under reduced motion: a 120ms cross-fade, frozen at mid-fade, no dolly.",
+    "reference": [
+      "docs/redesign/mockups/10-world-transition.png"
+    ]
+  },
+  {
+    "file": "rd-world-room.png",
+    "intent": "Plan tier room: five terraces at canvas positions, three waiting beacons, one failed agent, shared pill and minimap.",
+    "reference": [
+      "docs/redesign/mockups/11-world-main.png"
+    ]
+  },
+  {
+    "file": "rd-world-overview.png",
+    "intent": "Map tier, near top-down, with the camera panel, replay scrubber and away card.",
+    "reference": [
+      "docs/redesign/mockups/14-world-overview.png"
+    ]
+  },
+  {
+    "file": "rd-world-focus.png",
+    "intent": "A picked agent, camera in, focus sheet open on a pending request.",
+    "reference": [
+      "docs/redesign/mockups/12-world-focus.png"
+    ]
+  },
+  {
+    "file": "rd-world-attention.png",
+    "intent": "Attention flight settled: queue strip 2 of 3, a shell card with no reply field, the approval toast.",
+    "reference": [
+      "docs/redesign/mockups/13-world-attention.png"
+    ]
+  },
+  {
+    "file": "rd-world-flat.png",
+    "intent": "The flat room with the probe off. Judge the words and the doors, not the 3D picture.",
+    "reference": [
+      "docs/redesign/mockups/11-world-main.png"
+    ]
+  }
+]
