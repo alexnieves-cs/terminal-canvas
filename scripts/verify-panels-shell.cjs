@@ -11,7 +11,7 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 const WATCHDOG_MS = 96000 // measured 2026-09-07 alone in the Electron tier after the M149 checks, two green runs: 76.5s, 76.7s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
 
 runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, state, reloadWithin } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -1415,9 +1415,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       })
       writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
       layoutStore.load()
-      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload()
-      await reloaded
+      await reloadWithin(wc)
       await waitUntil(async () => {
         const sessions = await wc.executeJavaScript(
           `window.__m4aSessions ? window.__m4aSessions() : []`)
@@ -1917,9 +1915,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         // canvas has no panel to reattach and this fails as "no badge" with
         // nothing pointing at the 500ms save debounce.
         flushLayoutStore()
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         // Restored, promoted, and spawned again — the reattach itself. The
         // xterm is the signal that attachSlot ran, which is what calls
         // pty:create and therefore what asks main the has-session question.
@@ -2125,9 +2121,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         ws.panels.push({ id: 'never-started-93', x: 61000, y: 61000, w: 720, h: 460, z: maxZ + 1, cwd: '~', args: ['-l'] })
         writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
         layoutStore.load()
-        const reloaded93 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded93
+        await reloadWithin(wc)
         await settle()
       }
       // `dormant === true` first: a `spawned === false` panel can also be a
@@ -2209,18 +2203,27 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     //     despite its own comment naming that as a case the memo stops.
     //     Asserted on the JSX: the prop values must be bare identifiers.
     {
-      const canvasSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
-      const pasted = canvasSrc.match(/onContextPasted=\{([^}]*)\}/)
-      const pastedStable = pasted !== null && /^\s*[A-Za-z_$][\w$]*\s*$/.test(pasted[1])
-      const layer = canvasSrc.match(/<LinkLayer[\s\S]*?onRemove=\{([^}]*)\}/)
-      const layerValue = layer ? layer[1] : ''
+      // Every file under canvas/, as check 94 walks it: the JSX that passes
+      // these props moved out of Canvas.tsx into PanelNode.tsx and
+      // WorldLayers.tsx (lane E's split) without changing a value. EVERY use
+      // must be stable, and at least one of each must exist.
+      const msDir = join(__dirname, '..', 'src', 'renderer', 'canvas')
+      const msWalk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? msWalk(join(d, e.name))
+          : /\.tsx$/.test(e.name) ? [readFileSync(join(d, e.name), 'utf8')] : [])
+      const msFiles = msWalk(msDir)
+      const pastedAll = msFiles.flatMap((src) => [...src.matchAll(/onContextPasted=\{([^}]*)\}/g)].map((m) => m[1]))
+      const pastedStable = pastedAll.length > 0 && pastedAll.every((v) => /^\s*[A-Za-z_$][\w$]*\s*$/.test(v))
+      // Per file, so a lazy match cannot run from one file's <LinkLayer into
+      // another's onRemove.
+      const layerAll = msFiles.flatMap((src) => [...src.matchAll(/<LinkLayer\b[^>]*?onRemove=\{([^}]*)\}/g)].map((m) => m[1]))
       // A bare identifier, or the merged-view gate around one — never an arrow,
       // never a member read of paletteActions (whose identity follows the
       // palette's captured id), never a call.
-      const layerStable = layer !== null && /^\s*(?:merged\s*\?\s*undefined\s*:\s*)?[A-Za-z_$][\w$]*\s*$/.test(layerValue)
+      const layerStable = layerAll.length > 0 && layerAll.every((v) => /^\s*(?:merged\s*\?\s*undefined\s*:\s*)?[A-Za-z_$][\w$]*\s*$/.test(v))
       ok('memo-stable.1 onContextPasted and LinkLayer onRemove are passed as stable identifiers',
         pastedStable && layerStable,
-        `onContextPasted=${JSON.stringify(pasted && pasted[1])} onRemove=${JSON.stringify(layerValue)}`)
+        `onContextPasted=${JSON.stringify(pastedAll)} onRemove=${JSON.stringify(layerAll)}`)
     }
 
     // ---------------------------------------------------------------------
@@ -2708,8 +2711,12 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           `(document.querySelector('[data-review-summary]') || {}).textContent || null`)
         return text && text.includes('file') ? text : false
       }, 5000)
-      const files = await wc.executeJavaScript(
+      // The rows, waited on like the summary: on the runner the summary read
+      // "1 file changed" a frame before its rows rendered (files=[]).
+      const readFiles = () => wc.executeJavaScript(
         `[...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file'))`)
+      await waitUntil(async () => (await readFiles()).includes('agent.txt'), 5000)
+      const files = await readFiles()
       ok('99 the inspector names the file the panel\'s own agent wrote',
         selected && typeof summary === 'string' && summary.includes('1 file') &&
           files.includes('agent.txt'),
@@ -2870,9 +2877,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels, camera: { x: -60000 + 200, y: 100, scale: 1 },
           selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         // waitUntil on the DOM rather than a guessed sleep: boot awaits two
         // IPC round trips (layout:load, then pty:list) before the first
         // render, and the node's own review:at query resolves after that.
@@ -3020,12 +3025,19 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         await settle()
         await waitUntil(async () => wc.executeJavaScript(
           `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        // Pressed again only when a press has minted NOTHING for 3 s: on the
+        // runner one run in three read the button for the right panel and no
+        // node after it (the press landed while the inspector was re-keying
+        // from r90 to `first`). The check still demands exactly one fresh id,
+        // so a second press that ALSO minted would read red, not green.
         await clickShell('[data-inspector-action="review"]')
+        let pressedAt = Date.now()
         const node = await waitUntil(async () => {
           const ids = await panelIds()
           const fresh = ids.filter((id) => !beforeIds.includes(id))
+          if (fresh.length === 0 && Date.now() - pressedAt > 3000) { await clickShell('[data-inspector-action="review"]'); pressedAt = Date.now() }
           return fresh.length === 1 ? fresh[0] : false
-        }, 8000)
+        }, 10000)
         const heading = await wc.executeJavaScript(`(() => {
           const n = document.querySelector('.review-node[data-panel-id=' +
             ${JSON.stringify(JSON.stringify(node))} + ']')
@@ -3148,9 +3160,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           layoutStore.save({ panels: seededPanels, camera: camera107,
             selectedId: null, focusedId: null })
           layoutStore.flushSync()
-          const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-          wc.reload()
-          await reloaded
+          await reloadWithin(wc)
           await waitUntil(async () => wc.executeJavaScript(
             `document.querySelector('.review-node[data-panel-id="${collideId}"]') !== null`),
           10000)
@@ -3232,9 +3242,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       //      with the baseline it carries, so the only thing that has to
       //      have survived the reload is the node's own `subject` record.
       {
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         const back = await waitUntil(async () => wc.executeJavaScript(
           `document.querySelector('.review-node[data-panel-id="r90"]') !== null`), 10000)
         // waitUntil on the FILE ROWS, not on the node: boot awaits two IPC
@@ -3439,9 +3447,35 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           await selectPanel(subject)
         }
         const beforeIds = await panelIds()
-        await waitUntil(async () => wc.executeJavaScript(
-          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
-        await clickShell('[data-inspector-action="review"]')
+        // The Changes section renders only once the inspector's review read
+        // resolves; on the runner it once had not appeared after 5 s with the
+        // subject selected and its baseline present (button=false). Select
+        // again while it is absent past 4 s — a re-select re-asks — rather
+        // than click a button that is not there and undo something else.
+        const buttonWaitStart = Date.now()
+        let reselectedAt = buttonWaitStart
+        await waitUntil(async () => {
+          const there = await wc.executeJavaScript(
+            `document.querySelector('[data-inspector-action="review"]') !== null`)
+          if (!there && subject && Date.now() - reselectedAt > 4000) {
+            reselectedAt = Date.now()
+            await selectPanel(subject, { settle: false })
+          }
+          return there
+        }, 14000)
+        // Evidence for a node that never arrives: whose inspector the button
+        // sits in, and whether the baseline the review needs was there.
+        const atClick = await wc.executeJavaScript(`(async () => ({
+          selected: [...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')),
+          button: !!document.querySelector('[data-inspector-action="review"]'),
+          // Which inspector arm stood in for the button: 'reading…' is a
+          // review read never answered, the not-a-repository line an answer
+          // that says the cwd is not one; the heading says whose pane it is.
+          arm: (document.querySelector('[data-work-arm="changes"]') || {}).textContent || null,
+          heading: (document.querySelector('.inspector__heading, .context__title, [data-inspector-heading]') || {}).textContent || null,
+          tab: (document.querySelector('.context__panel:not([hidden])') || { getAttribute: () => null }).getAttribute('data-context-panel'),
+          baseline: ${JSON.stringify(subject ?? null)} === null ? null : await window.canvas.review.baseline(${JSON.stringify(subject ?? '')}).then((b) => b !== null) }))()`)
+        const clicked = await clickShell('[data-inspector-action="review"]')
         const node = await waitUntil(async () => {
           const ids = await panelIds()
           const fresh = ids.filter((id) => !beforeIds.includes(id))
@@ -3485,7 +3519,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           typeof node === 'string' && gone === true && preserved.ok &&
             closedReal === true && kills.includes(subject) === true &&
             kills.includes(node) === false,
-          `node=${node} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
+          `node=${node} subject=${subject} clicked=${clicked} atClick=${JSON.stringify(atClick)} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
       }
 
       // 112. A selected review NODE renders no Changes section at all, and
@@ -3780,7 +3814,14 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           ? await waitUntil(async () => { try { return readFileSync(modified, 'utf8') === 'seed\n' } catch { return false } }, 8000)
           : false
         const outcome1 = await text('[data-review-node-commit-outcome]')
-        const row2 = restored === true ? await rowReady('brand-new.txt') : false
+        // The second row is pressed only once the node has RE-READ after the
+        // first discard, which is when seed.txt's row leaves it. The old read's
+        // brand-new.txt row is enabled too, and a confirm through it is
+        // refused as stale ("the changes moved since this was read"), which
+        // is the product right and this check early: the runner did exactly that.
+        const reread = restored === true ? await waitUntil(async () => wc.executeJavaScript(
+          `${q('[data-review-node-discard="seed.txt"]')} === null`), 8000) : false
+        const row2 = reread === true ? await rowReady('brand-new.txt') : false
         const armed2 = row2 === true ? await press('[data-review-node-discard="brand-new.txt"]') : false
         await settle()
         const sentence2 = armed2 === true ? await text('[data-review-node-discard-armed="brand-new.txt"]') : ''
@@ -3798,7 +3839,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           restored === true && /^Restore seed\.txt .*cannot be undone/.test(sentence1) &&
             gone === true && /did not exist at spawn/.test(sentence2) &&
             typeof clean === 'string' && status === '',
-          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, row2, armed2, confirmed2, sentence2, outcome2, gone, clean, status }))
+          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, reread, row2, armed2, confirmed2, sentence2, outcome2, gone, clean, status }))
       }
 
       // 114. Escape cancels, and NOTHING is committed — read back out of
@@ -4433,9 +4474,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         )
         writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
         layoutStore.load()
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         await waitUntil(async () =>
           (await wc.executeJavaScript(
             `!!document.querySelector('[data-rail-row="${LINK_A}"]')`)) || false,
@@ -4748,9 +4787,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       //      can see together.
       {
         flushLayoutStore()
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         await settle()
         await settle()
         const paths = await linkPaths()
@@ -5007,9 +5044,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       //      and would stay green regardless of this defect).
       {
         flushLayoutStore()
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         await waitUntil(async () =>
           (await wc.executeJavaScript(
             `!!document.querySelector('[data-rail-row="${agentId}"]')`)) || false,
@@ -5550,8 +5585,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       // saves; a template saved through the bridge from here needs the reload
       // (the M133 checks' shape), or the row this check types for is absent.
       flushLayoutStore()
-      const reWT = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reWT
+      await reloadWithin(wc)
       await settle()
       const before = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => w.id))`)
       const activeBefore = await activeWorkspaceId()
@@ -5592,8 +5626,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         { key: 'a', kind: 'terminal', cwd: '{{folder}}', command: '/bin/sh', args: ['-c', 'sleep 300'], title: 'a', dx: 0, dy: 0 }
       ], edges: [] })`)
       flushLayoutStore()
-      const reWH = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reWH
+      await reloadWithin(wc)
       await settle()
       const before = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => w.id))`)
       const activeBefore = await activeWorkspaceId()

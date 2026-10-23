@@ -12,7 +12,7 @@ const WATCHDOG_MS = 80000 // measured 2026-09-30 (M410) after place.rim.inset.1 
 
 const { occupiedWorld, overlapsRect, cameraStill, zoomInto } = require('./lib/place-probe.cjs')
 runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, state, reloadWithin } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -1591,6 +1591,20 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         const row = rows.find((w) => w.active)
         return row ? row.id : null
       }
+      /**
+       * Main's list is the truth, but the chord steps from the RENDERER's copy
+       * of it, which catches up a render later: a press sent the moment main
+       * reports the move steps from the old row (152 once wrapped w14 → w1, not
+       * w14 → w40, because the renderer still stood on w40). A person cannot
+       * press that fast; the check waits until the top bar names the row too.
+       */
+      const landedOn = async (wsId) => {
+        const rows = await wsRows()
+        const row = rows.find((w) => w.active)
+        if (!row || row.id !== wsId) return false
+        const crumb = await wc.executeJavaScript(`document.querySelector('.shell__workspace')?.getAttribute('title') ?? null`)
+        return crumb === row.name || (typeof crumb === 'string' && crumb.startsWith(row.name + ' / '))
+      }
       /** The class the top bar's merged toggle carries while the view is on. */
       const mergedOn = () => wc.executeJavaScript(
         `document.querySelector('.shell__merge--on') !== null`)
@@ -1643,13 +1657,13 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       if (ids128.length >= 2) {
         await wc.executeJavaScript(
           `window.__m7aWorkspace().switchTo(${JSON.stringify(last128)})`)
-        await settle()
+        await waitUntil(() => landedOn(last128), 2500)
         const parked = await activeId()
         await NEXT()
-        await waitUntil(async () => (await activeId()) === first128, 2500)
+        await waitUntil(() => landedOn(first128), 2500)
         stepped128 = await activeId()
         await PREV()
-        await waitUntil(async () => (await activeId()) === last128, 2500)
+        await waitUntil(() => landedOn(last128), 2500)
         back128 = await activeId()
         // The same physical key a German keyboard prints as '*'. It has to
         // wrap forward again from `last128`, which is where the PREV above
@@ -2669,7 +2683,14 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       {
         const FIXTURE = join(M22_DIR, 'raced.txt')
         writeFileSync(FIXTURE, 'v1\n')
+        const fileIds = `[...document.querySelectorAll('[data-panel-kind="file"]')].map((n) => n.closest('.panel')?.getAttribute('data-panel-id') ?? null)`
+        const idsBefore139 = await wc.executeJavaScript(fileIds)
         await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+        // The panel this check owns is the one __m13Open ADDS, waited for by
+        // id: "the newest file panel" read at once was still 169's, mid-edit,
+        // so the editor looked up before any press (last=null), the typing
+        // went into 169's draft and its closeDraft took it (draft=null).
+        const id139 = await waitUntil(async () => (await wc.executeJavaScript(fileIds)).find((x) => x !== null && !idsBefore139.includes(x)) ?? false, 8000)
         // Check 138 above exits edit mode on a successful save (closeDraft
         // runs), so ordinarily only one file panel is mid-edit at once — but
         // target the NEWEST file panel explicitly rather than trust that,
@@ -2679,27 +2700,42 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // `:not([disabled])`: an unscoped wait would resolve the instant
         // check 138's now-idle panel's own (already-enabled) edit button
         // matched, before this second panel's file:read ever resolved.
-        await waitUntil(() => wc.executeJavaScript(`
+        // Every query below is scoped to the NEWEST file panel, like the edit
+        // button above. An unscoped [data-file-node-editor] matched 169's
+        // panel when its closeDraft had not yet run after the save: the typing
+        // went into the wrong editor, the write found this panel clean, and
+        // the read came back null once 169's editor unmounted (draft=null on
+        // the runner).
+        const NEWEST = `[...document.querySelectorAll('[data-panel-kind="file"]')].find((n) => n.closest('.panel')?.getAttribute('data-panel-id') === ${JSON.stringify(String(id139))})`
+        // The press is part of the wait. The blocking job once read
+        // editorUp=false after 12s with the press sent once, unconditionally,
+        // after a wait whose answer nobody read: a press on a button still
+        // disabled (file:read not back) opens nothing and is never repeated.
+        // Now the edit button is pressed only while the newest panel has no
+        // editor at all and the button is enabled, and what was pressed is
+        // evidence.
+        let pressed139 = null
+        const editorUp = await waitUntil(async () => {
+          const st = await wc.executeJavaScript(`
+            (() => {
+              const last = ${NEWEST}
+              if (!last) return { up: false, why: 'no file panel' }
+              const id = last.closest('.panel')?.getAttribute('data-panel-id') ?? null
+              if (last.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')) return { up: true, id }
+              if (last.querySelector('[data-file-node-editor]')) return { up: false, id, why: 'loading' }
+              const btn = last.querySelector('[data-file-node-edit]')
+              if (!btn || btn.disabled) return { up: false, id, why: btn ? 'edit disabled' : 'no edit button' }
+              btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+              return { up: false, id, why: 'pressed' }
+            })()
+          `)
+          if (!st.up) pressed139 = st
+          return st.up
+        }, 12000)
+        const typed = await wc.executeJavaScript(`
           (() => {
-            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
-            const last = nodes[nodes.length - 1]
-            const btn = last && last.querySelector('[data-file-node-edit]')
-            return !!(btn && !btn.disabled)
-          })()
-        `), 5000)
-        await wc.executeJavaScript(`
-          (() => {
-            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
-            nodes[nodes.length - 1].querySelector('[data-file-node-edit]')
-              .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-          })()
-        `)
-        await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')`), 12000)
-        await wc.executeJavaScript(`
-          (() => {
-            const ta = document.querySelector('[data-file-node-editor]')
-            if (!window.__m276Type(ta, 'my unsaved work\\n')) return 'no editor'
+            const ta = ${NEWEST}?.querySelector('[data-file-node-editor]')
+            return window.__m276Type(ta, 'my unsaved work\\n')
           })()
         `)
         // M276. Wait for React to have the typed draft before the outside
@@ -2707,21 +2743,24 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // only when the watcher push finds the draft DIRTY, so a push that
         // overtakes the setDraft finds a clean draft and correctly reseeds it
         // instead: no banner, and a red that is entirely the check's own race.
-        await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-dirty]')`), 5000)
+        const dirty = await waitUntil(() => wc.executeJavaScript(
+          `!!(${NEWEST}?.querySelector('[data-file-node-dirty]'))`), 5000)
         // "The agent" writes, from outside the app entirely.
         writeFileSync(FIXTURE, 'the agent wrote this\n')
         await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-conflict]')`), 5000)
+          `!!(${NEWEST}?.querySelector('[data-file-node-conflict]'))`), 5000)
         const state139 = await wc.executeJavaScript(`
-          ({
-            draft: window.__m276Text(document.querySelector('[data-file-node-editor]')),
-            banner: !!document.querySelector('[data-file-node-conflict]')
-          })
+          (() => {
+            const panel = ${NEWEST}
+            return {
+              draft: window.__m276Text(panel?.querySelector('[data-file-node-editor]') ?? null),
+              banner: !!panel?.querySelector('[data-file-node-conflict]')
+            }
+          })()
         `)
         ok('170 a write under a dirty draft raises the conflict banner and does not clobber the draft',
           state139.draft === 'my unsaved work\n' && state139.banner === true,
-          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner}`)
+          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner} editorUp=${editorUp} typed=${typed} dirty=${dirty} id=${id139} last=${JSON.stringify(pressed139)}`)
       }
 
       // 140 — THE TRUNCATION BYPASS. buildFileNodeModel refuses to mark a
@@ -3215,9 +3254,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         )
         writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
         layoutStore.load()
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         await waitUntil(async () =>
           (await wc.executeJavaScript(
             `!!document.querySelector('[data-rail-row="${M24_A}"]')`)) || false,
@@ -3519,11 +3556,56 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           const r = el.getBoundingClientRect()
           return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
         })()`)
+        // The highlight is read with the pointer ON THE LINE AWAY FROM ITS
+        // MIDPOINT. The remove badge renders at the midpoint, on top of the hit
+        // stroke, so a pointer parked at `mid` ends up over the badge: once
+        // Chromium's post-layout hover update runs, :hover leaves the hit
+        // stroke and the line reads its rest colour. Whether that update had
+        // run when the colour was read was a race (link-draw.5 flaked on the
+        // runner with hovered === sibling while the badge was present). A
+        // person hovering a line is on the line; the badge is where they go
+        // next. Found from the path's own geometry and confirmed by
+        // elementFromPoint, so the point is on THIS link's hit stroke.
+        const onLine = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.link-layer [data-link="${key}"]')
+          if (!el || typeof el.getPointAtLength !== 'function') return null
+          // Points ON the path, by its own geometry: user space mapped to the
+          // screen through the box the two share (the world transform is a
+          // scale and a translation, never a rotation).
+          const r = el.getBoundingClientRect(), bb = el.getBBox(), len = el.getTotalLength()
+          if (bb.width === 0 && bb.height === 0) return null
+          const sx = bb.width > 0 ? r.width / bb.width : r.height / bb.height
+          const sy = bb.height > 0 ? r.height / bb.height : sx
+          const mid = el.getPointAtLength(len / 2)
+          // Clear of the badge: its r=9 circle in the same user space, scaled
+          // to the screen, plus a margin. A fixed 40px gate skipped EVERY
+          // point on the runner, where railGoTo leaves the link short on
+          // screen (onLine={"miss":[]}).
+          const clear = 9 * Math.max(sx, sy) + 6
+          const miss = []
+          for (const f of [0.25, 0.2, 0.3, 0.15, 0.35, 0.75, 0.8, 0.7, 0.85, 0.65, 0.1, 0.9]) {
+            const p = el.getPointAtLength(len * f)
+            if (Math.hypot((p.x - mid.x) * sx, (p.y - mid.y) * sy) < clear) { miss.push(f + ':near'); continue }
+            const x = Math.round(r.x + (p.x - bb.x) * sx), y = Math.round(r.y + (p.y - bb.y) * sy)
+            const hit = document.elementFromPoint(x, y)
+            if (hit && hit.classList.contains('link-layer__hit') && hit.nextElementSibling && hit.nextElementSibling.getAttribute('data-link') === '${key}') return { x, y, f }
+            miss.push(f + '@' + x + ',' + y + ':' + (hit ? hit.tagName + '.' + String(hit.className.baseVal ?? hit.className).slice(0, 24) : 'none'))
+          }
+          return { miss: miss.slice(0, 6), len: Math.round(len), sx: Math.round(sx * 100) / 100 }
+        })()`)
         let badge = null
         let hoverColors = null
         let afterRemove = null
         let afterUndo = null
-        if (mid) {
+        if (mid && onLine && onLine.x !== undefined) {
+          wc.sendInputEvent({ type: 'mouseMove', x: onLine.x, y: onLine.y })
+          await settle()
+          hoverColors = await wc.executeJavaScript(`(() => {
+            const hovered = document.querySelector('.link-layer [data-link="${key}"]')
+            const sibling = document.querySelector('.link-layer [data-link="${siblingKey}"]')
+            if (!hovered || !sibling) return null
+            return { hovered: getComputedStyle(hovered).stroke, sibling: getComputedStyle(sibling).stroke }
+          })()`)
           wc.sendInputEvent({ type: 'mouseMove', x: mid.x, y: mid.y })
           await settle()
           badge = await wc.executeJavaScript(`(() => {
@@ -3531,12 +3613,6 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
             if (!b) return null
             const r = b.getBoundingClientRect()
             return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
-          })()`)
-          hoverColors = await wc.executeJavaScript(`(() => {
-            const hovered = document.querySelector('.link-layer [data-link="${key}"]')
-            const sibling = document.querySelector('.link-layer [data-link="${siblingKey}"]')
-            if (!hovered || !sibling) return null
-            return { hovered: getComputedStyle(hovered).stroke, sibling: getComputedStyle(sibling).stroke }
           })()`)
           if (badge) {
             await clickAt(badge.x, badge.y)
@@ -3547,11 +3623,11 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           }
         }
         ok('link-draw.5 the hover badge removes a link, and ONE undo restores it, and the hover highlight actually changes the line\'s colour',
-          mid !== null && badge !== null &&
+          mid !== null && onLine !== null && onLine.x !== undefined && badge !== null &&
             hoverColors !== null && hoverColors.hovered !== hoverColors.sibling &&
             afterRemove !== null && !afterRemove.includes(key) &&
             afterUndo !== null && afterUndo.includes(key),
-          `mid=${JSON.stringify(mid)} badge=${JSON.stringify(badge)} hoverColors=${JSON.stringify(hoverColors)} ` +
+          `mid=${JSON.stringify(mid)} onLine=${JSON.stringify(onLine)} badge=${JSON.stringify(badge)} hoverColors=${JSON.stringify(hoverColors)} ` +
           `afterRemove=${JSON.stringify(afterRemove)} afterUndo=${JSON.stringify(afterUndo)}`)
       }
 
@@ -3828,9 +3904,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         : false
       // Persist the layout so the reload restores this panel, then reload.
       layoutStore.flushSync()
-      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload()
-      await reloaded
+      await reloadWithin(wc)
       const restored = fresh ? await waitUntil(async () => wc.executeJavaScript(
         `document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fresh))} + '] .panel__card') !== null`), 10000) : false
       const card = fresh ? await waitUntil(async () => {

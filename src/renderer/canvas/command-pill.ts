@@ -186,10 +186,20 @@ export function pillFocused(): boolean {
  * whole, so a subscriber compares by identity.
  */
 let censusSnapshot: readonly AttentionCensus[] = []
+let censusKey = '[]'
 const censusListeners = new Set<() => void>()
 
 export function publishAttentionCensus(next: readonly AttentionCensus[]): void {
   if (next === censusSnapshot) return
+  // By value, not only by identity. The pill rebuilds the census on every
+  // `panels` change, and a drag changes `panels` every frame without changing
+  // one census field. The pill publishes from a layout effect, so each notify
+  // forced a SYNC re-render of the dock and the top bar inside the commit;
+  // a 40-shape move stacked those past React's nested-update limit and the
+  // whole renderer unmounted (#185, verify:panels:flowchart perf.2).
+  const nextKey = JSON.stringify(next)
+  if (nextKey === censusKey) return
+  censusKey = nextKey
   censusSnapshot = next
   for (const listener of censusListeners) listener()
 }

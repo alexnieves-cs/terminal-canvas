@@ -12,7 +12,7 @@ const WATCHDOG_MS = 105000 // measured 2026-09-30 (M408 re-pin): the D1 real-inp
 
 const { occupiedWorld, overlapsRect, onScreen, cameraStill, zoomInto, measurePlacement, expectedSpot, storeRect } = require('./lib/place-probe.cjs')
 runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, zoomToScale, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, zoomToScale, state, reloadWithin } = ctx
   {
 
     // ---------------------------------------------------------------------
@@ -328,7 +328,9 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     const placed7 = await occupiedWorld(wc)
     const newest7 = placed7.find((r) => r.newest)
     const overlaps7 = newest7 === undefined ? ['missing'] : placed7.filter((r) => !r.newest && overlapsRect(r, newest7)).map((r) => r.id)
-    const shown7 = newest7 === undefined ? false : await onScreen(wc, newest7.id)
+    // On screen once the reveal's flight LANDS (the view had no room, so it
+    // flies): one settle() read the camera still at INITIAL once in three runs.
+    const shown7 = newest7 === undefined ? false : await waitUntil(async () => { await cameraStill(wc); return await onScreen(wc, newest7.id) }, 4000)
     // The M402 critic: without a pin on WHERE, "clear and on screen" passed a
     // panel anywhere in view. The store rect, to 1px, against the spot the
     // rule gives for what the canvas showed at the press (place-probe.cjs's
@@ -764,8 +766,14 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           clientX: rA.left + rA.width / 2, clientY: rA.top + rA.height / 2,
           deltaY: 120, deltaMode: 0
         }))
-        await new Promise((res) => setTimeout(res, 200))
-        const afterMeta = read()
+        // Polled, not one 200ms look: the zoom is applied on a later frame
+        // than a pan, and the contended runner read the unchanged matrix at
+        // 200ms in two runs of three. Up to 2s for the camera to change.
+        let afterMeta = read()
+        for (let t = 0; t < 40 && afterMeta === beforeMeta; t++) {
+          await new Promise((res) => setTimeout(res, 50))
+          afterMeta = read()
+        }
 
         return {
           before, overFocused, overBackground, overUnfocused,
@@ -1411,9 +1419,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
 
         // The real thing: a renderer teardown that skips React cleanup,
         // exactly like Cmd+R.
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
+        await reloadWithin(wc)
         // beforeunload's pty:kill would already have landed by now (it is
         // sent before the navigation even starts), but give the kill-session
         // it turns into time to be observable rather than racing the read.
@@ -1477,9 +1483,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // backend, so boot reconciliation after this reload restores it
       // dormant regardless of whether check 26 ran the tmux branch above or
       // skipped it — this reload needs nothing check 26 set up.
-      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload()
-      await reloaded
+      await reloadWithin(wc)
       // Boot reconciliation (pty:list, then registry.ensure for every
       // restored panel) runs after first paint, not synchronously with
       // did-finish-load; wait on the fixture actually showing up rather than
@@ -2841,6 +2845,27 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       if (moreNow !== null) await click(moreNow.x, moreNow.y)
       const dots = await wc.executeJavaScript(`[...document.querySelectorAll(${JSON.stringify(P + ' [data-panel-menu] button[role=menuitem]:not([data-panel-menu-close])')})].map((b) => b.textContent.trim())`)
       if (moreNow !== null) await click(moreNow.x, moreNow.y)
+      // Evidence: what the right-click lands on, and whether the terminal has
+      // asked for mouse reporting (the menu stands down for enable-mouse-events).
+      const ctxHit = body === null ? null : await wc.executeJavaScript(`(() => { const el = document.elementFromPoint(${body.x}, ${body.y}); const x = document.querySelector(${JSON.stringify(P + ' .xterm')})
+        return { el: el ? el.tagName + '.' + String(el.className.baseVal ?? el.className).slice(0, 60) : null, xterm: x ? String(x.className) : null, state: document.querySelector(${JSON.stringify(P)})?.getAttribute('data-tone') ?? null } })()`)
+      // Evidence: every CSI private-mode set/reset and OSC 133 mark the shell
+      // wrote, in order, and the ledger-visible tail — the runner's login bash
+      // turned mouse reporting on (enable-mouse-events) and this names who.
+      const rawOut = gid ? await scrollbackLog.readAll(String(gid)) : ''
+      const ctxSeq = (rawOut.match(/\x1b\[\?[0-9;]+[hl]|\x1b\]133;[A-D][^\x07\x1b]{0,60}/g) ?? []).slice(-24).map((q) => q.replace(/\x1b/g, 'ESC'))
+      const ctxTail = gid ? await scrollbackLog.tail(String(gid), 6) : []
+      // And tmux's own view of the pane: the raw log shows tmux's attach
+      // sequence turning the outer mouse modes ON, which tmux does only for
+      // its `mouse` option or a pane whose program asked for the mouse.
+      let ctxTmux = null
+      try {
+        const tmuxBin = findTmux()
+        if (tmuxBin && gid) {
+          const q = (args) => { try { return execFileSync(tmuxBin, ['-L', PANELS_SOCKET, ...args], { encoding: 'utf8', timeout: 3000 }).trim() } catch (e) { return 'ERR ' + String(e.message).slice(0, 80) } }
+          ctxTmux = { mouse: q(['show-options', '-gv', 'mouse']), pane: q(['display-message', '-p', '-t', '=' + gid, '#{pane_current_command} pid=#{pane_pid} any=#{mouse_any_flag} std=#{mouse_standard_flag} btn=#{mouse_button_flag} sgr=#{mouse_sgr_flag} created=#{session_created} att=#{session_attached}']), sessions: q(['list-sessions', '-F', '#{session_name}']).split('\n').join(' ') }
+        }
+      } catch (e) { ctxTmux = 'threw ' + String(e && e.message).slice(0, 80) }
       if (body !== null) await click(body.x, body.y, 'right')
       await sleep(200)
       const ctxRead = () => wc.executeJavaScript(`(() => { const m = document.querySelector('[data-context-for] [data-context-menu]'); if (!m) return null
@@ -2855,7 +2880,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       ok('ctx.panel.1 a real right-click on a terminal opens its context menu: Copy and Paste first, then exactly the ⋯ menu\'s rows (one list), then Close; the keyboard stays in the terminal and Escape closes it',
         ctxP !== null && ctxP.for === gid && ctxP.ids[0] === 'edit.copy' && ctxP.ids[1] === 'edit.paste' && ctxP.ids[ctxP.ids.length - 1] === 'sel.close' &&
           dots.length > 0 && JSON.stringify(shared) === JSON.stringify(dots) && !ctxP.focusInMenu && ctxGone === null,
-        JSON.stringify({ dots, ctxP, ctxGone }))
+        JSON.stringify({ dots, ctxP, ctxGone, ctxHit, ctxTmux, ctxSeq, ctxTail, rawLen: rawOut.length }))
 
       // ctx.paste.1 — its Paste is the ⌘V route (xterm's paste, bracketed),
       // never a raw write: the text reaches the shell's line.
@@ -4032,7 +4057,16 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const back = await waitUntil(() => isLive(shellId), 6000)
         const before = await agentStateOf(shellId)
         const mark = (await agentLog()).length
-        const click = await clickPanelBody(`[data-panel-id="${shellId}"] .panel__slot`)
+        // isLive turns true when the panel is promoted, a beat before its
+        // xterm is mounted to take a click: the runner once read
+        // reachedXterm=false, active empty, and nothing acknowledged. The
+        // click is repeated until it lands on the xterm (an acknowledge is
+        // idempotent), and the last attempt is the evidence.
+        let click = { active: '', reachedXterm: false }
+        await waitUntil(async () => {
+          try { click = await clickPanelBody(`[data-panel-id="${shellId}"] .panel__slot`) } catch { return false }
+          return click.reachedXterm === true
+        }, 6000)
         const answered = await waitUntil(async () => {
           const since = (await agentLog()).slice(mark)
           return since.some((u) => u.panelId === shellId && u.state !== 'wants-you')
@@ -4512,8 +4546,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // prompt saved through the bridge needs the reload (check 40's rows are
       // seeded in the layout for the same reason).
       flushLayoutStore()
-      const rePB = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await rePB
+      await reloadWithin(wc)
       await settle()
       // A bare ⌘⌥N spawns at the last pointer point; after the reload that is
       // stale or unset, which can leave the terminal off-screen or carded. A
@@ -4533,10 +4566,20 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       }, 8000)
       if (typeof pbId === 'string') {
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .xterm') !== null`), 8000)
-        await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(pbId)}] .panel__slot`)
-        await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === pbId, 5000)
+        // One click can land while the new panel is still settling and leave
+        // focus where it was (a run read n6 focused at the palette), so the
+        // click is sent again on each look until the panel holds focus, as
+        // check 57 does.
+        await waitUntil(async () => {
+          if ((await wc.executeJavaScript(`window.__m4aFocusedId()`)) === pbId) return true
+          try { await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(pbId)}] .panel__slot`) } catch { /* not placed yet */ }
+          return false
+        }, 6000, 300)
         await sleep(400)
       }
+      // Evidence: the insert targets the panel the palette CAPTURES (the focused
+      // one), and __m4aCellToScreen reads the focused panel's buffer.
+      const focusedAtPalette = await wc.executeJavaScript(`window.__m4aFocusedId()`)
       const liveCwd = typeof pbId === 'string' ? (ptyManager.list().find((s) => s.panelId === pbId) || { cwd: null }).cwd : null
       const title = typeof pbId === 'string' ? await wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .pf__title') || {}).textContent ?? null`) : null
       await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
@@ -4559,10 +4602,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const echoedCwd = cwdTail ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-cwd=') !== null && window.__m4aCellToScreen(${JSON.stringify(cwdTail)}) !== null`), 5000) : false
       const echoedPanel = typeof title === 'string' && title !== '' ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-panel=' + ${JSON.stringify(title.split(' ')[0])}) !== null`), 3000) : false
       const literal = await wc.executeJavaScript(`window.__m4aCellToScreen('{{cwd}}') !== null || window.__m4aCellToScreen('{{panel}}') !== null`)
+      const focusedAfter = await wc.executeJavaScript(`window.__m4aFocusedId()`)
       ok('prompt.builtin.1 a saved prompt\'s {{cwd}} and {{panel}} paste the target\'s live cwd and title into the terminal with no question asked, and the literal holes never reach the agent',
         typeof pbId === 'string' && inserted === true && (asked === null || asked === 'palette open' && false || !/1 of/.test(String(asked))) &&
           echoedCwd !== false && echoedPanel !== false && literal === false,
-        JSON.stringify({ pbId, liveCwd, title, inserted, asked, cwdTail, echoedCwd, echoedPanel, literal }))
+        JSON.stringify({ pbId, focusedAtPalette, focusedAfter, liveCwd, title, inserted, asked, cwdTail, echoedCwd, echoedPanel, literal }))
       if (typeof pbId === 'string') await clickPanelClose(wc, pbId)
     }
 

@@ -20,7 +20,7 @@ const M298_DEFAULT_COMP_PX = 179
 const WATCHDOG_MS = 210000 // measured 2026-09-20 with M301's orch-reconcile.app.1/.2 in (a real chat, a turn, a kill through the runner's exit path and two page re-reads): 163.9 s against the 180 s pin, which put headroom.1 red at 91%; 1.25x the slowest, to the next second. Before M301: 180000, measured 2026-09-20 with M298's orch-fit.app.1 in (five fixture reloads of 0/1/21/61/100 sessions, three window sizes each): 142.8 s with demo captures on at load ~3 against the 145 s pin. Before M298: 145000, measured with Phase D's blocks in: green runs 103.5 s, 106.4 s, 109.2 s at load 20–26. Phase C's pin was 116000 (81.9–92.1 s at load 7–11).
 
 runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
-  const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state } = ctx
+  const { app, attachPtyLifecycle, chatSpawns, clickPanelClose, createDirectBackend, execFileSync, flushLayoutStore, fromPanels, join, layoutStore, mkdirSync, mkdtempSync, ok, ptyManager, readFileSync, realpathSync, reviewEngine, rmSync, runLedger, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, state, reloadWithin } = ctx
   // As in `agents`: a renderer reload must DETACH every session, exactly as
   // main/index.ts wires it, or a fixture that expects a dormant panel after a
   // reload finds it live. Installed once, at this part's start.
@@ -32,6 +32,25 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
   // alone. The first open also records that the list IS the default
   // (orch-tasks.app.1, below).
   let tasksSeen = null
+  // A fixture layout that the page really loaded. The page being reloaded
+  // still has a layout save in flight, and one landing after ours put the
+  // PREVIOUS fixture back: orch-zoom.app.2 read 100 sessions as the 25-session
+  // scene, orch-fit.app.1 read 21 as the 1-session scene. So the save is
+  // checked after the reload settles (the new page saves what it loaded) and
+  // repeated until the store holds exactly these panels.
+  const seedLayout = async (panels) => {
+    const want = panels.map((p) => p.rect.id).sort().join(',')
+    let got = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      layoutStore.flushSync()
+      await reloadWithin(wc)
+      await settle()
+      got = await waitUntil(() => { const ids = layoutStore.initial().panels.map((p) => p.id).sort().join(','); return ids === want ? ids : false }, 3000)
+      if (got !== false) return
+    }
+    console.log(`[orchestrate] seedLayout: the store never held the fixture (${panels.length} panels) after 3 reloads`)
+  }
   const toVisual = async () => {
     await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"] .orch') !== null`), 3000)
     const onTasks = await wc.executeJavaScript(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false
@@ -266,8 +285,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       flushLayoutStore()
       // The renderer reads the roster at load: a teammate saved behind its back is one it
       // refuses by name (the product suite's recipe, kept).
-      const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reB
+      await reloadWithin(wc)
       await settle()
       const spawnsBefore = chatSpawns.length
       const lanesBefore = layoutStore.worktrees().length
@@ -326,21 +344,41 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
 
       // orch-bench.5 — the reading mode and the diff's context line.
       const benchH = () => wc.executeJavaScript(`Math.round(document.querySelector('[data-orch-workbench]').getBoundingClientRect().height)`)
+      // The bench's height EASES between rest and reading, so a single read
+      // taken when the mode flips lands somewhere along the ease (watched on
+      // the runner: back at 449 on its way down to 200). Settled means the
+      // same height on three reads 100 ms apart; the last read is returned
+      // either way, so a bench that never settles still fails on its number.
+      const settledBenchH = async (timeoutMs = 3000) => {
+        let last = await benchH(), same = 0
+        const until = Date.now() + timeoutMs
+        while (same < 2 && Date.now() < until) {
+          await sleep(100)
+          const now = await benchH()
+          same = now === last ? same + 1 : 0
+          last = now
+        }
+        return last
+      }
       const context = await waitUntil(() => wc.executeJavaScript(`(() => { const c = document.querySelector('[data-orch-workbench] [data-orch-diff-context]'); return c && /app\\.txt/.test(c.textContent) ? { text: c.textContent, review: c.querySelector('[data-orch-diff-review]')?.getAttribute('data-orch-diff-review') ?? null, checks: c.querySelector('[data-orch-diff-checks]') !== null, where: c.querySelector('[data-orch-diff-where]')?.textContent ?? '' } : false })()`), 6000)
-      const restH = await benchH()
+      const restH = await settledBenchH()
       await click('[data-orch-workbench] [data-orch-bench-reading="off"]')
       const reading = await waitUntil(() => wc.executeJavaScript(`(() => { const o = document.querySelector('.orch[data-orch-reading]'); const b = document.querySelector('.orch__body'); return o && b && b.getBoundingClientRect().height === 0 ? true : false })()`), 4000)
       // Re-measured after a pause: if the bench's flex is eased in, the first read lands at the start of that ease.
       const readH1 = await benchH()
-      await sleep(700)
-      const readH = Math.max(readH1, await benchH())
+      // The ease can stall mid-way on the runner (an offscreen window's frames
+      // are throttled): three equal reads at 242 settled, and the bench stood
+      // at 706 a moment later. So the grown height is waited for, up to 5s,
+      // before the settled read; a bench that never grows still fails on it.
+      await waitUntil(async () => (await benchH()) > restH + 150, 5000)
+      const readH = await settledBenchH()
       const readRules = await wc.executeJavaScript(`(() => { const out = []; for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules } catch { continue } for (const r of rules) { if (r.cssText && r.cssText.includes('orch__bench') && /reading|flex/.test(r.cssText) && r.cssText.length < 400) out.push(r.cssText) } } return out.slice(0, 8) })()`)
       // Taken IN reading mode: the numbers that explain a bench that did not take the area.
       const readChain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } const kids = [...document.querySelector('.orch').children].map((k) => { const cs = getComputedStyle(k); return k.className.toString().slice(0, 20) + ':' + Math.round(k.getBoundingClientRect().height) + ':' + cs.display + ':' + cs.flex.slice(0, 14) + ':' + cs.maxHeight }); return { inner: innerHeight, vw: innerWidth, chain: out, kids } })()`)
       const readDiff = await wc.executeJavaScript(`document.querySelector('[data-orch-workbench] [data-orch-diff]') !== null`)
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
       const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch[data-orch-reading]') === null && document.querySelector('.orch__body').getBoundingClientRect().height > 0`), 4000)
-      const backH = await benchH()
+      const backH = await settledBenchH()
       // Evidence for a red run: the height chain the bench's `flex: 1` fills.
       const chain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } const kids = [...document.querySelector('.orch').children].map((k) => { const cs = getComputedStyle(k); return k.className.toString().slice(0, 20) + ':' + Math.round(k.getBoundingClientRect().height) + ':' + cs.display + ':' + cs.flex.slice(0, 14) + ':' + cs.maxHeight }); return { inner: innerHeight, chain: out, kids } })()`)
       ok(IDS[4],
@@ -501,8 +539,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
       })
       layoutStore.flushSync()
-      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await re
+      await reloadWithin(wc)
       await settle()
       // Wake dA through the rail's own start control, then exit 1 through its PTY.
       const woke = await wc.executeJavaScript(`(() => { const b = document.querySelector('.rail-row[data-rail-row="dA"] .rail-row__start'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
@@ -607,8 +644,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       layoutStore.saveTeammate({ id: 'tm-c', name: 'phase-c', brief: 'You are phase-c.', places: [repo], services: [], skills: [], memory: 'phase-c', chats: [], messaging: false, scheduling: false })
       layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       flushLayoutStore()
-      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await re
+      await reloadWithin(wc)
       await settle()
       // Earlier blocks' items would be islands too and would take the primary pick: done, by the board's own verb.
       const leftovers = await wc.executeJavaScript(`(() => { const items = window.__m113.items().filter((i) => i.state === 'working' || i.state === 'review'); for (const i of items) window.__m113.done(i.id); return items.map((i) => i.id) })()`)
@@ -948,8 +984,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
       })
       layoutStore.flushSync()
-      const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await re
+      await reloadWithin(wc)
       await settle()
       await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
       await waitUntil(orchShown, 3000)
@@ -1063,11 +1098,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         while (dirs.length < groups) dirs.push(mkdtempSync(join(tmpdir(), `tc panels orch fx${dirs.length}-`)))
         const panels = []
         for (let i = 0; i < n; i++) panels.push({ kind: 'terminal', rect: { id: `fx${i}`, x: 6000 + i * 10, y: 6000, w: 320, h: 220 }, z: 1, spec: { panelId: `fx${i}`, cwd: dirs[i % groups], command: '/bin/sh', args: [], agent: 'claude-code' } })
-        layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
-        layoutStore.flushSync()
-        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await re
-        await settle()
+        await seedLayout(panels)
         await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
         await toVisual()
@@ -1231,8 +1262,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await re
+        await reloadWithin(wc)
         await settle()
         await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
@@ -1337,7 +1367,14 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-node]').length >= 5`), 8000)
       wc.send('agent:state', { panelId: 'qB', state: 'wants-you' })
       await settle()
-      const reduced = await wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph-scene'); const animated = document.getAnimations().filter((a) => a.effect && a.effect.target && s.contains(a.effect.target) && a.playState === 'running').map((a) => (a.animationName || a.constructor.name) + ':' + (a.effect.target.className.baseVal || a.effect.target.className)); return { matches: matchMedia('(prefers-reduced-motion: reduce)').matches, animated, webgl: s.getAttribute('data-orch-webgl'), beacon: s.querySelector('[data-node="qB"] .orch__cube-beacon') !== null, fit: !!document.querySelector('[data-orch-fit="all"]'), list: !!document.querySelector('[data-orch-lens="list"]') } })()`)
+      // "Animates" is an animation with a duration a person could see. styles.css's
+      // global reduced-motion block shortens every transition and animation to
+      // .01ms rather than removing it, so a tone change in the frame before this
+      // read leaves a .01ms CSSTransition 'running' until the next frame: one
+      // Mac run in three read exactly those (plate-bg, cube-state, a lit
+      // connector). A real regression (a rule that outlives the block, or a
+      // script-driven animation) has its full duration and still counts.
+      const reduced = await wc.executeJavaScript(`(() => { const s = document.querySelector('.orch__graph-scene'); const animated = document.getAnimations().filter((a) => a.effect && a.effect.target && s.contains(a.effect.target) && a.playState === 'running' && a.effect.getComputedTiming().activeDuration > 1).map((a) => (a.animationName || a.constructor.name) + ':' + (a.effect.target.className.baseVal || a.effect.target.className)); return { matches: matchMedia('(prefers-reduced-motion: reduce)').matches, animated, webgl: s.getAttribute('data-orch-webgl'), beacon: s.querySelector('[data-node="qB"] .orch__cube-beacon') !== null, fit: !!document.querySelector('[data-orch-fit="all"]'), list: !!document.querySelector('[data-orch-lens="list"]') } })()`)
       await click('.orch__graph-scene [data-node="qB"]')
       const reducedInspector = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-inspector="qB"] [data-orch-open]')?.textContent ?? false`), 4000)
       await demo('m293-4-reduced-motion')
@@ -1409,16 +1446,16 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         while (dirs.length < groups) dirs.push(mkdtempSync(join(tmpdir(), `tc panels orch fit${dirs.length}-`)))
         const panels = []
         for (let i = 0; i < n; i++) panels.push({ kind: 'terminal', rect: { id: `ft${i}`, x: 6000 + i * 10, y: 6000, w: 320, h: 220 }, z: 1, spec: { panelId: `ft${i}`, cwd: dirs[i % groups], command: '/bin/sh', args: [], agent: 'claude-code' } })
-        layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
-        layoutStore.flushSync()
-        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await re
-        await settle()
+        await seedLayout(panels)
         await click('[data-seg="orchestration"]:not([aria-pressed="true"])')
         await waitUntil(orchShown, 3000)
         await toVisual()
         await click('[data-orch-lens="scene"]')
-        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length >= 1`), 15000)
+        // Every platform, not the first: the sessions are discovered after the
+        // reload, and a read at >= 1 measured 2 of 4 platforms on the runner.
+        // One platform per cwd group plus the canvas's own (none with no session).
+        const expected = n === 0 ? 1 : groups + 1
+        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.orch__graph-scene [data-orch-platform]').length >= ${expected}`), 15000)
         await settle()
       }
       const read = () => wc.executeJavaScript(`(() => {
@@ -1436,6 +1473,26 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
           compH: comp ? +(comp.h / wrap.h).toFixed(3) : null, compW: comp ? +(comp.w / wrap.w).toFixed(3) : null,
           clipped: [...hits, ...labels].filter((r) => !inside(r)).length, covered: tools.filter((t) => [...hits, ...labels].some((r) => meets(t, r))).length }
       })()`)
+      // A read once the composition stops moving: the resize refits and Fit all
+      // eases the camera, so a read on a fixed settle() caught the narrow window
+      // mid-refit on the runner (compH 1.585, two plates clipped). Two equal
+      // reads 150 ms apart; the last read either way, so a red keeps its evidence.
+      // Two equal reads were not enough on a loaded runner: a frame stalled
+      // past 150 ms mid-ease reads the same twice, and one run took the narrow
+      // window at plateH 1.011 with every plate clipped. Three equal reads
+      // 200 ms apart now, so the camera must hold still for 400 ms.
+      const settledRead = async (timeoutMs = 6000) => {
+        const start = Date.now()
+        let prev = await read(), same = 0
+        while (Date.now() - start < timeoutMs) {
+          await sleep(200)
+          const next = await read()
+          same = JSON.stringify(next) === JSON.stringify(prev) ? same + 1 : 0
+          if (same >= 2) return next
+          prev = next
+        }
+        return prev
+      }
       const SIZES = [['default', 1200, 800], ['narrow', 1100, 720], ['wide', 1900, 1100]]
       const rows = []
       for (const n of [0, 1, 21, 61, 100]) {
@@ -1443,9 +1500,9 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         for (const [name, w, h] of SIZES) {
           win.setSize(w, h); await settle()
           // The first paint's camera at the default size — is it Fit all?
-          if (name === 'default') { const rest = await read(); rows.push({ n, size: 'default·first-paint', ...rest }) }
+          if (name === 'default') { const rest = await settledRead(); rows.push({ n, size: 'default·first-paint', ...rest }) }
           await click('[data-orch-fit="all"]'); await settle()
-          const r = await read()
+          const r = await settledRead()
           rows.push({ n, size: name, ...r })
           console.log(`MEASURE ${JSON.stringify(rows[rows.length - 1])}`)
           await demo(`m298-fit-${r.platforms}-${name}`)
@@ -1597,8 +1654,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
       })
       layoutStore.flushSync()
-      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-      wc.reload(); await reloaded
+      await reloadWithin(wc)
       await settle()
       const runtimeHasIt = await wc.executeJavaScript(`Promise.all([window.canvas.agentSession.list(), window.canvas.pty.list()]).then(([a, p]) => a.some((x) => x.id === ${JSON.stringify(restoredId)}) || p.some((x) => x.panelId === ${JSON.stringify(restoredId)}))`)
       await click('[data-seg="orchestration"]:not([aria-pressed="true"])')

@@ -168,6 +168,34 @@ const waitUntil = async (fn, timeoutMs, intervalMs = 50) => {
   return value
 }
 
+/**
+ * A reload whose wait is BOUNDED, and tried twice. `once('did-finish-load')`
+ * alone waits forever when the load never finishes, and the suite then hangs
+ * to its watchdog with the cause unnamed: panels:agents did exactly that on a
+ * Mac runner once in three runs, after sheet.4, with the next block's panels
+ * never spawning (M458; product's M402 run hung the same way). The first load
+ * that does not finish in `ms` is logged and the reload sent again; a second
+ * miss resolves false, so the checks after it fail BY NAME instead of hanging.
+ */
+const reloadOnce = (wc, ms) => new Promise((resolve) => {
+  let done = false
+  const finish = (loaded) => { if (done) return; done = true; clearTimeout(timer); wc.removeListener('did-finish-load', onLoad); wc.removeListener('did-fail-load', onFail); resolve(loaded) }
+  const onLoad = () => finish(true)
+  // -3 is ERR_ABORTED: a reload superseding a load in flight, not a failure.
+  const onFail = (_e, code, _desc, _url, isMainFrame) => { if (isMainFrame !== false && code !== -3) finish(false) }
+  const timer = setTimeout(() => finish(false), ms)
+  wc.once('did-finish-load', onLoad)
+  wc.on('did-fail-load', onFail)
+  wc.reload()
+})
+const reloadWithin = async (wc, ms = 20000) => {
+  if (await reloadOnce(wc, ms)) return true
+  console.log(`reloadWithin: no did-finish-load in ${ms} ms, reloading once more`)
+  const again = await reloadOnce(wc, ms)
+  if (!again) console.log(`reloadWithin: the second reload did not finish either`)
+  return again
+}
+
 const liveCount = (wc) =>
   wc.executeJavaScript(`document.querySelectorAll('.panel__slot .xterm').length`)
 const cardCount = (wc) =>
@@ -1120,6 +1148,7 @@ app.whenReady().then(async () => {
   // owns. Exactly main/index.ts's handlers, over these.
   const chatFixture = readFileSync(join(__dirname, 'fixtures', 'agent-session', 'turn.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
   const chatSpawns = []
+  let harnessSessionSeq = 0
   const chatRunner = ({ command, args, cwd, env }) => {
     const dataCbs = []
     const exitCbs = []
@@ -1178,7 +1207,10 @@ app.whenReady().then(async () => {
     codex: { command: '/fake/codex' },
     // M82. The canvas's ceilings, read live from the same store main reads.
     limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0, budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0 }),
-    newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16,
+    // A counter of its own, not chatSpawns.length: an id is minted at CREATE and
+    // a spawn comes later, so a pool minting three workers before the first
+    // spawned gave all three the same id. Production mints a randomUUID each.
+    newSessionId: () => `fake-s${++harnessSessionSeq}`, interruptGraceMs: 200, coalesceMs: 16,
     // M74. The fenced answer to "has the CLI written this session": the
     // front-end fixture store, so an imported chat's first send resumes.
     transcriptExists: (id) => frontTranscripts.has(id)
@@ -2055,7 +2087,7 @@ app.whenReady().then(async () => {
     })()`)
 
     const ctx = {
-      editorOpens, kit, harnessAccount, createPoolCaller, requestFromRendererWith, harnessAttachmentsDir, harnessStarterDir, readImage, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, zoomToScale,
+      editorOpens, kit, harnessAccount, createPoolCaller, requestFromRendererWith, harnessAttachmentsDir, harnessStarterDir, readImage, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, zoomToScale, reloadWithin,
       state,
     }
     await body(ctx)

@@ -107,6 +107,10 @@ const { ok, results } = require('./lib/checks.cjs').createChecks()
   const conf = T.buildTmuxConf(EXIT_DIR)
   ok('5 the config never enables tmux mouse capture', !/mouse\s+on/.test(conf),
     JSON.stringify(conf.match(/.*mouse.*/g) ?? []))
+  // Absent was not enough: the hosted macOS runner's tmux server reported
+  // `mouse on` with nothing here setting it, and captured the mouse all the same.
+  ok('tmux.mouse.1 the config turns tmux mouse capture OFF by name, never leaving it to the default',
+    /^set -g mouse off$/m.test(conf), JSON.stringify(conf.match(/.*mouse.*/g) ?? []))
 }
 
 // 6. The hook writes the exit file BEFORE killing the session. That ordering is
@@ -456,7 +460,9 @@ console.log('\n' + '='.repeat(60))
 //      for a panel whose command was absent (a login shell): zsh gets
 //      ZDOTDIR pointed at the integration directory, whose rc files source
 //      the user's own (from the ORIGINAL ZDOTDIR, else $HOME) BEFORE the
-//      hooks; bash gets --rcfile; an agent command gets nothing and loses
+//      hooks; bash gets --rcfile, and since bash ignores --rcfile in a LOGIN
+//      shell a `-l` is dropped and replayed by the rcfile under TC_BASH_LOGIN
+//      (it read no hooks at all before M459); an agent command gets nothing and loses
 //      nothing. Pure: it returns the env and args to spawn with and the files
 //      to write, and PtyManager does the writing.
 {
@@ -465,20 +471,36 @@ console.log('\n' + '='.repeat(60))
   const zsh = can ? T.shellIntegrationFor({ command: '/bin/zsh', absentCommand: true, args: ['-l'], env: { HOME: '/Users/x', PATH: '/bin' }, dir }) : null
   const zshCustom = can ? T.shellIntegrationFor({ command: '/opt/homebrew/bin/zsh', absentCommand: true, args: [], env: { HOME: '/Users/x', ZDOTDIR: '/Users/x/.config/zsh' }, dir }) : null
   const bash = can ? T.shellIntegrationFor({ command: '/bin/bash', absentCommand: true, args: ['-l'], env: { HOME: '/Users/x' }, dir }) : null
+  const bashInteractive = can ? T.shellIntegrationFor({ command: '/bin/bash', absentCommand: true, args: [], env: { HOME: '/Users/x' }, dir }) : null
   const agent = can ? T.shellIntegrationFor({ command: '/opt/homebrew/bin/claude', absentCommand: false, args: ['--resume'], env: { HOME: '/Users/x' }, dir }) : null
   const fish = can ? T.shellIntegrationFor({ command: '/opt/homebrew/bin/fish', absentCommand: true, args: ['-l'], env: { HOME: '/Users/x' }, dir }) : null
   const zrc = zsh && zsh.files.find((f) => f.path === dir + '/zsh/.zshrc')
   const brc = bash && bash.files.find((f) => f.path === dir + '/bash/bashrc')
   const sourcesBeforeHooks = (content, needle) => content.indexOf(needle) >= 0 && content.indexOf(needle) < content.indexOf('133;A')
-  ok('shell-integration.1 zsh gets ZDOTDIR and rc files that source the user\'s own before the hooks, bash gets --rcfile, an agent or an unknown shell gets nothing',
+  ok('shell-integration.1 zsh gets ZDOTDIR and rc files that source the user\'s own before the hooks, bash gets --rcfile (a login bash with its login files replayed, since bash ignores --rcfile with -l), an agent or an unknown shell gets nothing',
     can && zsh.env.ZDOTDIR === dir + '/zsh' && zsh.env.TC_ORIG_ZDOTDIR === '/Users/x' && zsh.args.join(' ') === '-l' &&
       zrc !== undefined && sourcesBeforeHooks(zrc.content, '.zshrc') && /precmd|preexec/.test(zrc.content) && /133;D;%s/.test(zrc.content) &&
       zshCustom.env.TC_ORIG_ZDOTDIR === '/Users/x/.config/zsh' &&
-      bash.env.ZDOTDIR === undefined && bash.args.join(' ') === '--rcfile ' + dir + '/bash/bashrc -l' &&
-      brc !== undefined && sourcesBeforeHooks(brc.content, '.bashrc') && /PROMPT_COMMAND/.test(brc.content) &&
+      bash.env.ZDOTDIR === undefined && bash.args.join(' ') === '--rcfile ' + dir + '/bash/bashrc' && bash.env.TC_BASH_LOGIN === '1' &&
+      bashInteractive.args.join(' ') === '--rcfile ' + dir + '/bash/bashrc' && bashInteractive.env.TC_BASH_LOGIN === undefined &&
+      brc !== undefined && sourcesBeforeHooks(brc.content, '.bashrc') && sourcesBeforeHooks(brc.content, '/etc/profile') && sourcesBeforeHooks(brc.content, '.bash_profile') &&
+      /PROMPT_COMMAND/.test(brc.content) && brc.content.indexOf('trap ') > brc.content.indexOf('PS1=') &&
       agent.files.length === 0 && agent.env.ZDOTDIR === undefined && agent.args.join(' ') === '--resume' &&
       fish.files.length === 0 && fish.args.join(' ') === '-l',
-    JSON.stringify({ zsh: zsh && { env: zsh.env, args: zsh.args, files: zsh.files.map((f) => f.path) }, bash: bash && { args: bash.args, files: bash.files.map((f) => f.path) }, agent, fish }))
+    JSON.stringify({ zsh: zsh && { env: zsh.env, args: zsh.args, files: zsh.files.map((f) => f.path) }, bash: bash && { args: bash.args, login: bash.env.TC_BASH_LOGIN, files: bash.files.map((f) => f.path) }, bashInteractive: bashInteractive && bashInteractive.args, agent, fish }))
+  // shell-integration.arm.1 — the DEBUG trap marks only a command typed at
+  // the prompt. It also fires for the user's own PROMPT_COMMAND entries, and
+  // unarmed each one (`history -a`) ran as a phantom C after every prompt
+  // that held the terminal "running" and swallowed the real command's C. The
+  // last PROMPT_COMMAND entry arms it, the prompt and the first mark disarm it.
+  const pc = brc ? (brc.content.match(/^PROMPT_COMMAND=(.*)$/m) || [])[1] || '' : ''
+  const dbg = brc ? (brc.content.match(/^__tc_debug\(\) \{(.*)\}$/m) || [])[1] || '' : ''
+  ok('shell-integration.arm.1 bash\'s DEBUG trap is armed by the LAST PROMPT_COMMAND entry and marks nothing unarmed, so a user\'s own PROMPT_COMMAND is never a command',
+    can && /;__tc_arm"$/.test(pc) && /^"__tc_prompt/.test(pc) &&
+      dbg.indexOf('[[ -z "$__tc_armed" ]] && return') >= 0 && dbg.indexOf('[[ -z "$__tc_armed" ]] && return') < dbg.indexOf('133;C') &&
+      dbg.indexOf('unset __tc_armed') >= 0 && dbg.indexOf('unset __tc_armed') < dbg.indexOf('133;C') &&
+      /__tc_prompt\(\) \{[^\n]*unset __tc_armed/.test(brc.content),
+    JSON.stringify({ pc, dbg }))
 }
 
   // shell-integration.2 — a spec with NO args at all (the harnesses' seed

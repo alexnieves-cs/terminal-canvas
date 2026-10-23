@@ -11,7 +11,7 @@ try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { c
 const WATCHDOG_MS = 132000 // measured 2026-09-30 (M408 follow-up re-pin): ctx.dormant.1, group.slop.1 and reload.flight.1 (a reload and a re-seed) took the part to 104.5–105.5 s over five runs alone under the lock, 90–91% of the old 116000 (headroom.1 red) — 1.25x the slowest, to the next second. Before that: 116000, measured 2026-09-19 after M288 moved the Orchestrate blocks (orch-task.*, orch-bench.*) into verify:panels:orchestrate: 92.6 s green-but-for-detail.1 at load 7–9, against 101.6 s for the last run that still carried those blocks (M287); 1.25x the 92.6 s, to the next second. Was 168000.
 
 runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, resetZoom, zoomTo, state, reloadWithin } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -71,9 +71,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reloaded41 = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded41
+        await reloadWithin(wc)
         const seeded = await waitUntil(async () => wc.executeJavaScript(
           `['hA', 'hB', 'hC', 'hD'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const cardPoint = async (id) => wc.executeJavaScript(`(() => {
@@ -188,6 +186,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           // mid-flight) but its timing against this check is uncontrolled,
           // and a check that depends on landing inside a 900 ms window is a
           // flake waiting for a slower machine.
+          // The packet is the MOTION answer: under prefers-reduced-motion the
+          // stylesheet hides it on purpose. The hosted macOS runner reports
+          // reduce (display none, reduce true on every run), so the motion
+          // case is asked for by name for this read and handed back after.
+          let emulated = false
+          try { if (!wc.debugger.isAttached()) wc.debugger.attach('1.3'); await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }); emulated = true } catch { /* the read below says reduce */ }
           await wc.executeJavaScript(`(() => { const n = Date.now(); window.__m233Flow('fired', 'hA', 'hB'); window.__m233Freeze(n + 450); return true })()`)
           await settle(); await sleep(250)
           const lit = await line()
@@ -196,15 +200,30 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             if (p === null) return null
             const r = p.getBoundingClientRect()
             const host = document.querySelector('.canvas').getBoundingClientRect()
-            const el = document.elementFromPoint(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2))
             // WHO OWNS THE PIXEL. The packet's own hit stroke sitting over it
             // is fine — it is transparent and exists only to take a pointer.
             // A PANEL over it is not: that is the failure this arm exists for,
             // and a rect-inside-the-host test alone reports it as a pass.
-            const covered = el !== null && el.closest('.panel') !== null
-            return { w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
+            // The stack is walked rather than its top read, because a
+            // terminal's name strip stands 16px proud of its frame, right over
+            // the north port an edge ends on, and paints nothing between its
+            // parts (styles.css, M397 A4): it takes the hit while the packet
+            // shows through. A panel box that paints nothing is looked
+            // through; the first one that paints, or anything not a panel's
+            // (the packet, the link layer, the world), owns it.
+            const paints = (q) => { const cs = getComputedStyle(q); return q.classList.contains('panel') || cs.backgroundImage !== 'none' || (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') }
+            const cx = Math.round(r.x + r.width / 2), cy = Math.round(r.y + r.height / 2)
+            const stack = document.elementsFromPoint(cx, cy)
+            const top = document.elementFromPoint(cx, cy)
+            const el = stack.find((q) => q.closest('.panel') === null || paints(q)) ?? top
+            const covered = el !== null && el.closest('.link-layer') === null && el.closest('.panel') !== null
+            const by = covered ? el.closest('.panel') : null
+            const coverBy = by ? { top: top ? top.tagName + '.' + String(top.className.baseVal ?? top.className).slice(0, 40) : null, hit: el.tagName + '.' + String(el.className.baseVal ?? el.className).slice(0, 60), hitOpacity: getComputedStyle(el).opacity, hitVis: getComputedStyle(el).visibility, id: by.getAttribute('data-panel-id'), z: getComputedStyle(by).zIndex, rect: (() => { const q = by.getBoundingClientRect(); return [Math.round(q.x), Math.round(q.y), Math.round(q.width), Math.round(q.height)] })(), layerZ: getComputedStyle(document.querySelector('.link-layer')).zIndex } : null
+            return { coverBy, w: Math.round(r.width), x: Math.round(r.x), y: Math.round(r.y), scale: window.__m4aScale && window.__m4aScale(), html: p.outerHTML.slice(0, 160), fill: getComputedStyle(p).fill, covered,
+              display: getComputedStyle(p).display, reduce: matchMedia('(prefers-reduced-motion: reduce)').matches,
               inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)
           await wc.executeJavaScript(`(() => { window.__m233Flow('thaw', '', ''); return true })()`)
+          if (emulated) { try { await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] }) } catch { /* detached */ } }
           // Past EDGE_FIRE_MS, so the fire lapses on the store's own timer
           // rather than because anything told it to. A fire that never ended
           // would leave a packet parked on the edge for the life of the run.
@@ -228,7 +247,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           ok('edge.paint.1 a fire lifts the ruled edge\'s computed stroke and paints a packet with a real size, inside the canvas host and NOT under a panel — the two failures this milestone hit (a packet under a panel, and the grammar culled at the wrong tier) both left the DOM correct; expiry is edge.flow.4\'s job',
             lit !== null && lit.act === 'firing' && packet !== null && packet.w >= 4 &&
               packet.inHost === true && packet.covered === false,
-            JSON.stringify({ lit, packet }))
+            JSON.stringify({ lit, packet, emulated }))
         }
 
         // handoff.2. The target is dormant AND off screen. After the exit the
@@ -296,8 +315,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: fromPanels([sPanel('sX', 60), sPanel('sY', 440)]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reloadedS = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reloadedS
+        await reloadWithin(wc)
         const seededS = await waitUntil(async () => wc.executeJavaScript(
           `['sX', 'sY'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const cardPtS = async (id) => wc.executeJavaScript(`(() => {
@@ -428,8 +446,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: fromPanels([jP('jHere', 60), jP('jFar', 9000)]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reJ = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reJ
+        await reloadWithin(wc)
         const seededJ = await waitUntil(async () => wc.executeJavaScript(
           `['jHere', 'jFar'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const camBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
@@ -490,8 +507,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: fromPanels([kP('kA', 60), kP('kB', 460)]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reK = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reK
+        await reloadWithin(wc)
         const seededK = await waitUntil(async () => wc.executeJavaScript(
           `['kA', 'kB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const selectedNow = () => wc.executeJavaScript(`document.querySelector('.panel--selected')?.dataset.panelId ?? null`)
@@ -604,8 +620,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // OS's reason rather than the app's.
         layoutStore.setPreference('appearance.theme', 'light')
         layoutStore.flushSync()
-        const reV = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reV
+        await reloadWithin(wc)
         await waitUntil(async () => wc.executeJavaScript(
           `['vA', 'vB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         // Wake vA so it has a LIVE terminal: click its card.
@@ -770,8 +785,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // checks toggled.
         for (const id of ['shell.railOpen', 'shell.inspectorOpen', 'shell.navigator', 'shell.contextTab', 'files.treeOpen']) layoutStore.clearPreference(id)
         layoutStore.flushSync()
-        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reS
+        await reloadWithin(wc)
         const seeded = await waitUntil(async () => wc.executeJavaScript(
           `['sA', 'sB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         // Wake sA so a LIVE panel sits under the reclaimed width.
@@ -843,7 +857,15 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         bw.setSize(1000, 900)
         const compact = await waitUntil(async () => (await frame()).bp === 'compact', 5000)
         await settle()
+        // The breakpoint flips a render before the rail's collapse reaches its
+        // box: one run read the shell already `--rail-collapsed` with the rail
+        // still 300 px wide. Read the frame once the rail has had the chance to
+        // give its width back (the assertion below still demands 0).
+        await waitUntil(async () => (await frame()).nav === 0, 3000)
         const closedAtCompact = await frame()
+        // Evidence: the shell's own classes and the persisted navigator state at the moment it was read.
+        const compactShell = await wc.executeJavaScript(`(() => { const s = document.querySelector('.shell'); const r = document.querySelector('.shell__rail'); return { cls: s ? s.className : null, rail: r ? { cls: r.className, pos: getComputedStyle(r).position, tr: getComputedStyle(r).transition.slice(0, 80) } : null } })()`)
+        const compactPrefs = await wc.executeJavaScript(`(async () => { try { const all = await window.canvas.settings.list(); const pick = (k) => { const row = (all.rows || all).find ? (all.rows || all).find((r) => r.id === k || r.key === k) : null; return row ? (row.value ?? row.current ?? null) : null }; return { railOpen: pick('shell.railOpen'), navigator: pick('shell.navigator') } } catch (e) { return String(e) } })()`)
         await dockClick('panels'); await settle()
         const open = await wc.executeJavaScript(`(() => {
           const shell = document.querySelector('.shell'); const rail = document.querySelector('.shell__rail'); const canvas = document.querySelector('.canvas')
@@ -871,7 +893,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             open !== null && open.drawer === true && open.overlaps === true &&
             vpAfter.x === vpBefore.x && vpAfter.y === vpBefore.y && vpAfter.scale === vpBefore.scale &&
             afterEscape === false && reopened === true && afterOutside === false,
-          JSON.stringify({ compact, closedAtCompact, open, vpBefore, vpAfter, afterEscape, reopened, afterOutside }))
+          JSON.stringify({ compact, closedAtCompact, compactShell, compactPrefs, open, vpBefore, vpAfter, afterEscape, reopened, afterOutside }))
 
         // ctx.1. Select sA through the rail, pin the context open through the
         //        top bar's toggle, then every tab.
@@ -988,8 +1010,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: fromPanels([term('fA', 60), ...kinds]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reF = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reF
+        await reloadWithin(wc)
         const seeded = await waitUntil(async () => wc.executeJavaScript(
           `['fA', 'fR', 'fF', 'fT', 'fJ'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const frames = await wc.executeJavaScript(`(() => {
@@ -1089,8 +1110,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         PROMPT_DIRS.add(kDir); PROMPT_DIRS.add(realpathSync(kDir))
         layoutStore.addPrompt({ id: 'p-hole', name: 'review-with-hole', body: 'Review {{file}} for {{what}}' })
         flushLayoutStore()
-        const reK = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reK
+        await reloadWithin(wc)
         await settle()
         const minted = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(kDir)})`)
         const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
@@ -1118,7 +1138,23 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
 
         // composer.2 — the real drop verb, at the panel's centre.
         await typeInto('')
-        const centre = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2 - host.left, y: r.top + r.height / 2 - host.top } })()`)
+        // CLIENT coordinates: __m59Drop subtracts the host's origin itself, as
+        // the real onDrop does. Host-relative ones were subtracted twice, and
+        // the drop landed host.left px left of the centre — inside the chat
+        // only while it was wide enough (dropped "opened" on the runner; the
+        // shot scene hit the same thing and says so).
+        // The centre is read once the chat holds still AND is the panel under
+        // that point: a freshly minted chat can still be gliding to its place
+        // (or under the camera's fly), and a centre read mid-move dropped
+        // "opened" on the runner once in three, onto bare canvas.
+        let lastCentre = null
+        const centre = await waitUntil(async () => {
+          const c = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); if (!p) return null; const r = p.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2
+            const hit = document.elementFromPoint(x, y)?.closest('.panel'); return { x, y, hit: hit ? hit.getAttribute('data-panel-id') : null } })()`)
+          const still = c && lastCentre && Math.abs(c.x - lastCentre.x) < 0.5 && Math.abs(c.y - lastCentre.y) < 0.5
+          lastCentre = c
+          return still && c.hit === chatId ? c : false
+        }, 6000, 250) || lastCentre
         const dropped = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'pic.png'))}, ${centre.x}, ${centre.y})`)
         const chip = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-attachment="pic.png"]')} !== null`), 4000)
         const droppedText = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'notes.txt'))}, ${centre.x}, ${centre.y})`)
@@ -1232,8 +1268,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.addPreset({ id: 'template-claude', name: 'Claude (template)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
-        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reT
+        await reloadWithin(wc)
         await settle()
         const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
         // The palette row for the built-in template.
@@ -1271,13 +1306,13 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(document.activeElement && document.activeElement.blur && document.activeElement.blur(), true)`)
         wc.send('edit:undo')
         const undone = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before}`), 5000)
+        const beforeRedo = await wc.executeJavaScript(`({ active: document.activeElement && (document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 30)), panels: document.querySelectorAll('.panel').length })`)
         wc.send('edit:redo')
-        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before} + 2`), 5000)
+        const redone = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before} + 2`), 5000)
         // Save the two panels as a template of the user's own.
         await settle()
         const saved = await wc.executeJavaScript(`(async () => {
           const ids = [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))
-          window.__m4aSelect ? window.__m4aSelect(ids) : null
           return ids })()`)
         // The SAVE VERB itself, through the palette: the two panels of the
         // template just made are selected and saved, and the record comes back
@@ -1287,10 +1322,19 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => {
           const chrome = (id) => document.querySelector('.panel[data-panel-id="' + id + '"] .pf__chrome')
           const a = chrome(${JSON.stringify(made.chatId)}); const b = chrome(${JSON.stringify(made.termId)})
-          if (a) a.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-          if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, shiftKey: true }))
+          if (a && b) { a.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, shiftKey: true })) }
+          // At a far tier a panel is a card with no chrome (the runner's
+          // instantiate landed there: neither chrome was found and nothing was
+          // selected). The selection is this check's SETUP, not its subject,
+          // so it is made through the same hook tidy.1 uses.
+          else window.__m50Select([${JSON.stringify(made.chatId)}, ${JSON.stringify(made.termId)}])
           return !!(a && b) })()`)
         await settle()
+        // Evidence: which chromes the gesture found and what it left selected.
+        const picked = await wc.executeJavaScript(`(() => {
+          const chrome = (id) => document.querySelector('.panel[data-panel-id="' + id + '"] .pf__chrome')
+          return { a: !!chrome(${JSON.stringify(made.chatId)}), b: !!chrome(${JSON.stringify(made.termId)}), ids: [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id') + ':' + (p.getAttribute('data-tier') ?? '')),
+            selected: [...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')) } })()`)
         await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
         const saveRan = await wc.executeJavaScript(`(async () => {
@@ -1319,7 +1363,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             saveRan === true && mine && mine.nodes.length === 2 && mine.edges.length === 1 && mine.edges[0].trigger === 'idle' &&
             mine.nodes.every((n) => n.kind === 'chat' || n.presetId !== undefined || (n.command ?? '') !== '') &&
             builtInDelete === false,
-          JSON.stringify({ rowRan, sheet, made, undone, saveRan, mine, builtInDelete, saved: Array.isArray(saved), log: mLog.slice(-3) }))
+          JSON.stringify({ rowRan, sheet, made, undone, beforeRedo, redone, picked, saveRan, mine: mine ?? null, listed: Array.isArray(listed) ? listed.map((t) => t.name) : listed, builtInDelete, saved: Array.isArray(saved), log: mLog.slice(-3) }))
         try { rmSync(tDir, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (mErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(mErr && mErr.message || mErr) + ' | renderer: ' + (mLog.slice(-4).join(' || ') || '(none)'))
@@ -1351,8 +1395,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reR = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reR
+        await reloadWithin(wc)
         await settle()
         const seeded = await waitUntil(() => wc.executeJavaScript(`['rA', 'rB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
@@ -1451,27 +1494,35 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const edge = (to, trigger) => ({ to, automation: { kind: 'handoff', enabled: true, trigger } })
         const gDir = mkdtempSync(join(tmpdir(), 'tc panels graph-'))
         layoutStore.addPreset({ id: 'graph-claude', name: 'Claude (graph)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
-        layoutStore.save({
-          panels: [
-            ...fromPanels([
-              gPanel('gA', 60, 60, [edge('gC', 'exit-ok'), edge('gD', 'exit-fail')]), gPanel('gB', 60, 340, [edge('gC', 'exit-ok')]),
-              // The join TARGET prints once and sleeps: the tty echoes the pasted
-              // payloads into its log without a shell executing them — a shell
-              // ran A's transcript line by line and its `exit` line ended the
-              // target before B's part arrived (the first run); a bare `cat`
-              // never leaves `starting` and is never receivable (the second).
-              gPanel('gC', 440, 60, undefined, '/bin/sh', ['-c', 'echo ready; sleep 600']), gPanel('gD', 440, 340),
-              gPanel('gT', 820, 340), gPanel('gS', 820, 60, [edge('gK', 'exit')])
-            ]),
-            { id: 'gH', kind: 'chat', x: 1200, y: 60, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '88888888-8888-4888-8888-888888888888' }, links: [edge('gT', 'idle')] },
-            { id: 'gK', kind: 'chat', x: 1200, y: 340, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '99999999-9999-4999-8999-999999999999' } }
-          ],
-          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
-        })
-        layoutStore.flushSync()
-        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reG
-        await settle()
+        // The seed is re-saved until the store holds it: the previous page's
+        // in-flight layout save can land after this one and the reload then
+        // restores the previous block's panels (the tools.1 clobber), which
+        // left graph.1-3 reading seeded=false and the suite's watchdog firing.
+        const G_IDS = ['gA', 'gB', 'gC', 'gD', 'gT', 'gS', 'gH', 'gK']
+        for (let attempt = 0; attempt < 3; attempt++) {
+          layoutStore.save({
+            panels: [
+              ...fromPanels([
+                gPanel('gA', 60, 60, [edge('gC', 'exit-ok'), edge('gD', 'exit-fail')]), gPanel('gB', 60, 340, [edge('gC', 'exit-ok')]),
+                // The join TARGET prints once and sleeps: the tty echoes the pasted
+                // payloads into its log without a shell executing them — a shell
+                // ran A's transcript line by line and its `exit` line ended the
+                // target before B's part arrived (the first run); a bare `cat`
+                // never leaves `starting` and is never receivable (the second).
+                gPanel('gC', 440, 60, undefined, '/bin/sh', ['-c', 'echo ready; sleep 600']), gPanel('gD', 440, 340),
+                gPanel('gT', 820, 340), gPanel('gS', 820, 60, [edge('gK', 'exit')])
+              ]),
+              { id: 'gH', kind: 'chat', x: 1200, y: 60, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '88888888-8888-4888-8888-888888888888' }, links: [edge('gT', 'idle')] },
+              { id: 'gK', kind: 'chat', x: 1200, y: 340, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '99999999-9999-4999-8999-999999999999' } }
+            ],
+            camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+          })
+          layoutStore.flushSync()
+          await reloadWithin(wc)
+          await settle()
+          const held = await waitUntil(() => { const ids = layoutStore.initial().panels.map((p) => p.id).sort(); return JSON.stringify(ids) === JSON.stringify([...G_IDS].sort()) }, 3000)
+          if (held === true) break
+        }
         // The rail collapsed: gT and gS sit at x 820 and a real click on their
         // cards must land inside the window whatever the previous block left.
         await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', false)`)
@@ -1629,14 +1680,21 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         agentTranscripts.appendTurn(chatId, { id: 'm-t2', role: 'assistant', blocks: [{ type: 'text', text: 'done' }], at: at + 2000 })
         agentTranscripts.appendMeta(chatId, { usage: { input: 1, output: 1, cacheWrite: 0, cacheRead: 0 }, turns: 1 })
         layoutStore.addPreset({ id: 'tools-claude', name: 'Claude (tools)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
-        layoutStore.save({
-          panels: [{ id: chatId, kind: 'chat', x: 80, y: 80, w: 520, h: 360, z: 1, chat: { cwd: trepo, sessionId: '77777777-7777-4777-8777-777777777777' } }],
-          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
-        })
-        flushLayoutStore()
-        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reT
-        await settle()
+        // The 900 ms above is not a bound, and the runner overran it (the
+        // reload showed the previous block's eight panels). So the seed is
+        // re-saved until the store, after the new page's own save, holds
+        // exactly this chat.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          layoutStore.save({
+            panels: [{ id: chatId, kind: 'chat', x: 80, y: 80, w: 520, h: 360, z: 1, chat: { cwd: trepo, sessionId: '77777777-7777-4777-8777-777777777777' } }],
+            camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+          })
+          flushLayoutStore()
+          await reloadWithin(wc)
+          await settle()
+          const held = await waitUntil(() => { const ids = layoutStore.initial().panels.map((p) => p.id); return ids.length === 1 && ids[0] === chatId }, 3000)
+          if (held === true) break
+        }
         const restored = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"]') !== null`), 8000)
         const restoreState = restored === true ? null : await wc.executeJavaScript(`(() => ({ panels: [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id')), launcher: !!document.querySelector('[data-launcher]'), title: document.title }))()`)
         // The baseline lands asynchronously after agent:create (git in a subprocess).
@@ -1646,18 +1704,37 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
         // A real click on the chrome selects (the inspector follows selectedId).
         const box = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="${chatId}"] .pf__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
-        if (box) { wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 }) }
-        const changes = await waitUntil(() => wc.executeJavaScript(`(() => { const f = [...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file')); return f.includes('seed.txt') ? f : false })()`), 10000)
+        const selectChat = () => { if (box) { wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 }) } }
+        selectChat()
+        // The Changes list is the inspector's git read at selection: on the
+        // runner one run in three it held the read from before the edit for
+        // the whole 10 s. A fresh selection (a press on bare canvas, then the
+        // chrome again) asks git again, once per 4 s without the file.
+        let selectedAt = Date.now()
+        const changes = await waitUntil(async () => {
+          const f = await wc.executeJavaScript(`[...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file'))`)
+          if (f.includes('seed.txt')) return f
+          if (Date.now() - selectedAt > 4000) { wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle(); selectChat(); selectedAt = Date.now() }
+          return false
+        }, 14000, 300)
+        const changesSaid = Array.isArray(changes) ? null : await wc.executeJavaScript(`(document.querySelector('[data-review-summary]') || document.querySelector('[data-work-arm="changes"]') || {}).textContent || null`)
         const reviewBtn = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); return b && !b.disabled ? { title: b.title } : false })()`), 5000)
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
-        const nodeRow = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.review-node'); if (!n) return false; const f = n.querySelector('[data-review-node-file="seed.txt"]'); if (!f) return false; const t = f.querySelector('[data-review-node-touches]'); return { id: n.getAttribute('data-panel-id'), touches: t ? t.getAttribute('data-review-node-touches') : null, text: t ? t.textContent : null, other: !!n.querySelector('[data-review-node-file="other.txt"]') } })()`), 10000)
+        const pressReview = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await pressReview()
+        // Pressed again only while no review node exists at all (as shell's 106).
+        let pressedAt = Date.now()
+        const nodeRow = await waitUntil(async () => {
+          const r = await wc.executeJavaScript(`(() => { const n = document.querySelector('.review-node'); if (!n) return null; const f = n.querySelector('[data-review-node-file="seed.txt"]'); if (!f) return false; const t = f.querySelector('[data-review-node-touches]'); return { id: n.getAttribute('data-panel-id'), touches: t ? t.getAttribute('data-review-node-touches') : null, text: t ? t.textContent : null, other: !!n.querySelector('[data-review-node-file="other.txt"]') } })()`)
+          if (r === null && Date.now() - pressedAt > 4000) { await pressReview(); pressedAt = Date.now() }
+          return r || false
+        }, 12000)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.review-node [data-review-node-file="seed.txt"] .review-node__file-button'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const touchList = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('.review-node [data-review-node-touch-list]'); return l ? l.textContent : false })()`), 5000)
         ok(IDS[0],
           restored === true && baseline && typeof baseline.sha === 'string' && Array.isArray(changes) && changes.includes('seed.txt') && !changes.includes('other.txt') &&
             reviewBtn && /review node/.test(reviewBtn.title) && nodeRow && nodeRow.touches === '1' && /1 tool call/.test(nodeRow.text) && nodeRow.other === false &&
             typeof touchList === 'string' && /Edit/.test(touchList) && !/Read/.test(touchList),
-          JSON.stringify({ restored, restoreState, baseline: baseline && baseline.sha, changes, reviewBtn, nodeRow, touchList, log: tLog.slice(-3) }))
+          JSON.stringify({ restored, restoreState, baseline: baseline && baseline.sha, changes, changesSaid, reviewBtn, nodeRow, touchList, log: tLog.slice(-3) }))
 
         // tools.2 — the chat's own tool rows.
         const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
@@ -1726,8 +1803,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const aDir = mkdtempSync(join(tmpdir(), 'tc panels approve-'))
         layoutStore.addPreset({ id: 'approve-claude', name: 'Claude (approve)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
         flushLayoutStore()
-        const reA = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reA
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
@@ -1846,8 +1922,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const bDir = mkdtempSync(join(tmpdir(), 'tc panels budget-'))
         layoutStore.addPreset({ id: 'budget-claude', name: 'Claude (budget)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
         flushLayoutStore()
-        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reB
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(bDir)})`)
         const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 8000)
@@ -1908,8 +1983,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         flushLayoutStore()
-        const reY = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reY
+        await reloadWithin(wc)
         await settle()
         const emptyArm = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="mem1"] [data-memory-arm="empty"]')?.textContent ?? false`), 8000)
         // No session for a document kind, and no xterm.
@@ -1968,8 +2042,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const zRepo = mkdtempSync(join(tmpdir(), 'tc panels memctx-'))
         memoryStore.add({ root: zRepo, kind: 'decided', text: 'sessions live in tmux' })
         memoryStore.add({ root: zRepo, kind: 'failed', text: 'parsing the pretty output' })
-        const reZ = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reZ
+        await reloadWithin(wc)
         await settle()
         const mintedZ = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(zRepo)})`)
         const zChat = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
@@ -2026,8 +2099,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const reloadWith = async (panels) => {
         layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await re
+        await reloadWithin(wc)
         await settle()
       }
       const launcherUp = () => wc.executeJavaScript(`!!document.querySelector('[data-launcher]')`)
@@ -2170,8 +2242,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           { kind: 'terminal', rect: { id: 'tB', x: 640, y: 160, w: 520, h: 320 }, z: 2, spec: { panelId: 'tB', cwd: home, command: '/bin/sh', args: [] }, fontSize: 20 }
         ]), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reT
+        await reloadWithin(wc)
         await waitUntil(async () => wc.executeJavaScript(`['tA', 'tB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const wake = async (id) => {
           await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="' + ${JSON.stringify(id)} + '"] .panel__card'); if (!card) return false
@@ -2250,20 +2321,29 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: fromPanels([P('pA', 100, 100), P('pB', 620, 100), P('pC', 100, 500), P('pD', 700, 560)]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reP = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reP
+        await reloadWithin(wc)
         await waitUntil(async () => wc.executeJavaScript(`['pA', 'pB', 'pC', 'pD'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         await settle()
         // Drag pB's chrome LEFT so its left edge ends 5px right of pA's right
         // edge (world 405): dx = 405 - 620 = -215 at scale 1.
-        const chrome = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="pB"] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
+        // A point of the chrome that is the chrome's own: on the runner the
+        // overview map sat over left+40 (the press landed on .minimap__view
+        // and nothing moved). The drag is relative, so where along the strip
+        // it starts does not change where the edge ends.
+        const chrome = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="pB"] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); const y = Math.round(r.top + r.height / 2)
+          for (let x = Math.round(r.left + 40); x < r.right - 40; x += 10) { const el = document.elementFromPoint(x, y); if (el && el.closest('.panel[data-panel-id="pB"]') && !el.closest('button')) return { x, y } }
+          return { x: Math.round(r.left + 40), y } })()`)
         let guideSeen = false
+        let hit = null
+        let mid = null
         if (chrome) {
           const to = { x: chrome.x - 215, y: chrome.y }
           // A person's pointer arrives before it presses; on a window this wide
           // the overview map sits over this chrome until a move lets it tuck aside.
           wc.sendInputEvent({ type: 'mouseMove', x: chrome.x, y: chrome.y })
           await sleep(200)
+          // Evidence: what the press will land on.
+          hit = await wc.executeJavaScript(`(() => { const el = document.elementFromPoint(${chrome.x}, ${chrome.y}); return el ? el.tagName + '.' + String(el.className).slice(0, 60) + (el.closest('.panel') ? ' in ' + el.closest('.panel').getAttribute('data-panel-id') : '') : null })()`)
           wc.sendInputEvent({ type: 'mouseDown', x: chrome.x, y: chrome.y, button: 'left', clickCount: 1 })
           for (let i = 1; i <= 6; i++) {
             // leftButtonDown, or the drag hook reads buttons === 0 as a release.
@@ -2272,13 +2352,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           }
           await sleep(120)
           guideSeen = await wc.executeJavaScript(`document.querySelectorAll('[data-snap-guide]').length > 0`)
+          mid = await rectOf('pB')
           wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
         }
         await settle()
         const after = await rectOf('pB')
         const guideGone = await wc.executeJavaScript(`document.querySelectorAll('[data-snap-guide]').length === 0`)
         ok(IDS[0], chrome !== null && after !== null && after.x === 400 && guideSeen === true && guideGone === true,
-          JSON.stringify({ chrome, after, guideSeen, guideGone }))
+          JSON.stringify({ chrome, hit, mid, after, guideSeen, guideGone }))
 
         // tidy.1. Select pC and pD (rail click then shift-click on chrome is
         //         the M18 gesture; the harness's marquee is heavier) through
@@ -2334,8 +2415,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: fromPanels([{ kind: 'terminal', rect: { id: 'lA', x: 60, y: 60, w: 640, h: 400 }, z: 1, spec: { panelId: 'lA', cwd: home, command: '/bin/sh', args: [] } }]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reL
+        await reloadWithin(wc)
         await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="lA"]') !== null`), 10000)
         await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="lA"] .panel__card'); if (!card) return false
           const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
@@ -2942,8 +3022,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({ panels: fromPanels([{ kind: 'terminal', rect: { id: 'oA', x: 60, y: 60, w: 640, h: 360 }, z: 1, spec: { panelId: 'oA', cwd: home, args: ['-l'] } }]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
-        const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reO
+        await reloadWithin(wc)
         await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="oA"]') !== null`), 10000)
         await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="oA"] .panel__card'); if (!card) return false
           const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
@@ -3031,8 +3110,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reG
+        await reloadWithin(wc)
         await settle()
         // M408 follow-up (the critic's item 1 and its minor). Real input on
         // the seeded pair while both are still DORMANT (from disk).
@@ -3081,8 +3159,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const live = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="gA"] .panel__slot') !== null`), 6000)
         const click = (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true })()`)
         const t1 = await click('.canvas-group[data-group-id="g1"] .canvas-group__toggle')
-        await settle()
-        const carded = await wc.executeJavaScript(`document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed') && document.querySelector('.panel[data-panel-id="gA"] .panel__slot') === null`)
+        // A condition, not one settle(): the collapse re-renders the live
+        // member to its card on the next commit, which a loaded CI runner can
+        // push past a fixed window. cardedHow records which half lagged.
+        const cardedNow = () => wc.executeJavaScript(`document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed') && document.querySelector('.panel[data-panel-id="gA"] .panel__slot') === null`)
+        const carded = (await waitUntil(cardedNow, 4000)) === true
+        const cardedHow = await wc.executeJavaScript(`({ collapsed: document.querySelector('.canvas-group[data-group-id="g1"]')?.classList.contains('canvas-group--collapsed') ?? null, slot: document.querySelector('.panel[data-panel-id="gA"] .panel__slot') !== null, card: document.querySelector('.panel[data-panel-id="gA"] .panel__card') !== null })`)
         const t2 = await click('.canvas-group[data-group-id="g1"] .canvas-group__toggle')
         await settle()
         const expanded = await wc.executeJavaScript(`!document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed')`)
@@ -3096,7 +3178,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const removed = await wc.executeJavaScript(`document.querySelector('.canvas-group') === null && document.querySelectorAll('.panel[data-panel-id]').length === 2`)
         const ptyStill = ptyManager.list().some((s) => s.panelId === 'gA')
         ok(ID, framed && live === true && t1 && carded && t2 && expanded && r1 && removed && ptyStill,
-          JSON.stringify({ framed, live, t1, carded, t2, expanded, r1, removed, ptyStill, log: gLog.slice(-3) }))
+          JSON.stringify({ framed, live, t1, carded, cardedHow, t2, expanded, r1, removed, ptyStill, log: gLog.slice(-3) }))
       } catch (gErr) {
         ok(ID, false, 'threw: ' + String(gErr && gErr.message || gErr) + ' | renderer: ' + (gLog.slice(-4).join(' || ') || '(none)'))
       } finally {
@@ -3132,8 +3214,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reS
+        await reloadWithin(wc)
         await settle()
         const words = (id) => wc.executeJavaScript(`(() => {
           const pf = document.querySelector('.panel[data-panel-id="${id}"]')
@@ -3296,8 +3377,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reH = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reH
+        await reloadWithin(wc)
         await settle()
         // Wake and focus shA so its live directory is what the sheet offers.
         await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="shA"] .panel__card'); if (!card) return false
@@ -3381,8 +3461,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reL
+        await reloadWithin(wc)
         await settle()
         // M397 (A8) — menu.layer.1. THE VIEW MENU PAINTS OVER THE MINIMAP.
         // The menu's own z-index ranks only inside the top bar's stacking
@@ -3416,8 +3495,19 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                   // The translate property composes with a transform the menu
                   // may already carry (its popper positions it that way);
                   // overwriting transform threw it back to the origin.
-                  m.style.translate = Math.round(pr.left + pr.width / 2 - mr.left - mr.width / 2) + 'px ' + Math.round(pr.top + pr.height / 2 - mr.top - 20) + 'px'
-                  moved = true; mr = m.getBoundingClientRect()
+                  // The MAP is moved, not the menu: the menu is a Motion element
+                  // that owns its own transform, and on the runner an inline
+                  // translate on it never took (moved, menu still at its
+                  // corner, overlap 0). The map is plain CSS. Measured and
+                  // corrected, since a translate is in the element's own pixels.
+                  let tx = 0, ty = 0
+                  for (let i = 0; i < 4; i++) {
+                    tx += mr.left + mr.width / 2 - pr.left - pr.width / 2; ty += mr.top + 20 + pr.height / 2 - pr.top - pr.height / 2
+                    map.style.translate = Math.round(tx) + 'px ' + Math.round(ty) + 'px'
+                    pr = map.getBoundingClientRect(); mr = m.getBoundingClientRect()
+                    if (Math.abs(mr.left + mr.width / 2 - pr.left - pr.width / 2) < 4) break
+                  }
+                  moved = true
                 }
                 const overlap = pr ? Math.max(0, Math.min(mr.right, pr.right) - Math.max(mr.left, pr.left)) * Math.max(0, Math.min(mr.bottom, pr.bottom) - Math.max(mr.top, pr.top)) : 0
                 // Only points over the map are probed: that is the claim, and a
@@ -3428,8 +3518,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
                     if (!pr || x <= pr.left || x >= pr.right || y <= pr.top || y >= pr.bottom) continue
                     probed++; const e = document.elementFromPoint(x, y)
                     if (!e || !m.contains(e)) lost.push(b.textContent.trim().slice(0, 20) + '@' + f + '→' + (e ? String(e.className).split(' ')[0] : null)) } }
-                m.style.translate = ''
-                return { open: true, mapShown, moved, overlap: Math.round(overlap), probed, lost, kbd: [...m.querySelectorAll('kbd')].map((k) => k.textContent) } })()`)
+                m.style.translate = ''; if (map) map.style.translate = ''
+                return { open: true, mapShown, moved, overlap: Math.round(overlap), probed, lost, menu: [Math.round(mr.left), Math.round(mr.top), Math.round(mr.width), Math.round(mr.height)], map: pr && [Math.round(pr.left), Math.round(pr.top), Math.round(pr.width), Math.round(pr.height)], presence: map && map.getAttribute('data-presence'), kbd: [...m.querySelectorAll('kbd')].map((k) => k.textContent) } })()`)
               press(trig)
               await settle()
             }
@@ -3489,7 +3579,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             const gear = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-dock="settings"]'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
             const press = (p) => { wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 }) }
             const state = () => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-settings-root]'); return { open: !!r, label: r ? r.getAttribute('aria-label') : null, palette: document.querySelector('.palette') !== null } })()`)
-            const esc = async () => { wc.focus(); await sleep(150); wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle() }
+            // Evidence for a red: did the key arrive, was it already handled by
+            // the time it bubbled to the window, and what had focus.
+            const escLog = []
+            const esc = async () => {
+              await wc.executeJavaScript(`(() => { window.__escSeen = []; const f = (e) => { if (e.key === 'Escape') window.__escSeen.push({ prevented: e.defaultPrevented, phase: e.eventPhase, target: e.target && (e.target.tagName + '.' + String(e.target.className).slice(0, 30)) }) }; window.addEventListener('keydown', f, true); window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__escSeen.push({ bubbled: true, prevented: e.defaultPrevented }) }); return true })()`)
+              wc.focus(); await sleep(150); wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' }); await settle()
+              escLog.push(await wc.executeJavaScript(`({ seen: window.__escSeen, active: document.activeElement && (document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 30)) })`))
+            }
             if (gear) {
               press(gear); const opened = await waitUntil(async () => { const s = await state(); return s.open ? s : false }, 3000)
               await esc()
@@ -3497,7 +3594,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
               press(gear); const again = await waitUntil(async () => (await state()).open, 3000) === true
               await esc()
               const last = await state()
-              settings = { opened, afterEsc, again, last }
+              settings = { opened, afterEsc, again, last, escLog }
             }
           } catch (error) { settings = { error: String(error && error.message || error) } }
           ok('settings.dismiss.1 Settings opened from the dock gear is the Settings page, closes on ONE real Escape (never landing on the root palette) and opens again',
@@ -3574,8 +3671,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reC
+        await reloadWithin(wc)
         await settle()
         // Wake and select the shell, open the context pane on Work.
         await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="cxA"] .panel__card'); if (!card) return false
@@ -3680,8 +3776,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
         layoutStore.load()
         layoutStore.setSession('frontT', sessionId)
-        const reF = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reF
+        await reloadWithin(wc)
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="frontT"]') !== null`), 5000)
         // M170 — agent-card.1. THE AGENT CARD WHEN IT IS A TERMINAL: frontT
@@ -3812,8 +3907,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
         layoutStore.flushSync()
-        const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload(); await reO
+        await reloadWithin(wc)
         await settle()
         await wc.executeJavaScript(`window.__m56ReducedMotion(true)`)
         const cmd = (key) => wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, metaKey: true, bubbles: true }))`)

@@ -42,3 +42,15 @@ Format:
 - File: src/cli/** (and the unowned verb-table.ts, plan.ts, palette-actions/objects.ts and executor.ts, palette/commands.ts)
 - Smallest change: `tc view` writes a plan line from verbs that already have four doors: a page is `create-browser`, a picture `image-add`, anything else a new `file-open <absolute path>` verb whose doors are the drop on the canvas, the Open file… row, the agent line and a workflow node. `file-open` joins the teammate's refused verbs (it reads a path the caller names, like `import-docx`).
 - Status: done (M535, lane G): `verify:borrow view.*`.
+
+### Q-004 · `relay.bp.2` sizes its stall in fixed megabytes, which Linux's socket buffers swallow
+- From: A · To: D
+- File: scripts/verify-relay.cjs
+- Smallest change: the backpressure block pumps a fixed 5 MB (`n = 320` chunks of 16 KB) past a paused viewer. The relay only marks a viewer lagging once the kernel stops taking its bytes and its queue passes HIGH, then the viewer must fall a ring (1 MB) further for a resync. A Linux loopback absorbed about 3.7 MB, so the viewer never lagged far enough: bp.2 fails 5 of 5 there and flaked once on the Mac gate (PR #54). Measure what the loopback absorbs first and size the stream at twice that plus HIGH plus twice the ring (never under 5 MB), with the two waits scaled to the stream. The check's condition is unchanged. A ready patch, 5 of 5 green on Linux: /mnt/project-files/notes/stream-a/relay-bp2-fix.patch.
+- Status: done in #38 (A, with Alex's go-ahead since D is finished): the stream is sized from what the loopback absorbs.
+
+### Q-007 · The lit orchestration connector's reduced-motion stand-down loses on source order
+- From: A · To: F (or whichever lane owns orchestration CSS)
+- File: src/renderer/styles.css
+- Smallest change: the reduced-motion block near `.canvas--behind-orch` sets `.orch__connector--lit { animation: none; }`, but the base rule `.orch__connector--lit { … animation: edge-current … }` comes later at the same specificity, so it wins and the lit connector still animates under reduced motion (only the global block's `.01ms` keeps it invisible). Re-state `@media (prefers-reduced-motion: reduce) { .orch__connector--lit { animation: none; } }` from inside your `st:` block. Found by `verify:panels:orchestrate` orch-parity.app.3, which now counts only animations with a visible duration (M458).
+- Status: open

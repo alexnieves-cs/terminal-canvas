@@ -13,7 +13,10 @@ import { basename, join } from 'node:path'
  * zsh: ZDOTDIR is pointed at our directory, whose .zshenv/.zprofile/.zshrc/
  * .zlogin source the USER'S own from the original ZDOTDIR (else $HOME) FIRST,
  * then .zshrc adds precmd/preexec hooks. bash: --rcfile with a file that
- * sources ~/.bashrc first, then sets PROMPT_COMMAND and a DEBUG trap. The
+ * sources the user's own startup files first, then sets PROMPT_COMMAND and a
+ * DEBUG trap. bash IGNORES --rcfile in a login shell, and the default preset
+ * is `-l`, so a login bash is spawned interactive-only with TC_BASH_LOGIN set
+ * and the rcfile reads the login files itself (see bashFiles). The
  * marks are the standard four — A prompt start, B prompt end, C command
  * start, D;exit command end — with the command line percent-encoded on C,
  * which the standard does not carry and the ledger needs.
@@ -52,14 +55,26 @@ add-zsh-hook preexec __tc_preexec 2>/dev/null
 PS1="%{$(printf '\\033]133;B\\a')%}$PS1"
 `
 
+// The trap is set LAST: the DEBUG trap fires for every simple command after
+// it, so a PS1 assignment below it ran as a phantom first command (a C mark
+// for `PS1=...` and a D;0 ahead of the first prompt).
+//
+// The trap is ARMED by the last entry of PROMPT_COMMAND and disarmed by the
+// first command it marks. It also fires for the user's own PROMPT_COMMAND
+// entries (`history -a` is common), and without the arm each of those ran as
+// a phantom command after every prompt: a C mark the terminal then held open
+// as "running" until the next prompt, while the real command got no C at all.
+// An empty Enter runs no command, so the next simple command is __tc_prompt
+// itself, which marks nothing.
 const BASH_HOOKS = `
 # --- terminal-canvas shell integration (OSC 133) ---
 __tc_enc() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \\n' | sed 's/\\(..\\)/%\\1/g'; }
-__tc_prompt() { local __ec=$?; if [[ -n "$__tc_running" ]]; then ${MARK('D', '$__ec')}; unset __tc_running; fi; ${MARK('A')}; }
-__tc_debug() { [[ -n "$COMP_LINE" ]] && return; [[ "$BASH_COMMAND" == "__tc_prompt" ]] && return; [[ -n "$__tc_running" ]] && return; __tc_running=1; ${MARK('C', '$(__tc_enc "$BASH_COMMAND")')}; }
-PROMPT_COMMAND="__tc_prompt\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
-trap '__tc_debug' DEBUG
+__tc_prompt() { local __ec=$?; unset __tc_armed; if [[ -n "$__tc_running" ]]; then ${MARK('D', '$__ec')}; unset __tc_running; fi; ${MARK('A')}; }
+__tc_arm() { __tc_armed=1; }
+__tc_debug() { [[ -n "$COMP_LINE" ]] && return; [[ -z "$__tc_armed" ]] && return; [[ "$BASH_COMMAND" == "__tc_prompt" ]] && return; unset __tc_armed; __tc_running=1; ${MARK('C', '$(__tc_enc "$BASH_COMMAND")')}; }
+PROMPT_COMMAND="__tc_prompt\${PROMPT_COMMAND:+;$PROMPT_COMMAND};__tc_arm"
 PS1="\\[$(printf '\\033]133;B\\a')\\]$PS1"
+trap '__tc_debug' DEBUG
 `
 
 function zshFiles(dir: string): Array<{ path: string; content: string }> {
@@ -75,9 +90,28 @@ function zshFiles(dir: string): Array<{ path: string; content: string }> {
   ]
 }
 
+// A LOGIN bash reads /etc/profile and the first of ~/.bash_profile,
+// ~/.bash_login, ~/.profile, and never --rcfile: spawned as `bash --rcfile X
+// -l` it silently loaded no hooks, so every bash user got no marks and no Work
+// runs (verify:panels:agents osc133.1 on the runner, whose login shell is
+// bash). The login is dropped from the args and replayed here, in bash's own
+// order, under TC_BASH_LOGIN; without it this is the interactive ~/.bashrc.
+const BASH_STARTUP = `if [[ -n "$TC_BASH_LOGIN" ]]; then
+  unset TC_BASH_LOGIN
+  [[ -r /etc/profile ]] && source /etc/profile
+  if [[ -r "$HOME/.bash_profile" ]]; then source "$HOME/.bash_profile"
+  elif [[ -r "$HOME/.bash_login" ]]; then source "$HOME/.bash_login"
+  elif [[ -r "$HOME/.profile" ]]; then source "$HOME/.profile"; fi
+else
+  [[ -r "$HOME/.bashrc" ]] && source "$HOME/.bashrc"
+fi
+`
+
 function bashFiles(dir: string): Array<{ path: string; content: string }> {
-  return [{ path: join(dir, 'bash', 'bashrc'), content: `[[ -r "$HOME/.bashrc" ]] && source "$HOME/.bashrc"\n` + BASH_HOOKS }]
+  return [{ path: join(dir, 'bash', 'bashrc'), content: BASH_STARTUP + BASH_HOOKS }]
 }
+
+const BASH_LOGIN_FLAGS = new Set(['-l', '--login'])
 
 export function shellIntegrationFor(i: ShellIntegrationInput): ShellIntegration {
   const none: ShellIntegration = { env: { ...i.env }, args: [...(i.args ?? [])], files: [], shell: null }
@@ -94,7 +128,14 @@ export function shellIntegrationFor(i: ShellIntegrationInput): ShellIntegration 
   }
   if (name === 'bash') {
     const files = bashFiles(i.dir)
-    return { env: { ...i.env }, args: ['--rcfile', files[0]!.path, ...(i.args ?? [])], files, shell: 'bash' }
+    const args = i.args ?? []
+    const login = args.some((a) => BASH_LOGIN_FLAGS.has(a))
+    return {
+      env: login ? { ...i.env, TC_BASH_LOGIN: '1' } : { ...i.env },
+      args: ['--rcfile', files[0]!.path, ...args.filter((a) => !BASH_LOGIN_FLAGS.has(a))],
+      files,
+      shell: 'bash'
+    }
   }
   return none
 }

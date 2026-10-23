@@ -25,10 +25,15 @@
 let runPanelsSuite
 try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
-const WATCHDOG_MS = 47000 // measured 2026-09-29 alone in the Electron tier, two green runs: 37.6 s, 37.4 s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 60000 // measured 2026-10-22 (M458) on the Mac runner at TC_WATCHDOG_SCALE 2, with app.12/app.13 and the reload retries in: green runs 81.6 s and 84.7 s (90% of the scaled 94 s, headroom.1's line) and one slow run past it — about 47 s unscaled at worst; 1.25x that, to the next second. Was 47000, measured 2026-09-29 alone in the Electron tier, two green runs: 37.6 s, 37.4 s — re-measure when a milestone adds checks
 
+// perf.2's hang bound, scaled as the watchdog is: the Mac runner (TC_WATCHDOG_SCALE 2)
+// read a pinch at p95 250 and 350 ms on contended runs whose every drag still
+// landed — the machine, not a hang. Parsed as the harness parses it (a
+// malformed value is 1).
+const HANG_P95_MS = 250 * (Number(process.env.TC_WATCHDOG_SCALE) > 0 ? Number(process.env.TC_WATCHDOG_SCALE) : 1)
 runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
-  const { IPC_EVENTS, app, attachPtyLifecycle, chatSpawns, fromPanels, flushLayoutStore, join, killedPanelIds, layoutStore, listSessions, mkdtempSync, ok, ptyManager, requestFromRendererWith, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, zoomToScale, state } = ctx
+  const { IPC_EVENTS, app, attachPtyLifecycle, chatSpawns, fromPanels, flushLayoutStore, join, killedPanelIds, layoutStore, listSessions, mkdtempSync, ok, ptyManager, requestFromRendererWith, sessionMap, settle, sleep, tmpdir, waitUntil, wc, win, writeFileSync, zoomToScale, state, reloadWithin } = ctx
   const { clipboard } = require('electron')
   // A renderer reload must DETACH every session, exactly as main/index.ts
   // wires it (the other parts' first line, for the same reason).
@@ -45,9 +50,32 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
     ptyManager.create = (spec) => { createdPanelIds.push(spec && spec.panelId); return realCreate(spec) }
   }
 
+  // Renderer errors, kept for perf.2's `lost` evidence: a run read NO .shape
+  // and no workspace title after the 40-shape commit, which is what an
+  // uncaught render error looks like with no error boundary at the root.
+  // Electron has passed console-message both as (event, level, message) and
+  // as one details object; read either.
+  const rendererErrors = []
+  wc.on('console-message', (e, level, message) => {
+    const lv = typeof level === 'number' ? level : (e && e.level)
+    const msg = typeof message === 'string' ? message : (e && e.message)
+    if (lv !== 3 && lv !== 'error') return
+    rendererErrors.push(String(msg).slice(0, 300))
+    // Whole, on its own line: a development build's component stack is
+    // what names the component behind a render loop.
+    console.log(`[renderer-error] ${String(msg).slice(0, 4000).replace(/\n/g, ' | ')}`)
+  })
+  wc.on('render-process-gone', (_e, details) => rendererErrors.push(`render-process-gone ${JSON.stringify(details)}`))
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   const js = (code) => wc.executeJavaScript(code)
-  const reload = async () => { const loaded = new Promise((r) => wc.once('did-finish-load', r)); wc.reload(); await loaded; await settle() }
+  // An uncaught renderer error's console line carries only its message; the page
+  // logs the stack too, so the recorder above keeps where it was thrown (perf.2's
+  // lost page was React #185, traced this way to the attention census, M458).
+  const installErrorStacks = () => js(`(() => { if (window.__errorStacks) return true; window.__errorStacks = true
+    window.addEventListener('error', (e) => { console.error('[stack] ' + String(e.error && e.error.stack || e.message)) })
+    return true })()`).catch(() => false)
+  const reload = async () => { await reloadWithin(wc); await settle(); await installErrorStacks() }
   const press = async (x, y, modifiers = []) => {
     wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })
     wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers })
@@ -856,17 +884,34 @@ runPanelsSuite('flowchart', WATCHDOG_MS, async (ctx) => {
       for (const [i, s] of pick.entries()) await press(s.cx, s.cy, i === 0 ? [] : ['shift'])
       const selectedIds = (await shapes()).filter((s) => s.selected).map((s) => s.id)
       const manyBefore = await rectOf(pick.map((s) => s.id))
+      await installErrorStacks()
       const many = await dragFrames(lead, '200 shapes · drag a 40-shape selection (multi-move)')
-      const manyAfter = await rectOf(pick.map((s) => s.id))
+      // A condition, not the drag's one settle(): two of three CI runs read
+      // every member 'missing' after the multi-move commit, so the read waits
+      // until all 40 are back in the DOM with a position. countAfter, before
+      // and after say which side lacked them if it still misses.
+      const pickIds = pick.map((s) => s.id)
+      await waitUntil(async () => { const r = await rectOf(pickIds); return pickIds.every((id) => r[id] && Number.isFinite(r[id].x) && Number.isFinite(r[id].y)) }, 5000)
+      const manyAfter = await rectOf(pickIds)
+      const countAfter = (await shapes()).length
+      // Evidence for the run that read 0 shapes after the commit (the 5 s wait
+      // above did not bring them back): what the page was showing instead.
+      const lost = countAfter === 200 ? null : await js(`({ panels: document.querySelectorAll('.panel[data-panel-id]').length, shapeKind: document.querySelectorAll('[data-panel-kind="shape"]').length, world: document.querySelector('.world') !== null, behindWorld: document.querySelector('.canvas--behind-world') !== null, scale: window.__m4aScale ? window.__m4aScale() : null, workspace: document.querySelector('.shell__workspace')?.getAttribute('title') ?? null, dialog: [...document.querySelectorAll('[role="dialog"]')].map((d) => (d.getAttribute('aria-label') || d.textContent || '').slice(0, 60)), canvas: document.querySelectorAll('.canvas').length, root: (document.getElementById('root') || document.body).childElementCount, text: (document.body.innerText || '').slice(0, 160) })`)
+      if (lost) {
+        // Whether the loss is the page's or the layout's: the saved panel
+        // count main holds, and every renderer error since the suite began.
+        try { const saved = layoutStore.load(); lost.saved = saved && Array.isArray(saved.panels) ? saved.panels.length : null } catch (err) { lost.saved = `load threw ${err && err.message}` }
+        lost.errors = rendererErrors.slice(-6)
+      }
       const deltas = pick.map((s) => manyBefore[s.id] && manyAfter[s.id] ? `${Math.round(manyAfter[s.id].x - manyBefore[s.id].x)},${Math.round(manyAfter[s.id].y - manyBefore[s.id].y)}` : 'missing')
       const oneDelta = new Set(deltas)
       const unselectedStill = (await shapes()).filter((s) => !pick.some((p) => p.id === s.id)).length
       const measured = [...rows, single && single.row, many && many.row].filter(Boolean)
       ok(ID2,
-        measured.length === 4 && measured.every((r) => r.frames >= 60 && Number.isFinite(r.meanMs) && Number.isFinite(r.p95Ms) && r.p95Ms < 250) &&
+        measured.length === 4 && measured.every((r) => r.frames >= 60 && Number.isFinite(r.meanMs) && Number.isFinite(r.p95Ms) && r.p95Ms < HANG_P95_MS) &&
           single && single.at.hit && singleMoved && rerouted &&
           pick.length === 40 && selectedIds.length === 40 && oneDelta.size === 1 && !oneDelta.has('missing') && !oneDelta.has('0,0') && unselectedStill === 160,
-        JSON.stringify({ measured, single: single && single.at, singleMoved, oneBefore, oneAfter, expectDx, expectDy, rerouted, routes: Object.keys(routesBefore).length, picked: pick.length, selected: selectedIds.length, deltas: [...oneDelta] }))
+        JSON.stringify({ measured, single: single && single.at, singleMoved, oneBefore, oneAfter, expectDx, expectDy, rerouted, routes: Object.keys(routesBefore).length, picked: pick.length, selected: selectedIds.length, deltas: [...oneDelta], countAfter, lost, before: Object.keys(manyBefore).length, after: Object.keys(manyAfter).length, many: many && many.at }))
     } catch (error) {
       if (!reportedP1) ok(ID1, false, `threw: ${error && error.stack ? error.stack : error}`)
       ok(ID2, false, `threw: ${error && error.stack ? error.stack : error}`)
