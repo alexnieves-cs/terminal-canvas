@@ -1122,6 +1122,13 @@ const SCENES = [
       // which, so a run that flips names its own cause.
       await k.layoutStill()
       await k.cameraLog('starter')
+      // The framing applyStarter lands depends on the canvas box the instant
+      // it ran (x of -56 on some runs, -206 on others, 9.9% apart). Fit all
+      // (Cmd+1, the product's own door) frames what is on the canvas NOW, so
+      // the picture no longer depends on that instant.
+      await k.press('1', { metaKey: true })
+      await sleep(900)
+      await k.cameraLog('starter-fitted')
       console.log(`[shot] starter: minimap ${await k.js(`(() => { const m = document.querySelector('[data-minimap]'); if (!m) return 'absent'; const r = m.getBoundingClientRect(); return JSON.stringify({ w: Math.round(r.width), x: Math.round(r.x), op: getComputedStyle(m).opacity, presence: m.getAttribute('data-presence') || m.className }) })()`)}`)
       await k.shot('starter')
     } },
