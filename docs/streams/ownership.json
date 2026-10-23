@@ -33,16 +33,16 @@
       "scripts/verify-all.cjs",
       "scripts/verify-visual.cjs",
       ".github/workflows/verify.yml",
-      ".github/workflows/triage.yml"
+      ".github/workflows/triage.yml",
+      "scripts/shot.cjs",
+      "scripts/shot-scenes/**"
     ],
     "B": [
       ".github/workflows/release.yml",
       ".github/workflows/shots.yml",
       "build/**",
       "electron-builder.config.cjs",
-      "scripts/shot.cjs",
       "scripts/shot-composite.cjs",
-      "scripts/shot-scenes/**",
       "verify/visual/**",
       "scripts/verify-package.cjs",
       "scripts/verify-packaged.cjs",

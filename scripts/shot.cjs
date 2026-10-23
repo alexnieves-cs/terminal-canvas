@@ -109,8 +109,11 @@ function clockAt(h, m) {
 // out, and a caption that never resolves is a thrown scene, not a golden.
 async function changesRead(k, scene) {
   const loading = `[...document.querySelectorAll('.orch__caption[role="status"]')].some((p) => p.textContent.trim() === 'Reading changes…')`
-  for (let i = 0; i < 50 && (await k.js(loading)); i++) await sleep(100)
-  if (await k.js(loading)) throw new Error(`${scene}: the Changes pane still says "Reading changes…" after 5s, so the shot would pin a loading caption`)
+  // M463. 30s, not 5: a hosted runner reading git under a full paint run took
+  // longer than 5s once in three (orchestration-watch), and a scene thrown for
+  // a slow disk is a red check about the machine, not the app.
+  for (let i = 0; i < 300 && (await k.js(loading)); i++) await sleep(100)
+  if (await k.js(loading)) throw new Error(`${scene}: the Changes pane still says "Reading changes…" after 30s, so the shot would pin a loading caption`)
 }
 
 // Never touch the real store: this harness spawns real shells.
@@ -452,8 +455,9 @@ const SCENES = [
       // rewrote palette, search and every other scene that lists bookmarks —
       // a scene must not change the fixture other scenes are shot against.
       await kit.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
+      await kit.layoutStill()
       await kit.goTo('worker a')
-      await kit.zoom(0.5)
+      await kit.zoom(0.5, true)
       await sleep(400)
       // Fire, then freeze 80% of the way across (720 of EDGE_FIRE_MS's 900).
       // Order matters: the freeze must land after the fire's timestamp or the
@@ -484,8 +488,9 @@ const SCENES = [
   { name: 'edge-waiting', intent: 'M233. A join that is waiting: the worker\'s edge has DELIVERED into `claude — api (2)` and rests at the accent with no packet — the travel is over, the join is not. Captured after the breath has finished: the waiting edge breathes three times and then rests, because nothing on this canvas animates forever (M111\'s rule, applied to an edge), and the resting value is what a person who waits a minute actually sees — and what a reduced-motion user sees from the start. It differs from `edge-firing` by the absence of the packet, which is deliberate and is the point: the two states differ by whether something is CROSSING, not by how the edge is coloured.',
     run: async (kit) => {
       await kit.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
+      await kit.layoutStill()
       await kit.goTo('worker a')
-      await kit.zoom(0.5)
+      await kit.zoom(0.5, true)
       await sleep(400)
       await kit.js(`(() => { window.__m233Flow('arrived', 'groupA', 'twin'); window.__m233Flow('waiting', '', 'twin', ['chat']); return true })()`)
       // Past the arrival flash (EDGE_ARRIVE_MS) and past three breaths of
@@ -2085,6 +2090,29 @@ app.whenReady().then(async () => {
   // The kit every scene drives the renderer through.
   // ---------------------------------------------------------------------
   const js = (code) => wc.executeJavaScript(code)
+  // M463. See kit.shot. True when two bitmaps differ in under 0.02% of pixels
+  // by more than the channel tolerance the visual suite itself uses (24 of 255).
+  const HOLD_STILL_LOOKS = 25
+  const sameFrame = (a, b) => {
+    if (a.length !== b.length) return false
+    const pixels = a.length / 4
+    let differing = 0
+    for (let i = 0; i < a.length; i += 4) {
+      if (Math.abs(a[i] - b[i]) > 24 || Math.abs(a[i + 1] - b[i + 1]) > 24 || Math.abs(a[i + 2] - b[i + 2]) > 24) differing += 1
+    }
+    return differing / pixels < 0.0002
+  }
+  /** Looks at the page until two consecutive captures agree. Returns the look that agreed, or -1 past the bound. */
+  const holdStill = async () => {
+    let prev = null
+    for (let i = 0; i < HOLD_STILL_LOOKS; i++) {
+      const frame = (await wc.capturePage()).toBitmap()
+      if (prev !== null && sameFrame(prev, frame)) return i
+      prev = frame
+      await sleep(200)
+    }
+    return -1
+  }
   const kit = {
     js,
     // M345. The shared-workspace scenes turn the share on through these.
@@ -2109,6 +2137,15 @@ app.whenReady().then(async () => {
         const where = await js(`(() => { const t = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const w = ${JSON.stringify(leaks[0])}; const i = t.indexOf(w); return i < 0 ? '' : t.slice(Math.max(0, i - 60), i + w.length + 40).replace(/\\s+/g, ' ') })()`)
         throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name, in "${where}"`)
       }
+      // M463. A picture is taken once the page HOLDS STILL: two captures 200ms
+      // apart that agree. Six scenes painted one of two pictures from run to
+      // run on a hosted runner (the top bar before and after its layout, a
+      // WebGL layer before and after its first frame, a camera mid-flight),
+      // because each waited a fixed time for something whose time is the
+      // machine's. A page that never holds still (a cube bobbing, an arc in
+      // flight) is captured after the bound, as before, and says so in the log.
+      const looks = await holdStill()
+      if (looks < 0) console.log(`[shot] ${name}: never held still in ${HOLD_STILL_LOOKS} looks; captured as it was`)
       // M466. Two captures, the first thrown away. The window is hidden, so
       // nothing asks the compositor for a frame between gestures, and the
       // first capturePage after a change hands back the LAST frame it made
@@ -2213,7 +2250,26 @@ app.whenReady().then(async () => {
         const r = s.getBoundingClientRect(); s.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
       await sleep(300)
     },
-    zoom: async (target) => {
+    // M463. Waits until the canvas host's box stops changing (three looks
+    // 120ms apart). A pane closed a moment ago re-lays the canvas out after
+    // the setting lands; a goTo centred on the OLD width bakes that width into
+    // the camera, which is the other half of the edge scenes' two pictures.
+    layoutStill: async () => {
+      let prev = ''
+      let agreed = 0
+      for (let i = 0; i < 50 && agreed < 3; i++) {
+        const box = await js(`(() => { const r = document.querySelector('.canvas')?.getBoundingClientRect(); return r ? [r.x, r.y, r.width, r.height].map(Math.round).join(',') : '' })()`)
+        agreed = box === prev ? agreed + 1 : 0
+        prev = box
+        await sleep(120)
+      }
+    },
+    // M463. `strict` lands within 0.4% of the target instead of 4%. The loose
+    // window stops at whichever pinch step first falls inside it, and a camera
+    // still easing from the previous goTo moves that step between runs: the two
+    // edge scenes painted their panels about 60px apart on a loaded runner.
+    zoom: async (target, strict = false) => {
+      const window4 = strict ? 0.004 : 0.04
       // A pinch is a wheel with ctrlKey (canvas-input.ts); step until the
       // scale lands within a few percent of the target.
       // M410. The pinch lands on OPEN canvas: at the host's centre it could
@@ -2231,7 +2287,7 @@ app.whenReady().then(async () => {
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`
       for (let i = 0; i < 120; i++) {
         const scale = await js(`window.__m4aScale()`)
-        if (Math.abs(scale - target) / target < 0.04) break
+        if (Math.abs(scale - target) / target < window4) break
         // A pinch step is exp(-deltaY × 0.01) with deltaY clamped to ±25
         // (canvas-input.ts): a fixed ±60 always moved a whole ×0.78 step,
         // which can straddle the 4% window forever from some starting scales.
