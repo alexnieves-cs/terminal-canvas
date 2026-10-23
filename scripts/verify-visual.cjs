@@ -204,7 +204,7 @@ app.whenReady().then(async () => {
   const shot = await runShot(dir)
   // M463. The scenes that never held still are named in the run's own log, so
   // a flip is read from the job and not only from the pictures it left.
-  for (const line of shot.out.split('\n')) if (line.includes('never held still')) console.log(line.trim())
+  for (const line of shot.out.split('\n')) if (line.includes('never held still') || line.includes('[shot] camera') || line.includes('the 3D layer is blank') || line.includes('rd-world-focus: the camera')) console.log(line.trim())
   const manifestPath = join(dir, 'manifest.json')
   if (shot.code !== 0 || !existsSync(manifestPath)) {
     ok('harness the shot harness painted its scenes and wrote a manifest', false, `exit ${shot.code}; tail: ${shot.out.slice(-600)}`)
