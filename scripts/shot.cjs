@@ -1013,6 +1013,7 @@ const SCENES = [
         turn('chat', 'w-l3', [{ type: 'tool_use', id: 'wl3', name: 'Edit', input: { file_path: f('server.ts'), old_string: 'const tick = 2000', new_string: 'const tick = watchdogBudget(load)\nlog.debug(tick)' } }])
         await sleep(1150)
         const painted = await k.js(`(() => { const r = document.querySelector('[data-orch-live]'); return r ? { towers: r.dataset.orchLiveTowers, events: r.dataset.orchLiveEvents } : null })()`)
+        console.log(`[shot] orchestration-watch: live ${JSON.stringify(painted)}`)
         if (!painted || Number(painted.towers) < 3) throw new Error(`orchestration-watch: expected at least 3 towers, got ${JSON.stringify(painted)}`)
         // M463. The Watch layer is WebGL too: on a runner it sometimes holds a
         // blank frame (3.7% off the golden, the towers and HUD gone). A blank
@@ -2162,6 +2163,24 @@ app.whenReady().then(async () => {
     // `still: false` is for a scene whose picture IS a moment (a transition frozen mid-way): holding still would wait it out.
     shot: async (name, opts = {}) => {
       await sleep(250)
+      // M463. The top bar's "N sessions" label counts the terminal and chat
+      // panels on a 1 s tick (TopBar's useObservedSessionCount), so a capture
+      // within a second of a panel arriving or leaving reads the PREVIOUS
+      // count, and the label's width moves the search field with it: both
+      // pictures are stable, 0.58% apart, which no hold-still can tell
+      // apart. Wait for the label to say what is on the canvas (silence for
+      // none), then capture. A scene whose top bar is not mounted is left alone.
+      for (let i = 0; i < 40; i++) {
+        const settled = await js(`(() => {
+          if (!document.querySelector('.shell__top')) return true
+          const n = document.querySelectorAll('[data-panel-kind="terminal"], [data-panel-kind="chat"]').length
+          const l = document.querySelector('[data-session-count]')
+          const want = n <= 0 ? '' : n === 1 ? '1 session' : n + ' sessions'
+          return (l ? l.textContent.trim() : '') === want
+        })()`)
+        if (settled) break
+        await sleep(100)
+      }
       // M410. No capture names this Mac. The PNGs are committed and handed to
       // critics, and a live shell's row 0 once printed the developer's
       // `user@host ~ %` (flowchart-dark). Every terminal's rows and the
