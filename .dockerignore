@@ -1,0 +1,15 @@
+# Lane Q (M594). The host image builds from the repo root; none of this is needed inside it.
+node_modules
+out
+dist
+release
+.git
+.claude
+*.log
+*.tsbuildinfo
+docs
+reports
+research_notes
+notes
+output
+verify

@@ -7,8 +7,12 @@ import type { CombineRunResult } from './combine'
 import type { CombineInputsResult, IntegrateRequest, IntegrateResult, IntegrationReceipt } from './integration'
 import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { RadarLane, RadarReport } from './collision-radar'
+import type { LearnDecideRequest, LearnDecideResult, LearnProposeRequest, LearnProposeResult, LearnProveRequest, LearnProveResult, LearnRead, LearnRecordResult } from './learn'
+import type { CommentFacts } from './lessons'
 import type { TonightBatchSpec, TonightStatus } from './tonight'
 import type { ForkRequest, ForkResult, TurnSnapshotRow } from './turn-fork'
+import type { TournamentStatus } from './tournament'
+import type { CloudLane, CloudProviderId } from './cloud-lane'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
 import type { Recipe } from './recipes'
@@ -21,7 +25,7 @@ import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnaps
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { HostState } from './exit-explain'
-import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
+import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult, NightFilmExportRequest, NightFilmExportResult, NightFilmRecord, NightFilmRecordRequest } from './export'
 import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
 import type { FlowchartExportRequest, FlowchartExportResult, FlowchartReadRequest, FlowchartReadResult } from './flowchart-files'
 import type { ToolGenerateRequest, ToolGenerateResult } from './tool-spec'
@@ -712,6 +716,19 @@ export const IPC = {
    * picture is refused before the sheet opens. Never rejects.
    */
   EXPORT_FLOWCHART: 'export:flowchart',
+  /**
+   * M562 (lane L). What the night left on record — the ledger up to the
+   * night's end and the Tonight batch — for the night film's script. Read in
+   * main because `ledger:timeline` is capped at the panes' 200 rows.
+   */
+  FILM_NIGHT: 'film:night',
+  /**
+   * M563 (lane L). The night film as MP4 bytes, to a file the person picks.
+   * Main writes only a box tree of the muxer's own shape; the words in the
+   * frames passed the outward gate when the script was built, and the count
+   * comes back with the path.
+   */
+  EXPORT_NIGHT_FILM: 'export:night-film',
   /** M251. A Markdown deck as .pptx, scrubbed field by field, through a save dialog. */
   DECK_EXPORT_PPTX: 'deck:export-pptx',
   /**
@@ -782,6 +799,27 @@ export const IPC = {
    * (`merge-tree --write-tree`, touching no checkout). Read-only.
    */
   LANE_RADAR: 'lane:radar',
+  /**
+   * M570 (lane O). A harness that learns. `read` answers the lessons each
+   * named repository (resolved to its main tree) has been taught; `record`
+   * files one from a review comment the person SENT. A discard's lesson is
+   * main's own (main/lesson-capture.ts) and has no channel.
+   */
+  LEARN_READ: 'learn:read',
+  LEARN_RECORD: 'learn:record',
+  /**
+   * M571–M572. `propose` asks a no-tools agent for ONE rule from named
+   * lessons and keeps it as a draft (refused while `learn.agents` is off);
+   * `decide` is the person's answer to a draft. Neither writes the rule.
+   */
+  LEARN_PROPOSE: 'learn:propose',
+  LEARN_DECIDE: 'learn:decide',
+  /**
+   * M573–M575. Replay a draft's task in a throwaway worktree with the rule
+   * applied (refused while `learn.agents` is off). Answers at once with the
+   * draft `proving`; the verdict lands on it, read back through `read`.
+   */
+  LEARN_PROVE: 'learn:prove',
   /**
    * M312. The repository setup: `read` answers the saved record or a DRAFT
    * detected from the repository's own files; `save` writes one (re-resolved
@@ -892,6 +930,39 @@ export const IPC = {
    */
   FORK_TURNS: 'fork:turns',
   FORK_BRANCH: 'fork:branch',
+  /**
+   * M547. A TOURNAMENT's doors over the runner: start one (parsed by name in
+   * main; main makes each entrant's worktree and chat through the create
+   * door and starts its checked auto run), stop it (every run stopped, the
+   * field scored as it stands), and read its status. The renderer mints the
+   * entrants' panel ids and places their chats; main runs them.
+   */
+  TOURNAMENT_START: 'tournament:start',
+  TOURNAMENT_STOP: 'tournament:stop',
+  TOURNAMENT_STATUS: 'tournament:status',
+  /**
+   * M543. CLOUD LANES (lane H): a task handed to a cloud agent and read back
+   * as a pull request (main/cloud-lanes.ts). `dispatch` asks the person in
+   * main's own dialog before anything leaves, so the renderer only names the
+   * task; `list` is every lane main watches, `refresh` polls one now, and
+   * `forget` stops watching one (nothing on GitHub changes).
+   */
+  CLOUD_LIST: 'cloud:list',
+  CLOUD_DISPATCH: 'cloud:dispatch',
+  CLOUD_REFRESH: 'cloud:refresh',
+  CLOUD_FORGET: 'cloud:forget',
+  /**
+   * M544. Merge a ready lane's PR through the broker. Main re-reads the PR,
+   * merges only when it is ready NOW, pins the head the checks passed on, and
+   * asks first with the files that will land.
+   */
+  CLOUD_MERGE: 'cloud:merge',
+  /**
+   * M545. The collision radar for cloud lanes: each live lane's PR head
+   * (fetched into a hidden ref) against the local lanes the renderer names,
+   * as M479's report keyed by the lane's TASK id so a flag lands on its card.
+   */
+  CLOUD_RADAR: 'cloud:radar',
   /**
    * M98. Session grants — `Allow for session`. The grant itself rides
    * `agent:answer`'s `scope`; these two read the granted tools for a panel
@@ -1359,8 +1430,44 @@ export const IPC_EVENTS = {
    * for a fact that had not changed. A failed step carries its sentence;
    * the splash stops, and the 09 surface is the reader of that sentence.
    */
-  BOOT_PROGRESS: 'boot:progress'
+  BOOT_PROGRESS: 'boot:progress',
+  /** M543. One cloud lane as it now stands, after a poll that moved it. */
+  CLOUD_CHANGED: 'cloud:changed'
 } as const
+
+/** M543. A cloud lane as the renderer shows it: the record and the sentence its state was derived with. */
+export interface CloudLaneView extends CloudLane {
+  reason: string
+  /** M544. The PR's size as last read; absent until a PR is read. */
+  stat?: { additions: number; deletions: number; files: number }
+}
+
+export type CloudMergeResult =
+  | { kind: 'merged'; sha: string; pr: number }
+  | { kind: 'cancelled' }
+  | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
+
+/**
+ * M543. What the renderer names when it sends a task to the cloud. The
+ * repository is `repo` when the task knows it (a GitHub issue's key), else
+ * main reads it from `cwd`'s origin remote. `issue` hands an existing issue
+ * over instead of opening one.
+ */
+export interface CloudDispatchRequest {
+  provider: CloudProviderId
+  title: string
+  task: string
+  repo?: string
+  cwd?: string
+  issue?: number
+  workItemId?: string
+}
+
+export type CloudDispatchResult =
+  | { kind: 'dispatched'; lane: CloudLaneView; redacted: number }
+  | { kind: 'handoff-failed'; lane: CloudLaneView; reason: string }
+  | { kind: 'cancelled' }
+  | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
 
 export interface FileReadRequest {
   panelId: PanelId
@@ -2053,6 +2160,29 @@ export interface CanvasBridge {
     /** M479. See LANE_RADAR. */
     radar(lanes: RadarLane[]): Promise<RadarReport>
   }
+  /** M543. See CLOUD_LIST. */
+  cloud: {
+    list(): Promise<CloudLaneView[]>
+    /** The task as the person wrote it; main resolves the repository, scrubs, and asks before sending. */
+    dispatch(req: CloudDispatchRequest): Promise<CloudDispatchResult>
+    refresh(id: string): Promise<CloudLaneView | null>
+    forget(id: string): Promise<boolean>
+    /** M544. See CLOUD_MERGE. */
+    merge(id: string): Promise<CloudMergeResult>
+    /** M545. See CLOUD_RADAR. */
+    radar(lanes: RadarLane[]): Promise<RadarReport>
+    onChanged(listener: (lane: CloudLaneView) => void): () => void
+  }
+  /** M570. See LEARN_READ. */
+  learn: {
+    read(roots: string[]): Promise<LearnRead>
+    record(facts: CommentFacts): Promise<LearnRecordResult>
+    /** M571. See LEARN_PROPOSE. */
+    propose(req: LearnProposeRequest): Promise<LearnProposeResult>
+    decide(req: LearnDecideRequest): Promise<LearnDecideResult>
+    /** M573. See LEARN_PROVE. */
+    prove(req: LearnProveRequest): Promise<LearnProveResult>
+  }
   /** M480. See TONIGHT_START. */
   tonight: {
     start(batch: TonightBatchSpec): Promise<{ kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }>
@@ -2063,6 +2193,12 @@ export interface CanvasBridge {
   fork: {
     turns(panelId: string): Promise<TurnSnapshotRow[]>
     branch(req: ForkRequest): Promise<ForkResult>
+  },
+  /** M547. See TOURNAMENT_START. The spec is `shared/tournament.ts`'s, each entrant naming its panel. */
+  tournament: {
+    start(spec: unknown): Promise<{ kind: 'started'; status: TournamentStatus } | { kind: 'refused'; reason: string }>
+    stop(): Promise<boolean>
+    status(): Promise<TournamentStatus | null>
   }
   /** M312. See SETUP_READ. */
   setup: {
@@ -2204,6 +2340,12 @@ export interface CanvasBridge {
     deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
     /** A diagram's Mermaid/SVG text, scrubbed by the outward gate, to a file the person chooses; the count is on the answer. */
     flowchart(req: FlowchartExportRequest): Promise<FlowchartExportResult>
+    /** M563. See EXPORT_NIGHT_FILM. */
+    nightFilm(req: NightFilmExportRequest): Promise<NightFilmExportResult>
+  }
+  /** M562. See FILM_NIGHT. */
+  film: {
+    night(req: NightFilmRecordRequest): Promise<NightFilmRecord>
   }
   tool: {
     /** M252. A description in, a tool OUT — never run. The renderer saves it unreviewed. */

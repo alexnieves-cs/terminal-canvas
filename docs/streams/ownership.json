@@ -15,7 +15,8 @@
     "K": "M556-M560",
     "L": "M561-M564",
     "N": "M565-M569",
-    "O": "M570-M579"
+    "O": "M570-M579",
+    "Q": "M590-M599"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -110,7 +111,9 @@
       "scripts/verify-cloud.cjs"
     ],
     "I": [
-      "scripts/verify-tournament.cjs"
+      "scripts/verify-tournament.cjs",
+      "src/shared/tournament.ts",
+      "src/main/tournament-runner.ts"
     ],
     "J": [
       "scripts/verify-vm.cjs"
@@ -119,13 +122,31 @@
       "scripts/verify-fork.cjs"
     ],
     "L": [
-      "scripts/verify-film.cjs"
+      "scripts/verify-film.cjs",
+      "scripts/film-sample.cjs",
+      "src/shared/night-film.ts",
+      "src/shared/night-film-sample.ts",
+      "src/shared/mp4-mux.ts",
+      "src/main/film-export.ts",
+      "src/renderer/film/**"
     ],
     "N": [
       "scripts/verify-demo.cjs"
     ],
     "O": [
       "scripts/verify-learn.cjs"
+    ],
+    "Q": [
+      "src/host/**",
+      "src/host-web/**",
+      "vite.host.config.ts",
+      "scripts/build-host.cjs",
+      "scripts/verify-host.cjs",
+      "scripts/host-smoke.cjs",
+      "deploy/host/**",
+      ".github/workflows/host.yml",
+      "docs/hosted.md",
+      ".dockerignore"
     ]
   }
 }

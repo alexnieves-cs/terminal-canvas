@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { homedir } from 'os'
 import { hookupIpc } from '@sentry/electron/preload-namespaced'
-import type { WatcherStateEvent, RelayData, RelayView } from '@shared/ipc-contract'
+import type { WatcherStateEvent, RelayData, RelayView, CloudLaneView } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PresenceRoster } from '../shared/presence'
 import type { WorldConnection } from '../shared/world-events'
@@ -254,6 +254,23 @@ const bridge: CanvasBridge = {
     merge: (req: unknown) => ipcRenderer.invoke(IPC.LANE_MERGE, req),
     radar: (lanes: unknown) => ipcRenderer.invoke(IPC.LANE_RADAR, lanes)
   },
+  cloud: {
+    list: () => ipcRenderer.invoke(IPC.CLOUD_LIST),
+    dispatch: (req: unknown) => ipcRenderer.invoke(IPC.CLOUD_DISPATCH, req),
+    refresh: (id: string) => ipcRenderer.invoke(IPC.CLOUD_REFRESH, id),
+    forget: (id: string) => ipcRenderer.invoke(IPC.CLOUD_FORGET, id),
+    merge: (id: string) => ipcRenderer.invoke(IPC.CLOUD_MERGE, id),
+    radar: (lanes: unknown) => ipcRenderer.invoke(IPC.CLOUD_RADAR, lanes),
+    onChanged: (listener) => subscribe<CloudLaneView>(IPC_EVENTS.CLOUD_CHANGED, listener)
+  },
+  // M570 (lane O). The lessons a review taught.
+  learn: {
+    read: (roots: unknown) => ipcRenderer.invoke(IPC.LEARN_READ, roots),
+    record: (facts: unknown) => ipcRenderer.invoke(IPC.LEARN_RECORD, facts),
+    propose: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_PROPOSE, req),
+    decide: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_DECIDE, req),
+    prove: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_PROVE, req)
+  },
   tonight: {
     start: (batch: unknown) => ipcRenderer.invoke(IPC.TONIGHT_START, batch),
     stop: () => ipcRenderer.invoke(IPC.TONIGHT_STOP),
@@ -262,6 +279,11 @@ const bridge: CanvasBridge = {
   fork: {
     turns: (panelId: string) => ipcRenderer.invoke(IPC.FORK_TURNS, panelId),
     branch: (req: unknown) => ipcRenderer.invoke(IPC.FORK_BRANCH, req)
+  },
+  tournament: {
+    start: (spec: unknown) => ipcRenderer.invoke(IPC.TOURNAMENT_START, spec),
+    stop: () => ipcRenderer.invoke(IPC.TOURNAMENT_STOP),
+    status: () => ipcRenderer.invoke(IPC.TOURNAMENT_STATUS)
   },
   setup: {
     read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
@@ -343,7 +365,11 @@ const bridge: CanvasBridge = {
     canvasPng: () => ipcRenderer.invoke(IPC.EXPORT_CANVAS_PNG),
     deckPptx: (req: { path: string }) => ipcRenderer.invoke(IPC.DECK_EXPORT_PPTX, req),
     deckPdf: (req) => ipcRenderer.invoke(IPC.EXPORT_DECK_PDF, req),
-    flowchart: (req) => ipcRenderer.invoke(IPC.EXPORT_FLOWCHART, req)
+    flowchart: (req) => ipcRenderer.invoke(IPC.EXPORT_FLOWCHART, req),
+    nightFilm: (req) => ipcRenderer.invoke(IPC.EXPORT_NIGHT_FILM, req)
+  },
+  film: {
+    night: (req) => ipcRenderer.invoke(IPC.FILM_NIGHT, req)
   },
   tool: {
     generate: (req: { description: string; folder: string }) => ipcRenderer.invoke(IPC.TOOL_GENERATE, req)

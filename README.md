@@ -33,7 +33,7 @@
 
 <p align="center"><sub>
   Design mockup of the 6.0 workspace, with sample data.
-  Every screen below is from the same set; none is a recording of a live session.
+  Every still below is from the same set; none is a recording of a live session.
 </sub></p>
 
 > **Status: `v6.0.1`.** macOS only, Apple Silicon by default. The app is
@@ -76,8 +76,15 @@ each agent in a real terminal on a canvas you arrange, and then does the bookkee
 ## A look around
 
 <p align="center">
-  <img src="docs/assets/tour.gif" alt="A slideshow of the Terminal Canvas screens listed below" width="800">
+  <img src="docs/assets/night-film.gif" alt="Last night as a one-minute film: a title card reading 23:10 to 06:40, three tasks, two checked; the camera moves across five panels as agents start, a test watcher fails and passes, an agent stops for permission, one task's check keeps failing and two pass; then the morning queue lists the failed task first and the two checked tasks to review." width="720">
 </p>
+
+<p align="center"><sub>
+  <b>The night as a film.</b> After a Tonight batch, <i>Last night</i> on the morning queue renders the
+  night as a 60-second MP4, drawn by the app from its own record: every word in it passes the same
+  secret scrubber as any other export. This clip is that code run on a sample night
+  (<code>scripts/film-sample.cjs</code>), not a recording of a live session.
+</sub></p>
 
 <table>
   <tr>
@@ -513,13 +520,16 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        diagnostics:sample / diagnostics:export
                        export:panel-text / export:canvas-png
                        export:deck-pdf / deck:export-pptx / tool:generate
-                       export:flowchart
+                       export:flowchart / export:night-film / film:night
                        memory:list / memory:add / vault:read
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
                        env:report / tmux:adoptable / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
                        check:output / combine:run / lane:merge / lane:radar
                        tonight:start / tonight:stop / tonight:status
+                       tournament:start / tournament:stop / tournament:status
+                       cloud:list / cloud:dispatch / cloud:refresh / cloud:forget / cloud:merge / cloud:radar
+                       learn:read / learn:record / learn:propose / learn:decide / learn:prove
                        combine:inputs / combine:integrate / combine:receipts
                        job:list / job:recover
                        agent:cancel-queued / agent:terminate
@@ -574,7 +584,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        canvas:tidy / canvas:flip
                        canvas:feedback
                        board:add
-                       pool:mint / pool:event / boot:progress
+                       pool:mint / pool:event / boot:progress / cloud:changed
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset / canvas:plan
                        preset:spawn / preset:default / preset:capture

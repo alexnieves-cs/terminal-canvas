@@ -118,7 +118,7 @@ review:baseline review:at review:diff git:status git:root review:across review:i
 credential:list credential:set credential:delete credential:verify jira:list github:list
 broker:audit jira:transitions jira:comment jira:transition file:open file:read file:close
 fs:list toolbox:read toolbox:permissions file:write file:create diagnostics:sample
-diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx export:flowchart
+diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx export:flowchart export:night-film film:night
 tool:generate env:report tmux:adoptable link:open ledger:list
 ledger:usage ledger:timeline ledger:event spawn:sheet spawn:recent spawn:recent-used agent:create agent:send agent:interrupt agent:dispose
 agent:answer agent:list agent:transcript agent:import agent:clipboard-image
@@ -137,7 +137,7 @@ agent:event watcher:state vault:changed session:live session:host session:recove
 file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip board:add
 canvas:plan pool:mint pool:event check:output combine:run combine:inputs combine:integrate combine:receipts setup:read setup:save
 setup:prepare editor:open recipe:list recipe:save recipe:delete session:last-exit lane:merge
-lane:radar tonight:start tonight:stop tonight:status
+lane:radar tonight:start tonight:stop tonight:status tournament:start tournament:stop tournament:status cloud:list cloud:dispatch cloud:refresh cloud:forget cloud:merge cloud:radar learn:read learn:record learn:propose learn:decide learn:prove
 job:list job:recover agent:cancel-queued agent:terminate task:evidence task:evidence-index
 task:export-handoff setup:preflight recipe:history agent:queue-edit agent:send-correction
 auth:login auth:logout auth:sessions auth:use auth:status presence:local presence:rosters presence:remote
@@ -145,7 +145,7 @@ team:list team:observe team:observed team:asks team:ask-answer team:asks-changed
 workspace:share workspace:shares workspace:open-share workspace:share-member workspace:share-members
 text:open text:close text:update text:remote
 relay:spawn relay:attach relay:detach relay:input relay:resize relay:control relay:kill
-relay:list relay:view relay:data relay:state world:events world:connection world:status world:retry boot:progress
+relay:list relay:view relay:data relay:state world:events world:connection world:status world:retry boot:progress cloud:changed
 fork:turns fork:branch
 ```
 

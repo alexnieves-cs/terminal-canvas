@@ -18,6 +18,7 @@ its own section, and records each decision it makes there.
 | L | The night as a film | M561–M564 | `verify:film` | M |
 | N | A live demo in the browser | M565–M569 | `verify:demo` | M |
 | O | A harness that learns | M570–M579 | `verify:learn` | L–XL |
+| Q | The app, hosted (opens from any browser) | M590–M599 | `verify:host` | L |
 
 There is no lane M, so a lane id is never read as a milestone.
 
@@ -55,6 +56,10 @@ on" and a provider is a row in a table, not a code path.
   a pure reducer from GitHub facts (issue, PR, check runs, reviews) to one lane
   state: `dispatched → working → pr-open → checks-running → ready | failed |
   needs-you | merged | closed`.
+  *Built:* there is no separate `pr-open` word, since an open PR is either a
+  draft (`working`), running checks or settled by them. The Copilot assignee
+  login and the `@claude` mention are data, and they are manual-only facts,
+  because the suite never calls GitHub.
 - **M542** — dispatch and poll in main (`src/main/cloud-lanes.ts`): the GitHub
   calls go through the broker (the client never reads the token), each write on
   `outward`'s list with a critic, polling backed off and paused while the app
@@ -62,10 +67,31 @@ on" and a provider is a row in a table, not a code path.
 - **M543** — the panel: a `cloud` lane card on the canvas showing the state word,
   the PR, its checks and the diff stat; opened from a task ("Send to cloud"), the
   palette, an agent line and a workflow node (the four doors).
+  *Built:* no new panel kind. The lane shows on the task's own work card (a
+  `cloud` row with the state word, its reason and the PR), because a second
+  card for the same task would split its facts. `cloudDispatchFor` builds the
+  one request every door sends; a teammate's plan cannot `cloud-send`.
 - **M544** — review and merge from the canvas: the review layer reads the PR's
   diff, and Accept merges through the broker.
+  *Built:* the card's PR link opens the PR's files on GitHub, and the card
+  shows its size. Merge appears only on a ready lane; main re-reads the lane
+  and merges only if it is ready now, pinned to the head its checks passed on
+  (a later push makes GitHub refuse with 409), after an ask that lists the
+  files. Reading a cloud PR inside the in-app review layer is not built: that
+  layer reads a local worktree, and fetching the PR into one is M545's radar
+  work, so it lands there or later.
 - **M545** — the morning queue ranks a ready cloud lane beside local lanes, and
   the collision radar trial-merges its head against local worktrees.
+  *Built:* the queue's module is stream C's, so cloud items are built in
+  `cloud-lane.ts` and merged in by the queue's own order, which
+  `verify:cloud morning.1` reads from its source. The radar fetches the PR head
+  into a hidden ref, `refs/tc/cloud/<lane>`, in the repository's main tree.
+  That is the one write: a fetch sends nothing but the ref name, it never
+  prompts, and git's own error text is not repeated, because a remote URL with
+  a token in it is what a fetch error prints.
+
+Lane H is complete at M545. The real-GitHub facts (Copilot's assignee login
+and branch prefix, the Claude Action's `claude/` branches) stay manual-only.
 
 ## I — Tournament mode (M546–M549)
 
@@ -81,6 +107,46 @@ One task, N agents, each in its own worktree; the task's check decides.
   diff stat, cost and time; Pick winner accepts one lane and discards the rest.
 - **M549** — the judge: an optional agent writes a short comparison of the
   passing entrants; `combine` can take the best parts.
+
+Decisions (lane I):
+
+- **An entrant is a chat session, by backend and model, not a terminal
+  preset.** Only a chat has a turn end, a spend meter and M475's check gate;
+  a terminal preset has none of the three, so "the check decides" could not
+  hold for it. (2026-10-26, M546.)
+- **The check is required.** A spec without one is refused by name: ranking
+  N claimed dones by diff size is ranking by who did the least.
+- **Eligibility before every metric.** Only `checked` with a non-empty, readable
+  diff can win; then diff size 0.4, overlap with lanes outside the tournament
+  0.3, cost 0.2, time 0.1, each min–max over the passing field, ties kept in
+  the order given. Entrants never count overlap against each other.
+- **An unreported cost is the middle of the field, never $0**, and a dollar
+  budget over a backend that reports no cost is refused unless a time limit
+  holds it.
+- **Main runs, the renderer names and places** (M547–M548). The renderer
+  mints each entrant's panel id and places the chats beside the card; main
+  makes each worktree, creates each chat through the same door as
+  `agent:create`, and starts each checked run. Entrants fork from the main
+  tree, whatever folder of the repository the task's lane was in.
+- **A tournament starts from a task that has a lane and a check.** The lane
+  says which repository; a never-started task is refused by name rather than
+  guessed into one. The default field is claude opus and sonnet plus every
+  other agent found, up to four.
+- **The bracket is a screen-space overlay, not a new panel kind** (M548): it
+  holds no authored state, draws nothing until a tournament has run, and so
+  changes no resting scene and no golden. Its colour is the entrant's tone
+  through `[data-tone]`.
+- **Pick keeps the winner and closes the other chats; it removes no
+  worktree.** The winner becomes the task's lane (`panelId`, `worktreeId`),
+  so Review, Open PR and the morning queue read it through their own doors.
+  Losing branches may hold work a person wants; the Worktrees list removes a
+  lane on purpose. Only a scored, eligible entrant can be picked.
+- **The judge is advice, never a second scorer** (M549): a read-only (plan
+  mode) claude chat at the main tree, shown only the passing entrants.
+  Combine opens the task's Combine tab, which already checks a combined tree
+  before anything lands, rather than growing a second merge path.
+- **The door is the card's Swarm… menu**, not a new card button, so the
+  card's resting face is unchanged.
 
 ## J — Sandboxed lanes in a micro-VM (M550–M555)
 
@@ -100,6 +166,34 @@ prompts off without touching the Mac.
   CI's macOS runners most likely cannot run nested VMs, so the suite fakes the
   runtime and the real-Mac check is listed as manual-only in
   `docs/load-bearing.md`.
+
+### J decisions
+
+- **The code word is `vm`, the person's word is "sandboxed".** M120's `sandbox`
+  (`main/sandbox.ts`) is a chat with no place, a folder on the Mac that still
+  asks every permission; the two must never be read as one.
+- **Claude Code only.** `vmAgentArgv` refuses any other binary by name: prompts
+  off is claude's `--permission-mode bypassPermissions`, and no other backend's
+  equivalent has been measured inside a VM.
+- **The model's token is the one credential, by name.** A Mac's `claude` keeps
+  its sign-in in the Keychain, which a VM must not read, so the lane forwards
+  `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY`
+  from the login env as `-e NAME`: the value never sits on an argv. With
+  neither set, the spec is refused with that sentence.
+- **Two mounts, never home.** The worktree at `/work` and an app-owned state
+  folder at the agent's `~/.claude` (so a lane's later processes can resume its
+  own conversation). A first spawn's `--resume` becomes `--session-id`, since
+  the Mac's transcript is not in the VM. `--settings` is dropped: its hooks call
+  `tc` over a socket that is not mounted, by design.
+- **Egress through the app's proxy only.** `HTTPS_PROXY` points at a proxy main
+  runs; the image's entry script (it holds `NET_ADMIN` for this alone) drops
+  every other packet before it runs the agent as an unprivileged user. The
+  decision is `vmEgressAllowed`: HTTPS (443) to a listed host or a strict
+  subdomain of a `*.` entry; never an IP literal.
+- **Runtime order:** Apple `container` (macOS 26, Apple silicon), then OrbStack,
+  then Docker. With `orb` installed the docker CLI is OrbStack's, so only one
+  row is usable for one engine. A runtime whose service was not asked or did not
+  answer is never reported usable.
 
 ## K — Fork from any turn (M556–M560)
 
@@ -134,18 +228,21 @@ temporary repository. Decisions:
   prompt N+1, re-addresses every record (new `sessionId`, the fork's `cwd`) and
   writes it under `~/.claude/projects/<slug of the fork's cwd>/`. A backend row
   without `forksTurns` (every one but claude) forks the files only and says so.
-- **The door is Replay's "Branch from here"** (reached from the inspector's
-  "Replay this conversation…" and its palette row). The verb is
+- **Two doors:** Replay's "Branch from here" (reached from the inspector's
+  "Replay this conversation…" and its palette row), and "fork from here" on an
+  answer's hover in the chat itself (the UI audit's ask: a door where people
+  already are). The verb is
   `canvas/useForkVerb.ts`; it places the fork beside the original and switches the
   sheet to compare the two (M559), with a "branched from … after message N"
-  caption. No palette, agent-line or workflow door yet: picking a turn needs the
-  sheet.
+  caption. No palette, agent-line or workflow door yet: each needs a turn picked,
+  which only the sheet and the transcript show.
 - **Pruning (M560):** capturing turn n deletes every snapshot past n (a recycled
   id or a cleared chat) and the oldest past 50; closing a chat deletes all of
   its snapshots. Fork worktrees are ordinary worktree records, removed the usual
   way.
 - **Manual-only:** that claude resumes the cut copy from the fork's folder is
-  confirmed by hand, not by CI (listed in `docs/load-bearing.md`).
+  left to a hand check, not CI; it is listed in `docs/load-bearing.md` as not
+  yet confirmed, with the steps.
 
 ## L — The night as a film (M561–M564)
 
@@ -159,6 +256,28 @@ temporary repository. Decisions:
 - **M564** — a "Last night" button on the morning queue, and a generated clip for
   the README in place of the mockups.
 
+**Decisions (lane L, 2026-10-26):**
+
+- **Drawn, not captured.** The plan said the World's replay drives the camera and
+  frames are captured. The World's journal holds one hour and a night is eight, and
+  a capture of the canvas is pixels the gate cannot scrub (the PNG door's exception,
+  `docs/load-bearing.md`, does not cover a second binary export). So the film is a
+  schematic of the canvas drawn from the script: the panels at their canvas
+  positions, coloured by the one state palette, a camera that pushes in on each
+  shot. Every word in it passed `outward` when the script was built.
+- **Encoded in the app, no ffmpeg.** WebCodecs (H.264, VideoToolbox on a Mac) in
+  the renderer, and a small MP4 writer of our own (`src/shared/mp4-mux.ts`) rather
+  than a library; a minute renders in about ten seconds.
+- **Where the night comes from.** The run ledger (main reads it through
+  `film:night`, since `ledger:timeline` is capped at 200 rows) and the Tonight
+  batch. The window is the batch when one ran, else the absence, else twelve hours.
+- **The README clip** is `docs/assets/night-film.gif`, the app's own film code run on
+  a labelled sample night by `scripts/film-sample.cjs`. It replaces `tour.gif` (a
+  slideshow of the mockups); the still mockups below it stay until real shots
+  replace them.
+- **Suite:** `verify:film` (`film.script.*`, `film.frame.*`, `film.window.1`,
+  `film.mux.*`, `film.door.*`, `film.wire.1`).
+
 ## N — A live demo in the browser (M565–M569)
 
 - **M565** — a web build target of the renderer with the `window.canvas` bridge
@@ -168,6 +287,52 @@ temporary repository. Decisions:
   door that would spawn or write says "in the app".
 - **M568** — a Pages workflow publishes it on merge to main.
 - **M569** — the README links it.
+
+## Q — The app, hosted (M590–M599)
+
+Alex's ask (2026-10-26): the whole app in the cloud, opened from any browser,
+no Mac needed. Lane N's demo is the renderer on a fake bridge; this lane is
+the renderer on the REAL one. [docs/hosted.md](../hosted.md) is the long form.
+
+- **M590** — the host: `src/main/index.ts` bundled with `electron` aliased to
+  `src/host/electron-shim.ts`, a hub that is `ipcMain` and `webContents.send`
+  over one WebSocket, and the tagged-JSON wire.
+- **M591** — the tab: the app's own preload, its `electron` import aliased to
+  the socket; dialogs, menu keys, paste and the lost-connection notice.
+- **M592** — the gate: a token, a cookie, an Origin check, back-off.
+- **M593** — dialogs and links asked of the person in the tab.
+- **M594** — the image (`deploy/host/Dockerfile`) and `host.yml`: a browser
+  against a host on Linux and against the image, on every PR.
+
+Decisions (lane Q):
+
+- **Main runs unedited, on a stand-in for Electron, not a port.** 24 files
+  in `src/main` import 17 Electron names; a shim of that surface is ~400
+  lines, and a rewrite of main would be a second main to keep in step. A
+  name the shim lacks is a load error on the host, and `host.shim.1`
+  inventories every import on every run. (2026-10-26, M590.)
+- **The tab runs the preload, not a second bridge.** Aliasing the preload's
+  three desktop imports (`electron`, `os`, Sentry's hook) makes every door
+  the preload's own line, so the hosted bridge cannot drift from the app's
+  (`host.preload.1`). Lane N's fake bridge stays the demo's; nothing is shared
+  but the renderer.
+- **One live tab.** Main has one window. A newer tab takes over and main sees
+  a navigation and a load, a Cmd+R in the app's terms, so tmux keeps every
+  shell (`host.hub.3`). Teammates share through the collab server (lane P),
+  never through one host.
+- **No token, no listening.** Off loopback the host refuses to start, and the
+  gate listens before main loads (`host.gate.1`, `host.boot.1`). The image
+  never carries a token (`host.docker.1`).
+- **Edit keys are the tab's.** Main's Edit menu reads main's clipboard,
+  which on a host is the server's; the tab emits `edit:*` itself and pastes
+  from the browser's paste event. Other menu keys are matched in the tab and
+  run on the host (`host.shim.3`, `host.keys.1`).
+- **Not an outward door.** Nothing leaves the person's machine: the page
+  and the host are theirs, and the gate is in front of both. The app's own
+  outward doors run on the host exactly as on the Mac, through `outward`.
+- **Booting main is host.yml's, not verify's.** The Mac runner's node-pty is
+  built for Electron's ABI; `verify:host` drives the hub, gate and shim in
+  plain node, and `host.yml` boots the real main on Linux with a browser.
 
 ## O — A harness that learns (M570–M579)
 
@@ -180,3 +345,95 @@ temporary repository. Decisions:
   passes.
 - **M576–M579** — the library: accepted rules, where each came from, and a way
   to retire one.
+
+### O — decisions
+
+- **Two signals, both a person's act.** A discard (per file: the app has no
+  per-hunk discard, so "hunk" is the file's changed lines) and a review comment
+  once SENT to the agent. A drafted comment is not a verdict yet, and an
+  agent's proposed comment (M360) is never a lesson, kept or not.
+- **A discard is captured in main, around the one discarder** (`withLessonCapture`
+  in `bootstrap/stores.ts`), not at the renderer's five discard doors. The diff
+  is read before the discard and the lesson recorded only for paths reported
+  gone. Capture failures are swallowed: a lesson never costs the discard.
+- **A comment is harvested from the work items** (`sentAt` is the one fact
+  every sender writes), offered to main once per launch; main keeps one per id.
+  The renderer can record comments only; discard lessons are main's alone.
+- **Lessons are keyed by the main tree** (`commonRootOf`), so a lane's lessons
+  outlive its worktree. One JSONL per repository under `userData/lessons/`,
+  every text field scrubbed, the signature rebuilt from the scrubbed excerpt.
+- **The signature** is the excerpt's distinctive identifiers (keywords and
+  the scrubber's placeholder dropped), never the person's words. Recurrence
+  (M573) is containment: the share of the lesson's signature the replay repeats.
+- **The page reads what is there.** Show Lessons lists the lessons for the
+  folders the canvas's panels sit in. Reading spends nothing, so the page is
+  always on; the agent steps (propose, prove) get the off-by-default switch.
+- **The proposer is M252's run** (`claude -p --tools "" --json-schema`), plus
+  `--strict-mcp-config` so no MCP server loads: the input is agent-written,
+  and an allowed MCP tool would be a door out. That the flag pair leaves the
+  run with no tools at all is a manual-only check against the real CLI.
+- **`learn.agents`** (Agent state, off, not plan-writable) gates every agent
+  step, read at the press; one draft at a time, held until a killed run exits.
+- **Scrub, then cut.** Lessons are read whole (64 KB of lines) and scrubbed
+  before the 40-line excerpt is cut, and a private key with no END line is
+  dropped from its BEGIN. The critic found the first cut kept parts of keys.
+- **A rule is a plain sentence.** Invisible characters (controls, format,
+  tag block, bidi), HTML comments and Markdown structure are refused, so what
+  the page shows is what an agent reads.
+- **The proof replays, it does not argue.** A detached `proof-*` worktree
+  at the newest lesson's baseline (no branch; removed with `--force` on every
+  way out, a crash's leftovers swept at the next replay, never at boot: main
+  builds the runner before the single-instance lock). The rule is written,
+  the saved setup run, and that tree recorded with `write-tree`; the judge
+  diffs the agent's work against IT, so a lockfile `npm install` rewrote, or
+  the rule itself, is never mistaken for the replay's work. The diff is
+  `diff-index` with CONTENT_DIFF_CONFIG's pins and `--no-renames`; file names
+  come from `--name-status -z`. The critic found the first version counted
+  both, and read `i/` prefixes under a person's `diff.mnemonicPrefix`.
+- **Verdicts, in order:** no-change, recurred (a deletion lesson recurs as a
+  deletion), the rule's own file edited (void), no-check, check-failed,
+  holds. A replay that touched none of the lessons' files still holds (the
+  rule may be "leave that file alone"), and its line says so.
+- **The replay agent can edit and nothing else.** `--tools Read,Edit,Write,Glob,Grep`
+  (so no shell exists for anyone's allow rule to open — `acceptEdits` alone
+  was not enough), `disableAllHooks`, `--strict-mcp-config`, 40 turns, 20
+  minutes, killed on quit (and the check aborted). The rule is never written
+  through a symlink: a linked CLAUDE.md or `.claude/skills` would land it in
+  the person's real file. The worktree's `.git` link is read before the agent
+  and the run is void if it changed (Write could point it at the person's
+  repository, and `add -A` would stage there). The rule's file is staged with
+  `-f`, because `.claude/` is often gitignored.
+- **The check runs what the tree holds.** An agent that rewrote `package.json`
+  or the test config can make its own check pass; a "holds" that changed one
+  of the check's usual files says so by name, for the person to read before
+  Accept. Restoring them would also undo a task that legitimately adds a
+  dependency, so it is a sentence, not a refusal.
+- **Accept is the one write into the repository, and it is fenced.** Only a
+  draft whose proof holds for its exact text, checked again as the agent's
+  answer was. A CLAUDE.md line lives in one `<!-- tc:learned -->` block the
+  app rewrites from its own record and never edits outside; a skill is a new
+  `.claude/skills/<name>/SKILL.md`, created exclusively (`wx`), never over a
+  file. Never through a symlink; a write the library cannot record is undone;
+  temp file and rename. A proof stands for the rule's text AND its kind, name
+  and description (the description decides when a skill loads).
+- **The markers are whole lines outside fenced code, exactly one pair.** A
+  CLAUDE.md that documents the block in inline code or an example is not the
+  block (the critic's first finding: everything between two mentions was
+  replaced). Two blocks are refused, so a retired rule cannot live on in the
+  copy not rewritten. The block takes the file's line endings, and retire
+  takes back exactly the separator accept added.
+- **An unreadable rule record blocks the block.** The block is rebuilt from
+  the records, so while any stored rule cannot be parsed, Accept and Retire
+  refuse and name the file; the unread record is carried through every write.
+  A read that fails for any reason but ENOENT is an error, never "no file".
+- **Accept and Retire are a person's press, on the Lessons page only** — a
+  deliberate exception to the four doors: a palette row would be a fifth way
+  to the same button, but an agent line or a workflow node would let an agent
+  write a standing rule for agents, which is the one thing this lane forbids.
+- **Not defended:** a hostile process swapping a symlink into the main tree
+  between the `lstat` and the write. Accept runs in the person's own checkout
+  at their press; the replay, where an agent IS the threat, is guarded.
+- **Retire keeps the row.** The line leaves the block (the last one takes the
+  block, and a file that held nothing else); a skill is removed only while
+  its hash matches what was written; a block someone removed by hand is not
+  put back. The retired rule stays in the library, struck through, with why.

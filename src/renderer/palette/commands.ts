@@ -1,4 +1,5 @@
 import type { TaskPlan } from '@shared/task-plan'
+import { PROVIDERS as CLOUD_PROVIDERS, type CloudProviderId } from '@shared/cloud-lane'
 import { COMMAND_ROW_ID, REASON_NO_COMMAND } from './command-panel'
 import { teamAskWords } from '@shared/team-asks'
 import { noteFormSentence } from '@shared/notes'
@@ -358,7 +359,7 @@ export interface PaletteActions {
    * M268. Show the canvas or the Orchestration center page. The canvas host
    * stays mounted either way — this only chooses which sibling is visible.
    */
-  setCenterView(view: 'canvas' | 'orchestration' | 'team'): void
+  setCenterView(view: 'canvas' | 'orchestration' | 'team' | 'learn'): void
   /**
    * Arm the one-shot link mode with this panel as the source. The NEXT click
    * on the canvas completes or cancels it; see useLinkMode and Canvas.tsx's
@@ -540,6 +541,12 @@ export interface PaletteActions {
   fitTask(): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M480. Hand the board's open tasks to main for the night (`op` absent), or end tonight's batch (`stop`). */
   runTonight(op?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M548. Start a tournament on a task (its id, key or card), `stop` the live one, or `pick` an entrant (absent is the scorer's winner). */
+  runTournament(op: string, value?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M543. Hand a work card's task to a cloud agent (`copilot`, `claude-action`); main asks before anything is sent. */
+  sendToCloud(panelId: string, provider: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M544. Merge the card's ready cloud lane through the broker; main re-checks it and asks first. */
+  mergeCloud(panelId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M324. Open the focus view of the task a card or member panel belongs to. */
   focusTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
@@ -1449,6 +1456,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'people team members organization presence who is working observe',
     group: 'canvas',
     run: () => actions.setCenterView('team')
+  })
+  // M570 (lane O). The Lessons page: what discards and sent review comments
+  // taught. Always here — reading what was kept spends nothing.
+  out.push({
+    id: 'learn.open',
+    title: 'Show Lessons',
+    subtitle: 'what your reviews taught the agents here',
+    searchText: 'lessons learn learned harness rules mistakes discarded comments review claude.md skills',
+    group: 'canvas',
+    run: () => actions.setCenterView('learn')
   })
   out.push({
     id: 'canvas.reset',
@@ -2483,6 +2500,17 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // the SELECTED picture through the system's own chooser, and is disabled by
   // name when the selection is not a picture.
   out.push({ id: 'image.add', title: 'Image: add a picture…', subtitle: 'from a file — or drop one on the canvas', group: 'canvas', searchText: 'image add picture png jpeg drop paste screenshot', run: () => actions.beginRunVerb('image-add') })
+  // M543. One row per provider, so the palette names who the task goes to.
+  // The ids are written out, not built from PROVIDERS: closure.v9.1 finds a
+  // verb's palette row by its literal id.
+  const cloudRow = ({ id, provider }: { id: string; provider: CloudProviderId }): void => {
+    const label = CLOUD_PROVIDERS.find((p) => p.id === provider)?.label ?? provider
+    out.push(withReason({ id, ...hiddenAtRestIf(workPanelId === undefined), title: `Task: send to ${label}`, subtitle: 'hand the selected work card\'s task to a cloud agent; it comes back as a pull request — you are asked before anything is sent', group: 'canvas', searchText: `task cloud send remote agent pull request ${provider} ${label}`, run: () => { if (workPanelId !== undefined) void actions.sendToCloud(workPanelId, provider).then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } }, workPanelId === undefined ? 'select a work card first' : undefined))
+  }
+  cloudRow({ id: 'task.cloud.copilot', provider: 'copilot' })
+  cloudRow({ id: 'task.cloud.claude-action', provider: 'claude-action' })
+  // M544. Hidden at rest like the send rows; the action refuses by name when the card's lane is not ready.
+  out.push(withReason({ id: 'task.cloud.merge', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: merge the cloud pull request', subtitle: 'squash-merge the selected work card\'s cloud lane once its checks pass — re-checked and asked first', group: 'canvas', searchText: 'task cloud merge pull request ready accept land', run: () => { if (workPanelId !== undefined) void actions.mergeCloud(workPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } }, workPanelId === undefined ? 'select a work card first' : undefined))
   out.push(withReason({ id: 'work.review', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: review the lane', subtitle: 'open the review for the selected work card\'s lane, beside the task and its conversation', group: 'canvas', searchText: 'task review lane work card changes diff ready handoff', run: () => { if (workPanelId !== undefined) { const r = actions.reviewTask(workPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, workPanelId === undefined ? 'select a work card first' : undefined))
   // M203 (D08). From a card, or from the one selected panel of a task; the
   // verb itself refuses by name for a panel in no task or in two.
@@ -2492,6 +2520,13 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(withReason({ id: 'task.related', ...hiddenAtRestIf(taskPanelId === undefined), title: 'Task: show related', subtitle: 'ring the task\'s panels and dim the rest; nothing moves — again to turn it off', group: 'canvas', searchText: 'task related highlight lens dim focus members show', run: () => { if (taskPanelId !== undefined) { const r = actions.showRelated(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   // M258. Fit task — present at rest; the verb itself refuses by name with no task context.
   // M480. Tonight: start and stop, both through the one verb.
+  // M548. The tournament's three rows: start on the selected card's task (its
+  // check picks the winner), stop the live one, pick the winner it named.
+  out.push(withReason({ id: 'task.tournament', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: run as a tournament', subtitle: 'the selected card\'s task on several agents at once, each in its own worktree — its check picks the winner', group: 'canvas', searchText: 'tournament compete agents race several models best of check winner bracket', run: () => { if (workPanelId !== undefined) void actions.runTournament(workPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } }, workPanelId === undefined ? 'select a work card first' : undefined))
+  out.push({ id: 'task.tournament-stop', ...hiddenAtRestIf(true), title: 'Stop the tournament', subtitle: 'stop every entrant still running and score the field as it stands', group: 'canvas', searchText: 'tournament stop cancel bracket', run: () => { void actions.runTournament('stop').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
+  out.push({ id: 'task.tournament-pick', ...hiddenAtRestIf(true), title: 'Pick the tournament\'s winner', subtitle: 'keep the winner as the task\'s lane and close the other entrants\' chats; their worktrees stay until you remove them', group: 'canvas', searchText: 'tournament pick winner accept keep bracket', run: () => { void actions.runTournament('pick').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
+  out.push({ id: 'task.tournament-judge', ...hiddenAtRestIf(true), title: 'Judge the tournament', subtitle: 'a read-only claude chat compares the entrants that passed — advice; the scorer\'s pick stands until you choose', group: 'canvas', searchText: 'tournament judge compare review entrants bracket', run: () => { void actions.runTournament('judge').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
+  out.push({ id: 'task.tournament-combine', ...hiddenAtRestIf(true), title: 'Combine the tournament\'s entrants…', subtitle: 'open the task — its Combine tab puts lanes together and checks the result before anything lands', group: 'canvas', searchText: 'tournament combine best parts merge entrants bracket', run: () => { void actions.runTournament('combine').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
   out.push({ id: 'task.tonight', title: 'Run tonight', subtitle: 'the open tasks, one auto run at a time while you are away — paused at usage limits, the Mac kept awake', group: 'canvas', searchText: 'tonight overnight batch night auto run queue away sleep', run: () => { void actions.runTonight().then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
   out.push({ id: 'task.tonight-stop', ...hiddenAtRestIf(true), title: 'Stop tonight\'s batch', subtitle: 'stop the current run and drop the rest of the queue; the Mac may sleep again', group: 'canvas', searchText: 'tonight stop overnight batch cancel', run: () => { void actions.runTonight('stop').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
   out.push({ id: 'task.fit', title: 'Fit task', subtitle: 'frame the active task — the one Show related lit, else the selected panel\'s task', group: 'canvas', searchText: 'fit task frame zoom active lens focus camera', run: () => { const r = actions.fitTask(); if (r.kind === 'refused') actions.say(r.reason) } })

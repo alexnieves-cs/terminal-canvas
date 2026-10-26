@@ -159,6 +159,9 @@ ok('fork.wire.2 closing a chat (drop) removes its snapshots, reading the cwd bef
 ok('fork.wire.3 Replay has Branch from here, and the canvas registers the verb that places the fork',
   /Branch from here/.test(sheetSrc) && /branchFromHere\(props\.panelId, props\.turn\)/.test(sheetSrc) && /useForkVerb\(\{/.test(canvasSrc),
   'ReplaySheet.tsx or Canvas.tsx no longer carries the branch door')
+ok('fork.wire.4 an answer in the chat itself offers fork from here, counting the prompts up to that answer, through the same verb',
+  /data-chat-fork/.test(read('src/renderer/chat/ChatConversation.tsx')) && /branchFromHere\(id, turn\)/.test(read('src/renderer/chat/ChatConversation.tsx')) && /promptCount\(chat\.turns\.slice\(0, at \+ 1\)\)/.test(read('src/renderer/chat/ChatConversation.tsx')),
+  'ChatConversation.tsx no longer carries the fork door')
 
 // ── The git half, against a real repository ──────────────────────────────
 const tmp = fs.mkdtempSync(join(os.tmpdir(), 'tc-fork-'))

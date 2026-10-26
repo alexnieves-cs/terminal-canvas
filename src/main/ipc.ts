@@ -33,6 +33,7 @@ import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
 import type { TonightStatus } from '../shared/tonight'
 import type { ForkRequest, ForkResult, TurnSnapshotRow } from '../shared/turn-fork'
+import type { TournamentStatus } from '../shared/tournament'
 import type { EventRow, RunRow, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -49,7 +50,7 @@ import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, 
 import { INERT_EXPORTERS, type Exporters } from './export'
 import { INERT_TOOLS, type ToolHandlers } from './tool-generate'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
-import type { DeckPdfExportRequest, PanelTextExportRequest } from '../shared/export'
+import type { DeckPdfExportRequest, NightFilmExportRequest, NightFilmRecordRequest, PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -238,6 +239,10 @@ export interface AgentHandlers {
   /** M556–M558 (lane K). Optional, like tonight's: a harness without them answers empty / refused. */
   forkTurns?(panelId: string): Promise<TurnSnapshotRow[]>
   forkBranch?(req: ForkRequest): Promise<ForkResult>
+  /** M547. The tournament's doors (main/tournament-runner.ts). Optional, for the same reason as Tonight's. */
+  tournamentStart?(raw: unknown): Promise<{ kind: 'started'; status: TournamentStatus } | { kind: 'refused'; reason: string }>
+  tournamentStop?(): boolean
+  tournamentStatus?(): TournamentStatus | null
   /** M98. The tools granted for a session, in grant order. */
   grants(id: string): string[]
   /** M98. Drop every grant for a session; it asks again. */
@@ -944,6 +949,13 @@ export function registerIpcHandlers(
     const lanes = Array.isArray(raw) ? raw.filter((l): l is { id: string; path: string } => typeof l?.id === 'string' && typeof l.path === 'string' && l.path.startsWith('/')).slice(0, RADAR_LANES_MAX) : []
     return kit.laneRadar === undefined ? { at: Date.now(), collisions: [], unread: lanes.map((l) => ({ id: l.id, reason: 'the radar is not wired in this process' })) } : kit.laneRadar(lanes.map((l) => ({ id: l.id, path: l.path })))
   })
+  // M570 (lane O). The doors validate their own input (main/learn.ts); an
+  // unwired process answers empty and refuses, never pretends to have kept one.
+  ipcMain.handle(IPC.LEARN_READ, (_event, roots: unknown) => (kit.learn === undefined ? { repos: [] } : kit.learn.read(roots)))
+  ipcMain.handle(IPC.LEARN_RECORD, (_event, facts: unknown) => (kit.learn === undefined ? { ok: false, reason: 'lessons are not wired in this process' } : kit.learn.record(facts)))
+  ipcMain.handle(IPC.LEARN_PROPOSE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'drafting a rule is not wired in this process' } : kit.learn.propose(req)))
+  ipcMain.handle(IPC.LEARN_PROVE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'proving a rule is not wired in this process' } : kit.learn.prove(req)))
+  ipcMain.handle(IPC.LEARN_DECIDE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'lessons are not wired in this process' } : kit.learn.decide(req)))
   ipcMain.handle(IPC.SETUP_READ, (_event, cwd: unknown) => (typeof cwd === 'string' ? kit.setupRead(cwd) : { kind: 'not-a-repo' as const }))
   ipcMain.handle(IPC.SETUP_SAVE, (_event, setup: unknown) => kit.setupSave(setup))
   ipcMain.handle(IPC.SETUP_PREPARE, (_event, req: unknown) => {
@@ -1009,6 +1021,9 @@ export function registerIpcHandlers(
     }
     return agents.forkBranch?.({ fromPanelId: r.fromPanelId, toPanelId: r.toPanelId, turn: r.turn }) ?? { kind: 'refused', reason: 'forks are not available in this process' }
   })
+  ipcMain.handle(IPC.TOURNAMENT_START, (_event, raw: unknown) => agents.tournamentStart?.(raw) ?? { kind: 'refused', reason: 'tournaments are not available in this process' })
+  ipcMain.handle(IPC.TOURNAMENT_STOP, () => agents.tournamentStop?.() ?? false)
+  ipcMain.handle(IPC.TOURNAMENT_STATUS, () => agents.tournamentStatus?.() ?? null)
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))
@@ -1177,6 +1192,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.EXPORT_DECK_PDF, (_event, req: DeckPdfExportRequest) => exporters.deckPdf(req))
   ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
+  // M562–M563 (lane L). Optional on the object so a harness that builds its own exporters still registers.
+  ipcMain.handle(IPC.FILM_NIGHT, (_event, req: NightFilmRecordRequest) => exporters.filmNight?.(req) ?? { kind: 'refused', reason: 'the night film is not wired' })
+  ipcMain.handle(IPC.EXPORT_NIGHT_FILM, (_event, req: NightFilmExportRequest) => exporters.nightFilm?.(req) ?? { kind: 'failed', reason: 'the night film is not wired' })
   // Shape-checked in main/flowchart-files.ts, which answers a refusal by name for anything malformed — so what arrives here is passed on untouched.
   ipcMain.handle(IPC.EXPORT_FLOWCHART, (_event, req: unknown) => flowcharts.export(req))
   ipcMain.handle(IPC.FLOWCHART_READ, (_event, req: unknown) => flowcharts.read(req))

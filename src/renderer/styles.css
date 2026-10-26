@@ -13446,6 +13446,30 @@ tr[data-session-row]:focus-within .sessions-world,
 /* ── /st:H ── */
 
 /* ── st:I ── */
+/* M548. The tournament bracket: screen space, top centre, under the HUD.
+   Columns side by side; the state edge is the entrant's tone, drawn through
+   [data-tone] like every frame, never a colour of its own. */
+.tn-bracket {
+  position: absolute; top: calc(var(--sp-6) * 2); left: 50%; transform: translateX(-50%); z-index: 40;
+  max-width: min(1100px, calc(100% - var(--sp-6) * 2)); padding: var(--sp-3);
+  background: var(--panel-bg); border: 1px solid var(--line); border-radius: var(--r-md);
+  font: var(--t-sm) / 1.4 var(--font-ui); color: var(--fg);
+}
+.tn-bracket__head { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.tn-bracket__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-bracket__check { font: var(--t-xs) / 1.4 var(--font-mono); color: var(--fg-3); }
+.tn-bracket__summary { color: var(--fg-2); flex: 1; }
+.tn-bracket__field { display: flex; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; overflow-x: auto; }
+.tn-bracket__entrant {
+  flex: 1 1 0; min-width: 180px; display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-2); border: 1px solid var(--line); border-left: 3px solid var(--tone); border-radius: var(--r-sm);
+}
+.tn-bracket__entrant[data-winner] { border-color: var(--tone); box-shadow: 0 0 0 1px var(--tone-dim); }
+.tn-bracket__label { font-weight: 600; }
+.tn-bracket__state { color: var(--tone); }
+.tn-bracket__facts { font: var(--t-xs) / 1.4 var(--font-mono); color: var(--fg-2); }
+.tn-bracket__why { font-size: var(--t-xs); color: var(--fg-3); }
+.tn-bracket__entrant .pf__verb { align-self: flex-start; }
 /* ── /st:I ── */
 
 /* ── st:J ── */
@@ -13460,6 +13484,10 @@ tr[data-session-row]:focus-within .sessions-world,
 .replay__branch-why { font-size: var(--t-xs); color: var(--fg-3); min-width: 0; }
 /* M559. A fork's caption in the compare view. */
 .replay__forked { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+/* M558. "fork from here" on an answer: contextual, like `remember` beside it — shown on the row's hover or focus. */
+.chat__fork { align-self: flex-start; width: auto; margin-top: var(--sp-1); opacity: 0; transition: opacity var(--dur-1); }
+.chat__row--assistant:hover .chat__fork, .chat__fork:focus-visible { opacity: 1; }
+.chat__fork-said { font-size: var(--t-xs); color: var(--fg-3); margin-top: var(--sp-1); }
 /* ── /st:K ── */
 
 /* ── st:L ── */
@@ -13469,4 +13497,62 @@ tr[data-session-row]:focus-within .sessions-world,
 /* ── /st:N ── */
 
 /* ── st:O ── */
+/* M570 (lane O). The Lessons page: the Team page's frame, a list per repository. */
+.learn {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+  padding: var(--sp-7); gap: var(--sp-6); overflow: auto; background: var(--bg);
+  font-family: var(--font-ui);
+}
+.learn__head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; min-width: 0; }
+.learn__title { margin: 0; font: 600 var(--t-lg)/1.2 var(--font-ui); color: var(--fg); }
+.learn__note { font-size: var(--t-sm); color: var(--fg-3); }
+.learn__empty { margin: var(--sp-8) auto; max-width: 46ch; text-align: center; color: var(--fg-3); font-size: var(--t-md); }
+.learn__repo { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.learn__repo-name { margin: 0; display: flex; align-items: baseline; gap: var(--sp-3); font: 600 var(--t-md)/1.3 var(--font-ui); color: var(--fg-2); }
+.learn__count { font-weight: 400; font-size: var(--t-sm); color: var(--fg-3); }
+.learn__list { display: flex; flex-direction: column; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.learn-lesson {
+  display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0;
+  padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1);
+}
+.learn-lesson__place { font: 500 var(--t-sm)/1.3 var(--font-mono, monospace); color: var(--fg-2); overflow-wrap: anywhere; }
+.learn-lesson__what { margin: 0; color: var(--fg); font-size: var(--t-md); }
+.learn-lesson__excerpt {
+  margin: 0; max-height: 12em; overflow: auto; padding: var(--sp-3);
+  background: var(--bg); border-radius: var(--r-sm); color: var(--fg-2);
+  font: var(--t-sm)/1.4 var(--font-mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.learn-lesson__meta { display: flex; gap: var(--sp-3); flex-wrap: wrap; font-size: var(--t-sm); color: var(--fg-3); }
+/* M571–M572. A group of lessons with its one press, and a drafted rule. */
+.learn-cluster { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.learn-cluster__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); min-width: 0; }
+.learn-cluster__title { font-size: var(--t-sm); color: var(--fg-2); overflow-wrap: anywhere; }
+.learn-draft {
+  display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0;
+  padding: var(--sp-4); border: 1px dashed var(--line); border-radius: var(--r-md); background: var(--s-1);
+}
+.learn-draft__label { font-size: var(--t-sm); color: var(--fg-3); }
+.learn-draft__text {
+  margin: 0; color: var(--fg); font: var(--t-md)/1.45 var(--font-ui);
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18em; overflow: auto;
+}
+.learn-draft__why { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.learn-draft__verbs { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+/* M573. The proof: its verdict line, its evidence, and the form a replay starts from. */
+.learn-draft__proof { display: flex; flex-direction: column; gap: var(--sp-2); }
+.learn-draft__proof > p { margin: 0; }
+.learn-draft__evidence > summary { cursor: pointer; font-size: var(--t-sm); color: var(--fg-3); }
+.learn-prove { display: flex; flex-direction: column; gap: var(--sp-3); padding-top: var(--sp-2); }
+.learn-prove__field { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--t-sm); color: var(--fg-2); }
+.learn-prove__input {
+  font: var(--t-sm)/1.4 var(--font-ui); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3); resize: vertical;
+}
+/* M576. An accepted rule is solid where a draft is dashed; a retired one keeps its row, struck through. */
+.learn-rule {
+  display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0;
+  padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1);
+}
+.learn-rule[data-learn-rule="retired"] { color: var(--fg-3); }
+.learn-rule[data-learn-rule="retired"] .learn-draft__text { text-decoration: line-through; color: var(--fg-3); }
 /* ── /st:O ── */

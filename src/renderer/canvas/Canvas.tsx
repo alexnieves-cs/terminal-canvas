@@ -1,6 +1,7 @@
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type Dispatch, type SetStateAction, type JSX, type MouseEvent, type CSSProperties } from 'react'
+import { TournamentBracket } from '@renderer/tournament/TournamentBracket'
 import { useHistoryVerbs } from './useHistoryVerbs'
 import { useRunningSessions } from './useRunningSessions'
 import { useSnapAndAgentLinks } from './useSnapAndAgentLinks'
@@ -2500,10 +2501,10 @@ export function Canvas({
   // failing check, the changes to review); absent, the task's remembered side.
   const [focusTask, setFocusTask] = useState<{ itemId: string; from: 'canvas' | 'orchestration'; side?: FocusSide; at: number } | null>(null)
   const openFocusTask = useCallback((itemId: string, side?: FocusSide): void => {
-    // Sessions, Review and People are pages, not a task's origin. Back returns
+    // Sessions, Review, People and Lessons are pages, not a task's origin. Back returns
     // to the canvas, the same way team already did. Orchestrate is an origin,
     // and a task opened from focus keeps the one it was opened from.
-    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow === 'team' || centerViewNow === 'sessions' || centerViewNow === 'review' ? 'canvas' : centerViewNow, ...(side === undefined ? {} : { side }), at: Date.now() }))
+    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow === 'team' || centerViewNow === 'sessions' || centerViewNow === 'review' || centerViewNow === 'learn' ? 'canvas' : centerViewNow, ...(side === undefined ? {} : { side }), at: Date.now() }))
     setCenterView('focus')
   }, [centerViewNow, setCenterView])
   const closeFocusTask = useCallback((): void => {
@@ -3933,6 +3934,8 @@ export function Canvas({
           selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
           engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
           onJump={pillJump} onSend={sendFromPill} openRef={pillOpenRef} />
+        {/* M548. The live tournament's bracket, in screen space; nothing at all until one has run. */}
+        <TournamentBracket run={paletteActions.runTournament} say={paletteActions.say} />
         {/* M408 (D1). The right-click menu, in screen space beside the pill. */}
         {contextMenu.element}
         {/* M69. The far-view tier, provided once for every kind's frame. */}

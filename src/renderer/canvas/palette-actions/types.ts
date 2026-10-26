@@ -203,7 +203,7 @@ export interface PaletteActionsDeps {
   teammatesRef: RefObject<PersistedTeammate[]>
   chooseNavigator: (pane: NavigatorPane) => void
   /** M268. Canvas ↔ Orchestration center page. */
-  setCenterView: (view: 'canvas' | 'orchestration' | 'team') => void
+  setCenterView: (view: 'canvas' | 'orchestration' | 'team' | 'learn') => void
   /** M106. */
   toggleFlip: () => void
   /** M113. The board's records (a ref: a verb reads the list once) and their setter. Records, not layout: not in history, like runs and bookmarks. */
