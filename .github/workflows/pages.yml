@@ -1,0 +1,67 @@
+# Lane N (M568). The browser demo, published to GitHub Pages on every push
+# to main, and BUILT (never published) on every pull request, so a change
+# that breaks the web target is red on the PR rather than on the next deploy.
+#
+# Ubuntu, not macOS: the demo is the renderer and a fake bridge, with no
+# native module, PTY or tmux behind it. `--ignore-scripts` skips the
+# postinstall's electron-rebuild of node-pty, which a Linux runner cannot
+# build against Electron's ABI and the web target never loads.
+#
+# Not part of `verify`: the gate is `npm run verify` on the Mac runner
+# (verify.yml). verify:demo pins this file's shape (demo.pages.*).
+name: pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Build the web demo
+        run: npm run build:web
+      # A smoke test in a real browser: the page mounts the canvas and the
+      # scripted agents reach it. A fake-bridge door that throws at boot
+      # leaves #root empty with no build error, so the build alone proves little.
+      # The runner's own Chrome, driven by playwright-core: no browser
+      # download, and --no-save keeps package.json and the lock unchanged.
+      - name: Install the browser driver
+        run: npm install --no-save --ignore-scripts playwright-core@1.55.0
+      - name: Smoke-test the demo
+        run: node scripts/demo-smoke.cjs
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: out/web
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

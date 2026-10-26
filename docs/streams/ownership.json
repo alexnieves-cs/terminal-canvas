@@ -122,7 +122,11 @@
       "scripts/verify-film.cjs"
     ],
     "N": [
-      "scripts/verify-demo.cjs"
+      "scripts/verify-demo.cjs",
+      "scripts/demo-smoke.cjs",
+      "src/web/**",
+      "vite.web.config.ts",
+      ".github/workflows/pages.yml"
     ],
     "O": [
       "scripts/verify-learn.cjs"

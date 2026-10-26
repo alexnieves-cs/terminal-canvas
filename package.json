@@ -20,6 +20,8 @@
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
+    "build:web": "vite build -c vite.web.config.ts",
+    "dev:web": "vite -c vite.web.config.ts",
     "start": "unset ELECTRON_RUN_AS_NODE && electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
@@ -32,6 +34,7 @@
     "collab": "node scripts/collab-server.cjs",
     "supabase:probe": "node scripts/supabase-probe.cjs",
     "verify:meta": "node scripts/verify-meta.cjs",
+    "verify:demo": "node scripts/verify-demo.cjs",
     "verify:package": "node scripts/verify-package.cjs",
     "verify:packaged": "unset ELECTRON_RUN_AS_NODE && node scripts/verify-packaged.cjs",
     "handcheck": "node scripts/handcheck.cjs",

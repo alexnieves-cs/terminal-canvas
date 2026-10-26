@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="https://alexnieves-cs.github.io/terminal-canvas/"><strong>Live demo</strong></a> ·
   <a href="#install">Install</a> ·
   <a href="#what-you-can-do-with-it">Use cases</a> ·
   <a href="#a-look-around">Screens</a> ·
@@ -35,6 +36,12 @@
   Design mockup of the 6.0 workspace, with sample data.
   Every screen below is from the same set; none is a recording of a live session.
 </sub></p>
+
+> **Try it in the browser:** the [live demo](https://alexnieves-cs.github.io/terminal-canvas/)
+> is the app's own renderer, running on a sample canvas with scripted agents that
+> work, wait for you and finish. Terminals play recordings, and anything that would
+> start a process or write a file says it runs in the app. It is rebuilt from `main`
+> on every merge (`.github/workflows/pages.yml`).
 
 > **Status: `v6.0.1`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
