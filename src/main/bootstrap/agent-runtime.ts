@@ -52,9 +52,10 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
   const env = state.loginEnv
 
   // M552 (lane J). Sandboxed lanes wrap the runner and the check runner: a
-  // panel marked sandboxed runs in a VM, every other spawn is untouched. The
-  // probe runs once here and again on every environment report (state.vmProbe).
-  void probeVmRuntimesLive((name) => whichFromEnv(name, env), env).then((p) => { state.vmProbe = p }, () => { /* the report says why */ })
+  // panel marked sandboxed runs in a VM, every other spawn is untouched. No
+  // probe at launch: an app that never runs a sandboxed task never asks a VM
+  // runtime anything. The doors' `prepare` probes before every entry, and
+  // every environment report probes too (state.vmProbe).
   // M554. One allowlisting proxy per place a runtime's VMs reach the Mac,
   // started on the first sandboxed run and never before: an app that never
   // runs one never listens. Every CONNECT lands in the egress log, in memory

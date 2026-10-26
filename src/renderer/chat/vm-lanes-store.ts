@@ -18,7 +18,14 @@ function start(): void {
   started = true
   const door = (window as { canvas?: { vm?: { lanes(): Promise<{ lanes: VmLaneInfo[] }>; onChanged(l: (lanes: VmLaneInfo[]) => void): () => void } } }).canvas?.vm
   if (door === undefined) return
-  const set = (next: VmLaneInfo[]): void => { lanes = next; for (const l of listeners) l() }
+  // An empty answer over an empty list changes nothing and re-renders nothing:
+  // every chat on the canvas reads this, and almost every window has no lanes.
+  const set = (next: VmLaneInfo[] | undefined): void => {
+    const list = Array.isArray(next) ? next : []
+    if (list.length === 0 && lanes.length === 0) return
+    lanes = list
+    for (const l of listeners) l()
+  }
   door.onChanged(set)
   void door.lanes().then((v) => set(v.lanes), () => { /* no lanes is the answer */ })
 }
