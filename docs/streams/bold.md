@@ -82,6 +82,22 @@ One task, N agents, each in its own worktree; the task's check decides.
 - **M549** — the judge: an optional agent writes a short comparison of the
   passing entrants; `combine` can take the best parts.
 
+Decisions (lane I):
+
+- **An entrant is a chat session, by backend and model, not a terminal
+  preset.** Only a chat has a turn end, a spend meter and M475's check gate;
+  a terminal preset has none of the three, so "the check decides" could not
+  hold for it. (2026-10-26, M546.)
+- **The check is required.** A spec without one is refused by name: ranking
+  N claimed dones by diff size is ranking by who did the least.
+- **Eligibility before every metric.** Only `checked` with a non-empty, readable
+  diff can win; then diff size 0.4, overlap with lanes outside the tournament
+  0.3, cost 0.2, time 0.1, each min–max over the passing field, ties kept in
+  the order given. Entrants never count overlap against each other.
+- **An unreported cost is the middle of the field, never $0**, and a dollar
+  budget over a backend that reports no cost is refused unless a time limit
+  holds it.
+
 ## J — Sandboxed lanes in a micro-VM (M550–M555)
 
 A Tonight lane can run its agent inside a throwaway Linux VM, so it can run with

@@ -99,3 +99,4 @@ Plan: [docs/streams/bold.md](../streams/bold.md). 2026-10-26: Alex picked all se
 | PR | Milestone | What | Checks |
 |---|---|---|---|
 | this PR | M540 | Lanes H, I, J, K, L, N and O in `ownership.json` (each owns its `verify-<name>.cjs`; `bold.md` is shared), their `st:` fences, `streams.own.1` covers A–O, the run book's rows, `docs/streams/bold.md` | `verify:meta` streams.own.1 |
+| next PR | M546 (I) | Tournament model, `src/shared/tournament.ts`: a spec (task, repository, 2–6 entrants by backend and model, a required check, budget and time limit each) parsed by name, and a pure scorer. Only a passed check with a real change is eligible, before any metric; then diff size, overlap with lanes outside the tournament, cost and time. An unreported cost is the middle of the field, never free, and a dollar budget over a backend with no meter is refused without a time limit. Lane I claims `tournament.ts` and `tournament-runner.ts` | `verify:tournament` (new) model.1–8 |
