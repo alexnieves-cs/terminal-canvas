@@ -126,6 +126,34 @@ prompts off without touching the Mac.
   runtime and the real-Mac check is listed as manual-only in
   `docs/load-bearing.md`.
 
+### J decisions
+
+- **The code word is `vm`, the person's word is "sandboxed".** M120's `sandbox`
+  (`main/sandbox.ts`) is a chat with no place, a folder on the Mac that still
+  asks every permission; the two must never be read as one.
+- **Claude Code only.** `vmAgentArgv` refuses any other binary by name: prompts
+  off is claude's `--permission-mode bypassPermissions`, and no other backend's
+  equivalent has been measured inside a VM.
+- **The model's token is the one credential, by name.** A Mac's `claude` keeps
+  its sign-in in the Keychain, which a VM must not read, so the lane forwards
+  `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY`
+  from the login env as `-e NAME`: the value never sits on an argv. With
+  neither set, the spec is refused with that sentence.
+- **Two mounts, never home.** The worktree at `/work` and an app-owned state
+  folder at the agent's `~/.claude` (so a lane's later processes can resume its
+  own conversation). A first spawn's `--resume` becomes `--session-id`, since
+  the Mac's transcript is not in the VM. `--settings` is dropped: its hooks call
+  `tc` over a socket that is not mounted, by design.
+- **Egress through the app's proxy only.** `HTTPS_PROXY` points at a proxy main
+  runs; the image's entry script (it holds `NET_ADMIN` for this alone) drops
+  every other packet before it runs the agent as an unprivileged user. The
+  decision is `vmEgressAllowed`: HTTPS (443) to a listed host or a strict
+  subdomain of a `*.` entry; never an IP literal.
+- **Runtime order:** Apple `container` (macOS 26, Apple silicon), then OrbStack,
+  then Docker. With `orb` installed the docker CLI is OrbStack's, so only one
+  row is usable for one engine. A runtime whose service was not asked or did not
+  answer is never reported usable.
+
 ## K — Fork from any turn (M556–M560)
 
 - **M556** — a snapshot per turn: at each turn boundary, the lane's tree is
