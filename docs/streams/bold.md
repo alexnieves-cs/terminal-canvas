@@ -141,12 +141,14 @@ Decisions (lane N):
   as it is, entered through `src/web/main.ts`, which installs the fake bridge
   first. The demo is what the app draws; nothing under `src/renderer` knows it
   is in a browser.
-- **The fake is typed where it answers, and answers by name elsewhere.**
-  `src/web/fake-bridge.ts` checks each door it implements against
-  `CanvasBridge`; every other door is a Proxy (`stub-door.ts`): `on*`
-  subscribes and never fires, a write verb says "in the app", a read answers
-  `[]` or `null`. Reads that answer a union (`git.status`, `env.report`…)
-  are written out, in the union's own "not here" words.
+- **The fake is typed where it answers, and answers by declared shape
+  elsewhere.** `src/web/fake-bridge.ts` checks each door it implements
+  against `CanvasBridge`. Every other door is a Proxy (`stub-door.ts`) that
+  answers in the return shape `scripts/lib/bridge-shapes.cjs` reads off the
+  contract: `[]`, `null`, or the union's "not here" member. A plain-record
+  read has no stand-in, so each is answered by hand (`demo.shapes.2`). The
+  method's name decides only whether the visitor is told "in the app". A
+  name-based guess blanked the page from the find box (the critic's finding).
 - **The world is `world-sim` itself**, given scripts keyed by the cast's
   panel ids, so the World room, the panel state word and the terminal read one
   stream. Scripts open on the cast's frame (3 waiting, 1 failed, 4 working,
