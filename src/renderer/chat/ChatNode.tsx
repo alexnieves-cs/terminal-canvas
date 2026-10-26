@@ -11,8 +11,6 @@ import { useChat, dismissAuto, useApprovals, isAnswered } from './chat-store'
 import { chatPhase, chatPhaseWord, chatStateInput, deliveredUserTurns, toolArgument, toolArgumentIsCode } from './chat-model'
 import { ChatConversation, answerRequest } from './ChatConversation'
 import { useConversationClaimed } from './conversation-host'
-import { useVmLane } from './vm-lanes-store'
-import { VM_LANE_LABEL, VM_RUNTIME_NAME } from '@shared/vm-lane'
 import { chatNameFromMessage } from '@renderer/palette/panel-name'
 
 /**
@@ -84,8 +82,6 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const chat = useChat(id)
   const snapshot = chat.snapshot
   const claimed = useConversationClaimed(id)
-  // M553. Whether this chat runs in a sandboxed lane (main's word, cached).
-  const vmLane = useVmLane(id)
   // M279. What the agent is doing while it works, beside the state word.
   const phaseWord = chatPhaseWord(chatPhase(chat.live))
   const hasHistory = chat.turns.length > 0
@@ -175,10 +171,6 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             ("Claude · demo2" beside "claude") the word is an echo: kept in the
             DOM for the screen reader and the checks, not painted twice in a
             header that was clipping its own close control. */}
-        {/* M553 (lane J). A sandboxed lane says so, a KIND fact beside the
-            engine: what runs here runs in a VM with prompts off. Absent for
-            every chat that is not one, so no scene at rest changes. */}
-        {vmLane !== undefined && <span className="pf__kind chat__vm" data-chat-vm={vmLane.runtime} title={`runs in a throwaway ${VM_RUNTIME_NAME[vmLane.runtime]} VM with prompts off — only its folder is shared, the network is an allowlist`}>{VM_LANE_LABEL}</span>}
         <span className={`pf__kind chat__backend${props.teammateName !== undefined && props.teammateName.toLowerCase().startsWith(backend.toLowerCase()) ? ' chat__backend--echo' : ''}`} data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M279. The phase, a SIBLING of the pill: the pill's text is the
