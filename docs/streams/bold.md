@@ -66,6 +66,10 @@ on" and a provider is a row in a table, not a code path.
 - **M543** — the panel: a `cloud` lane card on the canvas showing the state word,
   the PR, its checks and the diff stat; opened from a task ("Send to cloud"), the
   palette, an agent line and a workflow node (the four doors).
+  *Built:* no new panel kind. The lane shows on the task's own work card (a
+  `cloud` row with the state word, its reason and the PR), because a second
+  card for the same task would split its facts. `cloudDispatchFor` builds the
+  one request every door sends; a teammate's plan cannot `cloud-send`.
 - **M544** — review and merge from the canvas: the review layer reads the PR's
   diff, and Accept merges through the broker.
 - **M545** — the morning queue ranks a ready cloud lane beside local lanes, and
