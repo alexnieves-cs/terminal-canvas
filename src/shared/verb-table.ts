@@ -387,6 +387,10 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // M379. The team queue exists so a PERSON signs off; an agent or a
   // workflow node that could answer it would be the thing it guards against.
   answerTeamAsk: 'a teammate\'s ask is a person\'s to answer — a plan or a workflow node answering it would undo the approval it asks for',
+  // M583. Handing an agent to a person, and a person's verdict on a result,
+  // are between people: a plan that handed its own agent on, or a node that
+  // approved a review, would be the very thing the queue asks a person for.
+  teamFlow: 'a handoff and a review are between people — a plan or a workflow node handing an agent on, or judging a result, would undo the second pair of eyes the queue exists for',
   openWorkflow: 'opens a VIEW of a template — a plan runs a shape with `spawn` or the sheet, it does not open a diagram of one',
   beginSavePrompt: 'opens the palette\'s text mode',
   deletePrompt: 'prompt administration is the user\'s',

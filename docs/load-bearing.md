@@ -2370,6 +2370,15 @@ the feed (M125 cuts it) — could not have been. Unproven, by construction, at m
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
 
+- **A fork's conversation resuming in claude (lane K, M557) — NOT YET confirmed by hand.**
+  `main/turn-forks.ts` writes the cut copy of claude's JSONL to
+  `~/.claude/projects/<claudeProjectSlug(fork cwd)>/<new id>.jsonl`, betting on two facts of
+  another program: the folder rule (every non-alphanumeric of the cwd becomes `-`) and that
+  `--resume <id>` reads a file it did not write. `verify:fork` proves the cut and the path, never
+  the CLI. To confirm: turn on "Snapshot each agent turn", have a claude chat in a repository
+  answer two messages, Replay → Branch from here at message 1, and send the fork "what did I
+  ask you first?". A wrong rule shows as the fork's first send starting a new conversation with
+  M319's resume-lost line, never as a silent wrong answer.
 - **The real OS attention surfaces (M43)** — `new Notification(...).show()` and its click
   handler, `app.dock.setBadge`, and `shell.beep`, all wired in `main/bootstrap/stores.ts`. No suite reaches
   them: `verify:pty-manager` drives a FAKE `AttentionSink` and counts its calls. That a real

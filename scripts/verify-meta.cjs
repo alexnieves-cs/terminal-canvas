@@ -1334,7 +1334,7 @@ console.log('\n' + '='.repeat(60))
     }
   }
   const css = read('src/renderer/styles.css') || ''
-  const fenced = ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'N', 'O', 'U']
+  const fenced = ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'N', 'O', 'P', 'U']
   const badFences = fenced.filter((id) => {
     const a = css.indexOf(`/* ── st:${id} ── */`)
     const b = css.indexOf(`/* ── /st:${id} ── */`)
@@ -1342,8 +1342,8 @@ console.log('\n' + '='.repeat(60))
   })
   const hook = read('.claude/hooks/guard-paths.sh') || ''
   const hookReads = /docs\/streams\/ownership\.json/.test(hook) && /'tc-lane'/.test(hook)
-  ok('streams.own.1 lanes A–O own disjoint files, none claims a shared file, B–O have st: CSS fences, and the edit hook reads the map and .git/tc-lane',
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'N', 'O'].every((id) => Array.isArray(lanes[id]) && lanes[id].length > 0) &&
+  ok('streams.own.1 lanes A–P own disjoint files, none claims a shared file, B–P have st: CSS fences, and the edit hook reads the map and .git/tc-lane',
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'N', 'O', 'P'].every((id) => Array.isArray(lanes[id]) && lanes[id].length > 0) &&
       collisions.length === 0 && badFences.length === 0 && hookReads,
     JSON.stringify({ lanes: ids, collisions, badFences, hookReads }))
 }

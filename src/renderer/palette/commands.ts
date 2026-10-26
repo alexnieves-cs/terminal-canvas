@@ -2,6 +2,7 @@ import type { TaskPlan } from '@shared/task-plan'
 import { PROVIDERS as CLOUD_PROVIDERS, type CloudProviderId } from '@shared/cloud-lane'
 import { COMMAND_ROW_ID, REASON_NO_COMMAND } from './command-panel'
 import { teamAskWords } from '@shared/team-asks'
+import { handoffWords, reviewWords, type FlowRequest } from '@shared/team-flow'
 import { noteFormSentence } from '@shared/notes'
 import { shapeFormSentence } from '@shared/flowchart'
 import type { CreationResult } from '@shared/verb-table'
@@ -126,6 +127,8 @@ export interface PaletteActions {
   answerApproval(id: string, requestId: string, allow: boolean, scope?: 'session'): void
   /** M379. One person's answer to a teammate's agent's ask: allow ONCE, or deny. Never a grant. */
   answerTeamAsk(workspaceId: string, askId: string, allow: boolean): void
+  /** M583. One handoff or review press, as this person (team-flow/useTeamFlow's write). */
+  teamFlow(req: FlowRequest): void
   beginSavePrompt(): void
   deletePrompt(id: string): void
   beginRenamePanel(id: string, currentTitle: string): void
@@ -818,6 +821,57 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         id: `team.deny.${t.workspaceId}.${t.askId}`, title: `Deny — ${w.who}`, subtitle: w.action, mono: true,
         searchText: `deny refuse team teammate ask needs you ${t.tool} ${w.who}`, group: 'panel',
         run: () => actions.answerTeamAsk(t.workspaceId, t.askId, false)
+      })
+    }
+    // M583. The multiplayer canvas from wherever the person is: hand an agent
+    // they hold to someone in the room (or to anyone), put it up for review,
+    // and the Needs-you section's own verbs for what is waiting on them. The
+    // captured panel's rows stand at rest; every other held agent's are found
+    // by typing, so a canvas of twenty agents does not bury the list.
+    const flow = ctx.teamFlow
+    for (const h of flow?.held ?? []) {
+      const atRest = h.panelId === ctx.capturedId
+      const who = h.title === '' ? 'this agent' : h.title
+      for (const t of (flow?.teammates ?? []).filter((x) => x.workspaceId === h.workspaceId)) {
+        out.push({
+          id: `team.handoff.${h.workspaceId}.${h.panelId}.${t.userId}`, title: `Hand off ${who} to ${t.name}`, group: 'panel', ...(atRest ? {} : { hiddenAtRest: true }),
+          subtitle: 'they hold it from then on — its questions and review go to them; it keeps running here',
+          searchText: `hand off handoff pass give teammate team ${t.name} ${who}`,
+          run: () => actions.teamFlow({ kind: 'hand-off', workspaceId: h.workspaceId, panelId: h.panelId, to: t.userId, note: '' })
+        })
+      }
+      out.push({
+        id: `team.handoff.${h.workspaceId}.${h.panelId}.anyone`, title: `Offer ${who} to anyone on the team`, group: 'panel', ...(atRest ? {} : { hiddenAtRest: true }),
+        subtitle: 'the first teammate to take it holds it',
+        searchText: `hand off handoff offer anyone team teammate ${who}`,
+        run: () => actions.teamFlow({ kind: 'hand-off', workspaceId: h.workspaceId, panelId: h.panelId, to: '', note: '' })
+      })
+      out.push({
+        id: `team.review.ask.${h.workspaceId}.${h.panelId}`, title: `Ask the team to review ${who}`, group: 'panel', ...(atRest ? {} : { hiddenAtRest: true }),
+        subtitle: 'puts it in the shared review queue — anyone but you can approve it or ask for changes',
+        searchText: `review ask team queue approve second pair of eyes ${who}`,
+        run: () => actions.teamFlow({ kind: 'ask-review', workspaceId: h.workspaceId, panelId: h.panelId, title: who, summary: '' })
+      })
+    }
+    for (const r of flow?.handoffs ?? []) {
+      const w = handoffWords(r)
+      out.push({
+        id: `team.take.${r.workspaceId}.${r.handoffId}`, title: `Take ${w.who}`, subtitle: r.note === '' ? w.ask : r.note, group: 'panel',
+        searchText: `take accept handoff handed team teammate needs you ${w.who}`,
+        run: () => actions.teamFlow({ kind: 'take', workspaceId: r.workspaceId, handoffId: r.handoffId })
+      })
+    }
+    for (const r of flow?.reviews ?? []) {
+      const w = reviewWords(r)
+      out.push({
+        id: `team.review.approve.${r.workspaceId}.${r.reviewId}`, title: `Approve — ${r.title}`, subtitle: w.who, group: 'panel',
+        searchText: `approve review team queue needs you ${r.title} ${w.who}`,
+        run: () => actions.teamFlow({ kind: 'approve', workspaceId: r.workspaceId, reviewId: r.reviewId })
+      })
+      out.push({
+        id: `team.review.changes.${r.workspaceId}.${r.reviewId}`, title: `Ask for changes — ${r.title}`, subtitle: w.who, group: 'panel',
+        searchText: `request changes review team queue needs you ${r.title} ${w.who}`,
+        run: () => actions.teamFlow({ kind: 'request-changes', workspaceId: r.workspaceId, reviewId: r.reviewId })
       })
     }
     if (approvals.length === 0) {

@@ -18,6 +18,7 @@ its own section, and records each decision it makes there.
 | L | The night as a film | M561–M564 | `verify:film` | M |
 | N | A live demo in the browser | M565–M569 | `verify:demo` | M |
 | O | A harness that learns | M570–M579 | `verify:learn` | L–XL |
+| P | Multiplayer canvas (added 2026-10-26) | M580–M589 | `verify:multiplayer` | M–L |
 | Q | The app, hosted (opens from any browser) | M590–M599 | `verify:host` | L |
 
 There is no lane M, so a lane id is never read as a milestone.
@@ -206,6 +207,43 @@ prompts off without touching the Mac.
 - **M558** — Replay's "Branch from here", and the fork placed beside the original.
 - **M559** — compare: Replay's compare view shows the original and the fork.
 - **M560** — pruning: snapshot refs are bounded and removed with the panel.
+
+**Built (one PR, M556–M560).** Suite `verify:fork`, plain node against a real
+temporary repository. Decisions:
+
+- **A turn is a prompt.** Turn N is "after the agent answered the Nth message a
+  person typed", counted from the durable transcript (`promptCount`), not from the
+  process's result count, which restarts with the process. The UI says *message
+  N*, because Replay's own counter counts both sides.
+- **Off by default** (`agents.turnSnapshots`, "Snapshot each agent turn"): a
+  snapshot writes objects and a ref into the person's repository.
+- **Capture** (`src/main/turn-forks.ts`, called from the agent fan-out in
+  `bootstrap/agent-runtime.ts` on each `result`): `git add -A` into a *copy* of
+  the index, `write-tree`, `commit-tree` as "Terminal Canvas", `update-ref
+  refs/tc/turns/<panel>/<n>`. Plumbing on purpose: the person's commit hooks must
+  not run on a snapshot. An unchanged tree reuses the previous commit. Captures
+  per panel are serialised.
+- **The conversation is copied and cut, not `--fork-session`.** That flag forks at
+  the end of a session, and claude finds a session by its cwd's project folder,
+  which a fork in a new worktree does not share. Main cuts claude's JSONL before
+  prompt N+1, re-addresses every record (new `sessionId`, the fork's `cwd`) and
+  writes it under `~/.claude/projects/<slug of the fork's cwd>/`. A backend row
+  without `forksTurns` (every one but claude) forks the files only and says so.
+- **Two doors:** Replay's "Branch from here" (reached from the inspector's
+  "Replay this conversation…" and its palette row), and "fork from here" on an
+  answer's hover in the chat itself (the UI audit's ask: a door where people
+  already are). The verb is
+  `canvas/useForkVerb.ts`; it places the fork beside the original and switches the
+  sheet to compare the two (M559), with a "branched from … after message N"
+  caption. No palette, agent-line or workflow door yet: each needs a turn picked,
+  which only the sheet and the transcript show.
+- **Pruning (M560):** capturing turn n deletes every snapshot past n (a recycled
+  id or a cleared chat) and the oldest past 50; closing a chat deletes all of
+  its snapshots. Fork worktrees are ordinary worktree records, removed the usual
+  way.
+- **Manual-only:** that claude resumes the cut copy from the fork's folder is
+  left to a hand check, not CI; it is listed in `docs/load-bearing.md` as not
+  yet confirmed, with the steps.
 
 ## L — The night as a film (M561–M564)
 
@@ -400,3 +438,59 @@ Decisions (lane Q):
   block, and a file that held nothing else); a skill is removed only while
   its hash matches what was written; a block someone removed by hand is not
   put back. The retired rule stays in the library, struck through, with why.
+## P — Multiplayer canvas (M580–M589)
+
+Added 2026-10-26 from the second direction list (Alex: "do 2 and 1"; #1 is this
+lane, #2 is lane Q, the hosted web version). The shared canvas itself already
+exists (M330–M348: accounts, presence and cursors, the per-field CRDT, roles,
+shared text, the relay, the collab server), and so does the team's approval
+queue (M375–M379). What a team still could not do on it was pass work to each
+other or review each other's results. This lane adds those two, in the same
+workspace Y.Doc, judged by the same one table in three places (renderer, main,
+server).
+
+- **M581 — the record and its rules** (`shared/canvas-ops.ts`, `shared/canvas-doc.ts`,
+  `shared/team-flow.ts`). Two new maps, `canvas:handoffs` and `canvas:reviews`,
+  field map per object, one field per person, each written once.
+- **M582 — main** (`main/presence/canvas-sync.ts` `teamFlow`/`writeFlow`,
+  `bootstrap/presence-wiring.ts` `createTeamFlowDoors`) and the doors
+  `team:flow`, `team:flow-write`, `team:flow-changed`.
+- **M583 — the screens**: Needs you's "Handed to you", "Review queue" and
+  "Waiting on your team" (`renderer/team-flow/`), and palette rows to hand off,
+  offer to anyone, ask for a review, take, approve and ask for changes.
+
+### P decisions
+
+- **A handoff moves responsibility, never a process.** An agent runs on one
+  Mac; what passes is who holds it (its *steward*): whose questions and review
+  it is. The panel's owner is its first steward. Moving the process is the
+  relay's job (M335) and is not reinvented here.
+- **A handoff settles by its replies, without its maker's machine.** "I'm
+  leaving, take this" is the common case, so an offer that waited for its maker
+  to come back online to close it would not be a handoff. Named: that person's
+  accept hands it, their decline ends it. Open to anyone: the first accept.
+- **The chain is ordered by the server, never by a clock.** Each handoff
+  carries `n`, its place in the panel's chain; the server checks it against
+  the handoffs already handed, and only the current steward may open the next,
+  one at a time. The steward is the taker of the highest `n`.
+- **Nobody reviews their own result.** The poster cannot claim or judge their
+  own review: the point is a second pair of eyes. One "changes" decides it over
+  any approvals (the asks' rule); otherwise one approval. The queue hides a
+  review as soon as it is decided, and its poster closes it with Done — only as
+  withdrawn or as the verdicts decided, never "approved" on their own word. It
+  is not closed automatically: a close one tick after the first verdict would
+  refuse a second reviewer's verdict in flight.
+- **One handoff per panel per update.** Each is judged against the chain as it
+  stood, so the server refuses a second in the same update, and `stewardOf`
+  breaks a tie by id so every reader agrees.
+- **Names are main's.** `team:flow-write` names a workspace, an object and a
+  choice, never a person; main writes the signed-in person, and the server
+  checks that against the connection. Words leave scrubbed and counted
+  (`redactSecrets` in canvas-sync, an existing caller).
+- **Between people only.** `teamFlow` is excluded from the verb table with its
+  reason: a plan or a workflow node that handed its own agent on, or approved
+  a review, would undo the person the queue asks for. The doors are the
+  Dock's rows and the palette.
+- **No new audit words yet.** The compliance trail's actions are pinned by a
+  migration's CHECK, and `server/` is lane D's: handoffs and reviews are not
+  rows on the trail until that request lands (`docs/streams/requests.md`).

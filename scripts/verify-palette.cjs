@@ -294,6 +294,8 @@ const spyActions = () => {
     tidyPanels: record('tidyPanels'),
     // M379. The team asks' palette door.
     answerTeamAsk: record('answerTeamAsk'),
+    // M583. The multiplayer canvas's palette door.
+    teamFlow: record('teamFlow'),
     // M383. The Replay sheet's palette door.
     openReplay: record('openReplay'),
     // M409. The Undo/Redo rows' verbs (palette.undo.1 runs both).

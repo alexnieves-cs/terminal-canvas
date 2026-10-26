@@ -10,6 +10,7 @@ import type { RadarLane, RadarReport } from './collision-radar'
 import type { LearnDecideRequest, LearnDecideResult, LearnProposeRequest, LearnProposeResult, LearnProveRequest, LearnProveResult, LearnRead, LearnRecordResult } from './learn'
 import type { CommentFacts } from './lessons'
 import type { TonightBatchSpec, TonightStatus } from './tonight'
+import type { ForkRequest, ForkResult, TurnSnapshotRow } from './turn-fork'
 import type { TournamentStatus } from './tournament'
 import type { CloudLane, CloudProviderId } from './cloud-lane'
 import type { PrepareResult, RepoSetup } from './repo-setup'
@@ -514,6 +515,20 @@ export const IPC = {
    */
   TEAM_ASK_ANSWER: 'team:ask-answer',
   /**
+   * M582. The multiplayer canvas's queue for this person: handoffs offered to
+   * them (by name, or to anyone), reviews in the team's queue they may give,
+   * their own open offers and reviews with how each stands, and who holds
+   * each handed agent. Read-only.
+   */
+  TEAM_FLOW: 'team:flow',
+  /**
+   * M582. One handoff or review write — hand off, take, decline, withdraw,
+   * ask for a review, say you are looking, approve, ask for changes —
+   * written to the workspace doc in THEIR name by main (the request carries
+   * no name; the collab server refuses any other).
+   */
+  TEAM_FLOW_WRITE: 'team:flow-write',
+  /**
    * The shared canvas (presence/canvas-sync.ts). One write-through op from a
    * gesture on the ACTIVE workspace — a move/resize as it happens, or removing
    * a placeholder — authorised against this person's workspace role before it
@@ -921,6 +936,15 @@ export const IPC = {
   TONIGHT_STOP: 'tonight:stop',
   TONIGHT_STATUS: 'tonight:status',
   /**
+   * M556–M558 (lane K). A chat's turn snapshots (hidden refs under
+   * refs/tc/turns/<panel>/) and a fork from one: main makes the worktree at
+   * the snapshot and writes the conversation cut at that turn under the
+   * renderer-minted panel id, then the renderer places the chat beside the
+   * original. Refused by name — snapshots off, not a repository, no snapshot.
+   */
+  FORK_TURNS: 'fork:turns',
+  FORK_BRANCH: 'fork:branch',
+  /**
    * M547. A TOURNAMENT's doors over the runner: start one (parsed by name in
    * main; main makes each entrant's worktree and chat through the create
    * door and starts its checked auto run), stop it (every run stopped, the
@@ -1291,6 +1315,8 @@ export const IPC_EVENTS = {
   TEAM_OBSERVED: 'team:observed',
   /** M377. TEAM_ASKS's rows again, after a teammate opened, answered or closed one. */
   TEAM_ASKS_CHANGED: 'team:asks-changed',
+  /** M582. TEAM_FLOW's snapshot again, after a teammate handed, took, claimed or judged something. */
+  TEAM_FLOW_CHANGED: 'team:flow-changed',
   /** The shared canvas: the active workspace's view after a peer's change, a refusal, or a switch; null when not shared. */
   CANVAS_SHARED: 'canvas:shared',
   /**
@@ -2179,6 +2205,11 @@ export interface CanvasBridge {
     stop(): Promise<boolean>
     status(): Promise<TonightStatus | null>
   }
+  /** M556–M558. See FORK_TURNS. */
+  fork: {
+    turns(panelId: string): Promise<TurnSnapshotRow[]>
+    branch(req: ForkRequest): Promise<ForkResult>
+  },
   /** M547. See TOURNAMENT_START. The spec is `shared/tournament.ts`'s, each entrant naming its panel. */
   tournament: {
     start(spec: unknown): Promise<{ kind: 'started'; status: TournamentStatus } | { kind: 'refused'; reason: string }>
@@ -2522,6 +2553,10 @@ export interface CanvasBridge {
     asks(): Promise<TeamAskRow[]>
     answerAsk(req: TeamAskAnswerRequest): Promise<Verdict>
     onAsks(listener: (rows: TeamAskRow[]) => void): () => void
+    /** M582. See TEAM_FLOW / TEAM_FLOW_WRITE / TEAM_FLOW_CHANGED. */
+    flow(): Promise<import('./team-flow').TeamFlowSnapshot>
+    writeFlow(req: import('./team-flow').FlowRequest): Promise<Verdict>
+    onFlow(listener: (snapshot: import('./team-flow').TeamFlowSnapshot) => void): () => void
   }
   /** M89. See BROKER_AUDIT. */
   broker: {
