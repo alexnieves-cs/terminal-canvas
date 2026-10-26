@@ -20,6 +20,8 @@
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
+    "build:host": "node scripts/build-host.cjs",
+    "host": "node out/host/host.cjs",
     "start": "unset ELECTRON_RUN_AS_NODE && electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
@@ -130,7 +132,9 @@
     "verify:ux": "node scripts/verify-ux.cjs",
     "verify:auto": "node scripts/verify-auto.cjs",
     "verify:film": "node scripts/verify-film.cjs",
-    "verify:vm": "node scripts/verify-vm.cjs"
+    "verify:vm": "node scripts/verify-vm.cjs",
+    "verify:learn": "node scripts/verify-learn.cjs",
+    "verify:host": "node scripts/verify-host.cjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",

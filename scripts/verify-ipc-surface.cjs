@@ -350,9 +350,15 @@ app.whenReady().then(() => {
   // film's record read and its save.
   // +3: tournament:start / tournament:stop / tournament:status (M547, lane I)
   // — N entrants on one task, each in its own lane, run and scored by main.
+  // +2: learn:read / learn:record (M570, lane O) — the lessons a review
+  // taught, and a sent comment filed as one.
+  // +2: learn:propose / learn:decide (M571–M572, lane O) — a rule drafted
+  // from lessons by a no-tools agent, and the person's answer to the draft.
+  // +1: learn:prove (M573, lane O) — a draft's task replayed in a throwaway
+  // worktree with the rule applied, judged by recurrence and the check.
   // +2: team:flow / team:flow-write (M582, lane P) — the multiplayer canvas's
   // handoffs and shared review queue, read and written in the person's name.
-  const EXPECTED_CHANNELS = 227
+  const EXPECTED_CHANNELS = 232
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

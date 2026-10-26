@@ -19,6 +19,7 @@ its own section, and records each decision it makes there.
 | N | A live demo in the browser | M565–M569 | `verify:demo` | M |
 | O | A harness that learns | M570–M579 | `verify:learn` | L–XL |
 | P | Multiplayer canvas (added 2026-10-26) | M580–M589 | `verify:multiplayer` | M–L |
+| Q | The app, hosted (opens from any browser) | M590–M599 | `verify:host` | L |
 
 There is no lane M, so a lane id is never read as a milestone.
 
@@ -251,6 +252,52 @@ prompts off without touching the Mac.
 - **M568** — a Pages workflow publishes it on merge to main.
 - **M569** — the README links it.
 
+## Q — The app, hosted (M590–M599)
+
+Alex's ask (2026-10-26): the whole app in the cloud, opened from any browser,
+no Mac needed. Lane N's demo is the renderer on a fake bridge; this lane is
+the renderer on the REAL one. [docs/hosted.md](../hosted.md) is the long form.
+
+- **M590** — the host: `src/main/index.ts` bundled with `electron` aliased to
+  `src/host/electron-shim.ts`, a hub that is `ipcMain` and `webContents.send`
+  over one WebSocket, and the tagged-JSON wire.
+- **M591** — the tab: the app's own preload, its `electron` import aliased to
+  the socket; dialogs, menu keys, paste and the lost-connection notice.
+- **M592** — the gate: a token, a cookie, an Origin check, back-off.
+- **M593** — dialogs and links asked of the person in the tab.
+- **M594** — the image (`deploy/host/Dockerfile`) and `host.yml`: a browser
+  against a host on Linux and against the image, on every PR.
+
+Decisions (lane Q):
+
+- **Main runs unedited, on a stand-in for Electron, not a port.** 24 files
+  in `src/main` import 17 Electron names; a shim of that surface is ~400
+  lines, and a rewrite of main would be a second main to keep in step. A
+  name the shim lacks is a load error on the host, and `host.shim.1`
+  inventories every import on every run. (2026-10-26, M590.)
+- **The tab runs the preload, not a second bridge.** Aliasing the preload's
+  three desktop imports (`electron`, `os`, Sentry's hook) makes every door
+  the preload's own line, so the hosted bridge cannot drift from the app's
+  (`host.preload.1`). Lane N's fake bridge stays the demo's; nothing is shared
+  but the renderer.
+- **One live tab.** Main has one window. A newer tab takes over and main sees
+  a navigation and a load, a Cmd+R in the app's terms, so tmux keeps every
+  shell (`host.hub.3`). Teammates share through the collab server (lane P),
+  never through one host.
+- **No token, no listening.** Off loopback the host refuses to start, and the
+  gate listens before main loads (`host.gate.1`, `host.boot.1`). The image
+  never carries a token (`host.docker.1`).
+- **Edit keys are the tab's.** Main's Edit menu reads main's clipboard,
+  which on a host is the server's; the tab emits `edit:*` itself and pastes
+  from the browser's paste event. Other menu keys are matched in the tab and
+  run on the host (`host.shim.3`, `host.keys.1`).
+- **Not an outward door.** Nothing leaves the person's machine: the page
+  and the host are theirs, and the gate is in front of both. The app's own
+  outward doors run on the host exactly as on the Mac, through `outward`.
+- **Booting main is host.yml's, not verify's.** The Mac runner's node-pty is
+  built for Electron's ABI; `verify:host` drives the hub, gate and shim in
+  plain node, and `host.yml` boots the real main on Linux with a browser.
+
 ## O — A harness that learns (M570–M579)
 
 - **M570** — the signal: a discarded hunk or a review comment becomes a lesson
@@ -263,6 +310,97 @@ prompts off without touching the Mac.
 - **M576–M579** — the library: accepted rules, where each came from, and a way
   to retire one.
 
+### O — decisions
+
+- **Two signals, both a person's act.** A discard (per file: the app has no
+  per-hunk discard, so "hunk" is the file's changed lines) and a review comment
+  once SENT to the agent. A drafted comment is not a verdict yet, and an
+  agent's proposed comment (M360) is never a lesson, kept or not.
+- **A discard is captured in main, around the one discarder** (`withLessonCapture`
+  in `bootstrap/stores.ts`), not at the renderer's five discard doors. The diff
+  is read before the discard and the lesson recorded only for paths reported
+  gone. Capture failures are swallowed: a lesson never costs the discard.
+- **A comment is harvested from the work items** (`sentAt` is the one fact
+  every sender writes), offered to main once per launch; main keeps one per id.
+  The renderer can record comments only; discard lessons are main's alone.
+- **Lessons are keyed by the main tree** (`commonRootOf`), so a lane's lessons
+  outlive its worktree. One JSONL per repository under `userData/lessons/`,
+  every text field scrubbed, the signature rebuilt from the scrubbed excerpt.
+- **The signature** is the excerpt's distinctive identifiers (keywords and
+  the scrubber's placeholder dropped), never the person's words. Recurrence
+  (M573) is containment: the share of the lesson's signature the replay repeats.
+- **The page reads what is there.** Show Lessons lists the lessons for the
+  folders the canvas's panels sit in. Reading spends nothing, so the page is
+  always on; the agent steps (propose, prove) get the off-by-default switch.
+- **The proposer is M252's run** (`claude -p --tools "" --json-schema`), plus
+  `--strict-mcp-config` so no MCP server loads: the input is agent-written,
+  and an allowed MCP tool would be a door out. That the flag pair leaves the
+  run with no tools at all is a manual-only check against the real CLI.
+- **`learn.agents`** (Agent state, off, not plan-writable) gates every agent
+  step, read at the press; one draft at a time, held until a killed run exits.
+- **Scrub, then cut.** Lessons are read whole (64 KB of lines) and scrubbed
+  before the 40-line excerpt is cut, and a private key with no END line is
+  dropped from its BEGIN. The critic found the first cut kept parts of keys.
+- **A rule is a plain sentence.** Invisible characters (controls, format,
+  tag block, bidi), HTML comments and Markdown structure are refused, so what
+  the page shows is what an agent reads.
+- **The proof replays, it does not argue.** A detached `proof-*` worktree
+  at the newest lesson's baseline (no branch; removed with `--force` on every
+  way out, a crash's leftovers swept at the next replay, never at boot: main
+  builds the runner before the single-instance lock). The rule is written,
+  the saved setup run, and that tree recorded with `write-tree`; the judge
+  diffs the agent's work against IT, so a lockfile `npm install` rewrote, or
+  the rule itself, is never mistaken for the replay's work. The diff is
+  `diff-index` with CONTENT_DIFF_CONFIG's pins and `--no-renames`; file names
+  come from `--name-status -z`. The critic found the first version counted
+  both, and read `i/` prefixes under a person's `diff.mnemonicPrefix`.
+- **Verdicts, in order:** no-change, recurred (a deletion lesson recurs as a
+  deletion), the rule's own file edited (void), no-check, check-failed,
+  holds. A replay that touched none of the lessons' files still holds (the
+  rule may be "leave that file alone"), and its line says so.
+- **The replay agent can edit and nothing else.** `--tools Read,Edit,Write,Glob,Grep`
+  (so no shell exists for anyone's allow rule to open — `acceptEdits` alone
+  was not enough), `disableAllHooks`, `--strict-mcp-config`, 40 turns, 20
+  minutes, killed on quit (and the check aborted). The rule is never written
+  through a symlink: a linked CLAUDE.md or `.claude/skills` would land it in
+  the person's real file. The worktree's `.git` link is read before the agent
+  and the run is void if it changed (Write could point it at the person's
+  repository, and `add -A` would stage there). The rule's file is staged with
+  `-f`, because `.claude/` is often gitignored.
+- **The check runs what the tree holds.** An agent that rewrote `package.json`
+  or the test config can make its own check pass; a "holds" that changed one
+  of the check's usual files says so by name, for the person to read before
+  Accept. Restoring them would also undo a task that legitimately adds a
+  dependency, so it is a sentence, not a refusal.
+- **Accept is the one write into the repository, and it is fenced.** Only a
+  draft whose proof holds for its exact text, checked again as the agent's
+  answer was. A CLAUDE.md line lives in one `<!-- tc:learned -->` block the
+  app rewrites from its own record and never edits outside; a skill is a new
+  `.claude/skills/<name>/SKILL.md`, created exclusively (`wx`), never over a
+  file. Never through a symlink; a write the library cannot record is undone;
+  temp file and rename. A proof stands for the rule's text AND its kind, name
+  and description (the description decides when a skill loads).
+- **The markers are whole lines outside fenced code, exactly one pair.** A
+  CLAUDE.md that documents the block in inline code or an example is not the
+  block (the critic's first finding: everything between two mentions was
+  replaced). Two blocks are refused, so a retired rule cannot live on in the
+  copy not rewritten. The block takes the file's line endings, and retire
+  takes back exactly the separator accept added.
+- **An unreadable rule record blocks the block.** The block is rebuilt from
+  the records, so while any stored rule cannot be parsed, Accept and Retire
+  refuse and name the file; the unread record is carried through every write.
+  A read that fails for any reason but ENOENT is an error, never "no file".
+- **Accept and Retire are a person's press, on the Lessons page only** — a
+  deliberate exception to the four doors: a palette row would be a fifth way
+  to the same button, but an agent line or a workflow node would let an agent
+  write a standing rule for agents, which is the one thing this lane forbids.
+- **Not defended:** a hostile process swapping a symlink into the main tree
+  between the `lstat` and the write. Accept runs in the person's own checkout
+  at their press; the replay, where an agent IS the threat, is guarded.
+- **Retire keeps the row.** The line leaves the block (the last one takes the
+  block, and a file that held nothing else); a skill is removed only while
+  its hash matches what was written; a block someone removed by hand is not
+  put back. The retired rule stays in the library, struck through, with why.
 ## P — Multiplayer canvas (M580–M589)
 
 Added 2026-10-26 from the second direction list (Alex: "do 2 and 1"; #1 is this

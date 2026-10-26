@@ -13,6 +13,9 @@ import { arrangementTemplate } from '../orchestration/orch-arrangement'
 import { FocusTask } from '../focus/FocusTask'
 import type { FocusSide } from '../focus/focus-model'
 import { TeamView } from '../team/TeamView'
+import { LearnPage } from '../learn/LearnPage'
+import { useLessonHarvest } from '../learn/useLessonHarvest'
+import { panelPath } from '@renderer/palette/panel-name'
 import type { useAccounts } from '../account/useAccounts'
 import type { CenterView, ShellChrome } from '../shell/useShellChrome'
 import type { useTaskQueue } from '@renderer/shell/useTaskQueue'
@@ -94,6 +97,9 @@ export function CenterPages({
   accounts, focusTask, setFocusTask, taskContextFor, teammates, moveSessionsToTask,
   pendingApprovals, backendInfo, registry
 }: CenterPagesProps): JSX.Element {
+  // M570 (lane O). Mounted with the pages, which are always mounted, so a sent
+  // comment is offered as a lesson whether or not the Lessons page is open.
+  useLessonHarvest(workItems, (id) => { const p = panelsRef.current.find((x) => x.rect.id === id); return p === undefined ? undefined : panelPath(p) })
   return (
     <>
       {centerView === 'orchestration' && (
@@ -256,6 +262,11 @@ export function CenterPages({
       )}
       {/* The Team view: the same overlay cell, over the same mounted canvas.
           It reads nothing from the canvas — its tiles are people. */}
+      {centerView === 'learn' && (
+        <div className="shell__orch shell__orch--on" data-center-view="learn" role="presentation">
+          <LearnPage panels={panels} />
+        </div>
+      )}
       {centerView === 'team' && (
         <div className="shell__orch shell__orch--on" data-center-view="team" role="presentation">
           <TeamView accounts={accounts} />

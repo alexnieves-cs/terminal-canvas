@@ -7,6 +7,8 @@ import type { CombineRunResult } from './combine'
 import type { CombineInputsResult, IntegrateRequest, IntegrateResult, IntegrationReceipt } from './integration'
 import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { RadarLane, RadarReport } from './collision-radar'
+import type { LearnDecideRequest, LearnDecideResult, LearnProposeRequest, LearnProposeResult, LearnProveRequest, LearnProveResult, LearnRead, LearnRecordResult } from './learn'
+import type { CommentFacts } from './lessons'
 import type { TonightBatchSpec, TonightStatus } from './tonight'
 import type { TournamentStatus } from './tournament'
 import type { CloudLane, CloudProviderId } from './cloud-lane'
@@ -810,6 +812,27 @@ export const IPC = {
    * (`merge-tree --write-tree`, touching no checkout). Read-only.
    */
   LANE_RADAR: 'lane:radar',
+  /**
+   * M570 (lane O). A harness that learns. `read` answers the lessons each
+   * named repository (resolved to its main tree) has been taught; `record`
+   * files one from a review comment the person SENT. A discard's lesson is
+   * main's own (main/lesson-capture.ts) and has no channel.
+   */
+  LEARN_READ: 'learn:read',
+  LEARN_RECORD: 'learn:record',
+  /**
+   * M571–M572. `propose` asks a no-tools agent for ONE rule from named
+   * lessons and keeps it as a draft (refused while `learn.agents` is off);
+   * `decide` is the person's answer to a draft. Neither writes the rule.
+   */
+  LEARN_PROPOSE: 'learn:propose',
+  LEARN_DECIDE: 'learn:decide',
+  /**
+   * M573–M575. Replay a draft's task in a throwaway worktree with the rule
+   * applied (refused while `learn.agents` is off). Answers at once with the
+   * draft `proving`; the verdict lands on it, read back through `read`.
+   */
+  LEARN_PROVE: 'learn:prove',
   /**
    * M312. The repository setup: `read` answers the saved record or a DRAFT
    * detected from the repository's own files; `save` writes one (re-resolved
@@ -2155,6 +2178,16 @@ export interface CanvasBridge {
     /** M545. See CLOUD_RADAR. */
     radar(lanes: RadarLane[]): Promise<RadarReport>
     onChanged(listener: (lane: CloudLaneView) => void): () => void
+  }
+  /** M570. See LEARN_READ. */
+  learn: {
+    read(roots: string[]): Promise<LearnRead>
+    record(facts: CommentFacts): Promise<LearnRecordResult>
+    /** M571. See LEARN_PROPOSE. */
+    propose(req: LearnProposeRequest): Promise<LearnProposeResult>
+    decide(req: LearnDecideRequest): Promise<LearnDecideResult>
+    /** M573. See LEARN_PROVE. */
+    prove(req: LearnProveRequest): Promise<LearnProveResult>
   }
   /** M480. See TONIGHT_START. */
   tonight: {

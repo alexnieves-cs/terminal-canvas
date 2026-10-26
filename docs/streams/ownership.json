@@ -16,7 +16,8 @@
     "L": "M561-M564",
     "N": "M565-M569",
     "O": "M570-M579",
-    "P": "M580-M589"
+    "P": "M580-M589",
+    "Q": "M590-M599"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -140,6 +141,18 @@
       "scripts/verify-multiplayer.cjs",
       "src/shared/team-flow.ts",
       "src/renderer/team-flow/**"
+    ],
+    "Q": [
+      "src/host/**",
+      "src/host-web/**",
+      "vite.host.config.ts",
+      "scripts/build-host.cjs",
+      "scripts/verify-host.cjs",
+      "scripts/host-smoke.cjs",
+      "deploy/host/**",
+      ".github/workflows/host.yml",
+      "docs/hosted.md",
+      ".dockerignore"
     ]
   }
 }

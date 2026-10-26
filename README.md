@@ -530,6 +530,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        tonight:start / tonight:stop / tonight:status
                        tournament:start / tournament:stop / tournament:status
                        cloud:list / cloud:dispatch / cloud:refresh / cloud:forget / cloud:merge / cloud:radar
+                       learn:read / learn:record / learn:propose / learn:decide / learn:prove
                        combine:inputs / combine:integrate / combine:receipts
                        job:list / job:recover
                        agent:cancel-queued / agent:terminate
