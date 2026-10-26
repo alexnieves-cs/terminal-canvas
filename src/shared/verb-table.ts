@@ -291,6 +291,8 @@ export const VERBS: readonly VerbDef[] = [
   // that already exists, bounded by its turn limit, its check and the usage
   // window. It IS on TEAMMATE_REFUSED_VERBS (plan.ts): a night of runs across
   // every lane is the person's to start, never a teammate's plan.
+  { id: 'cloud-send', label: 'Task: send to a cloud agent', args: [{ name: 'panel', kind: 'panel' }, { name: 'provider', kind: 'value' }], destructive: false, actions: ['sendToCloud'], target: 'panel', hint: 'hand a work card\'s task to a cloud agent (`copilot` or `claude-action`); it comes back as a pull request, and you are asked before anything is sent' },
+  { id: 'cloud-merge', label: 'Task: merge the cloud pull request', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['mergeCloud'], target: 'panel', hint: 'squash-merge a work card\'s cloud lane once its checks pass; main re-checks it now and asks you first' },
   { id: 'tonight', label: 'Run tonight', args: [{ name: 'op', kind: 'value', optional: true }], destructive: false, actions: ['runTonight'], target: 'canvas', hint: 'run the open tasks one at a time while you are away — paused at usage limits, Mac kept awake; `tonight stop` ends the batch' },
   { id: 'workspace-from-template', label: 'New workspace from template', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['workspaceFromTemplate'], target: 'canvas', hint: 'a fresh workspace holding the shape' },
   { id: 'zoom-reset', label: 'Reset zoom', args: [], destructive: false, actions: ['resetZoom'], target: 'canvas', hint: 'the initial camera' },
@@ -567,6 +569,8 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: 'an action node whose line is: preview-capture' },
   'preview-bind': { canvas: 'Bind source / Change source on the preview pane', palette: 'preview.bind', agent: 'tc plan preview-bind', workflow: 'an action node whose line is: preview-bind' },
   'fit-task': { canvas: 'Fit task (primary) in the canvas HUD\'s zoom cluster — also lights the related lens', palette: 'task.fit', agent: 'tc plan fit-task', workflow: 'an action node whose line is: fit-task' },
+  'cloud-send': { canvas: 'Cloud… on a work card, then a provider', palette: 'task.cloud.copilot', agent: 'tc plan cloud-send wk1 copilot', workflow: 'an action node whose line is: cloud-send wk1 copilot' },
+  'cloud-merge': { canvas: 'Merge on a work card whose cloud lane is ready', palette: 'task.cloud.merge', agent: 'tc plan cloud-merge wk1', workflow: 'an action node whose line is: cloud-merge wk1' },
   tonight: { canvas: 'Run tonight on the New task sheet', palette: 'task.tonight', agent: 'tc plan tonight', workflow: 'an action node whose line is: tonight stop' },
   'show-task': { canvas: 'Show on a work card', palette: 'task.show', agent: 'tc plan show-task wk1', workflow: 'an action node whose line is: show-task wk1' },
   'show-related': { canvas: 'Show related in the ⋯ menu of any panel of a task, and Related in the command pill with one panel of a task selected', palette: 'task.related', agent: 'tc plan show-related wk1', workflow: 'an action node whose line is: show-related wk1' },

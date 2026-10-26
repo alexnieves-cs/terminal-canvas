@@ -1,4 +1,5 @@
 import type { TaskPlan } from '@shared/task-plan'
+import { PROVIDERS as CLOUD_PROVIDERS, type CloudProviderId } from '@shared/cloud-lane'
 import { COMMAND_ROW_ID, REASON_NO_COMMAND } from './command-panel'
 import { teamAskWords } from '@shared/team-asks'
 import { noteFormSentence } from '@shared/notes'
@@ -540,6 +541,10 @@ export interface PaletteActions {
   fitTask(): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M480. Hand the board's open tasks to main for the night (`op` absent), or end tonight's batch (`stop`). */
   runTonight(op?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M543. Hand a work card's task to a cloud agent (`copilot`, `claude-action`); main asks before anything is sent. */
+  sendToCloud(panelId: string, provider: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M544. Merge the card's ready cloud lane through the broker; main re-checks it and asks first. */
+  mergeCloud(panelId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M324. Open the focus view of the task a card or member panel belongs to. */
   focusTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
@@ -2483,6 +2488,17 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // the SELECTED picture through the system's own chooser, and is disabled by
   // name when the selection is not a picture.
   out.push({ id: 'image.add', title: 'Image: add a picture…', subtitle: 'from a file — or drop one on the canvas', group: 'canvas', searchText: 'image add picture png jpeg drop paste screenshot', run: () => actions.beginRunVerb('image-add') })
+  // M543. One row per provider, so the palette names who the task goes to.
+  // The ids are written out, not built from PROVIDERS: closure.v9.1 finds a
+  // verb's palette row by its literal id.
+  const cloudRow = ({ id, provider }: { id: string; provider: CloudProviderId }): void => {
+    const label = CLOUD_PROVIDERS.find((p) => p.id === provider)?.label ?? provider
+    out.push(withReason({ id, ...hiddenAtRestIf(workPanelId === undefined), title: `Task: send to ${label}`, subtitle: 'hand the selected work card\'s task to a cloud agent; it comes back as a pull request — you are asked before anything is sent', group: 'canvas', searchText: `task cloud send remote agent pull request ${provider} ${label}`, run: () => { if (workPanelId !== undefined) void actions.sendToCloud(workPanelId, provider).then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } }, workPanelId === undefined ? 'select a work card first' : undefined))
+  }
+  cloudRow({ id: 'task.cloud.copilot', provider: 'copilot' })
+  cloudRow({ id: 'task.cloud.claude-action', provider: 'claude-action' })
+  // M544. Hidden at rest like the send rows; the action refuses by name when the card's lane is not ready.
+  out.push(withReason({ id: 'task.cloud.merge', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: merge the cloud pull request', subtitle: 'squash-merge the selected work card\'s cloud lane once its checks pass — re-checked and asked first', group: 'canvas', searchText: 'task cloud merge pull request ready accept land', run: () => { if (workPanelId !== undefined) void actions.mergeCloud(workPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } }, workPanelId === undefined ? 'select a work card first' : undefined))
   out.push(withReason({ id: 'work.review', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: review the lane', subtitle: 'open the review for the selected work card\'s lane, beside the task and its conversation', group: 'canvas', searchText: 'task review lane work card changes diff ready handoff', run: () => { if (workPanelId !== undefined) { const r = actions.reviewTask(workPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, workPanelId === undefined ? 'select a work card first' : undefined))
   // M203 (D08). From a card, or from the one selected panel of a task; the
   // verb itself refuses by name for a panel in no task or in two.

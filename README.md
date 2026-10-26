@@ -527,6 +527,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        env:report / tmux:adoptable / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
                        check:output / combine:run / lane:merge / lane:radar
                        tonight:start / tonight:stop / tonight:status
+                       cloud:list / cloud:dispatch / cloud:refresh / cloud:forget / cloud:merge / cloud:radar
                        combine:inputs / combine:integrate / combine:receipts
                        job:list / job:recover
                        agent:cancel-queued / agent:terminate
@@ -580,7 +581,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        canvas:tidy / canvas:flip
                        canvas:feedback
                        board:add
-                       pool:mint / pool:event / boot:progress
+                       pool:mint / pool:event / boot:progress / cloud:changed
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset / canvas:plan
                        preset:spawn / preset:default / preset:capture

@@ -26,7 +26,7 @@ buildSync({
   // one had never needed it until now.
   alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
 })
-const { IPC, registerIpcHandlers, installTmuxAdopt } = require(OUT)
+const { IPC, registerIpcHandlers, installTmuxAdopt, installCloudLanes } = require(OUT)
 
 const { ok, results } = require('./lib/checks.cjs').createChecks()
 
@@ -142,6 +142,13 @@ app.whenReady().then(() => {
   // M-UX. tmux:adoptable is installed by main/index.ts beside registerIpcHandlers
   // (it needs the login env), so this harness installs it the same way.
   installTmuxAdopt(() => ({}))
+  // M543. Cloud lanes, the same way: a stub broker that is never called and a
+  // lanes file in tmp, so registration touches neither GitHub nor userData.
+  installCloudLanes({ window: null }, {
+    broker: { call: async () => ({ ok: false, reason: 'stub' }) },
+    originOf: async () => null,
+    file: join(tmpdir(), 'tc-verify-ipc-cloud-lanes.json')
+  }).stop()
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
@@ -335,9 +342,13 @@ app.whenReady().then(() => {
   // and git's trial merge of each pair; read-only.
   // +3: tonight:start / tonight:stop / tonight:status (M480, stream C) — the
   // night's batch named by the renderer, run and stopped by main.
+  // +4: cloud:list / cloud:dispatch / cloud:refresh / cloud:forget (M543,
+  // lane H) — a task handed to a cloud agent, read back as a pull request.
+  // +1: cloud:merge (M544, lane H) — merge a ready lane's PR, asked first.
+  // +1: cloud:radar (M545, lane H) — a cloud PR's head against local lanes.
   // +2: film:night / export:night-film (M562–M563, lane L) — the night
   // film's record read and its save.
-  const EXPECTED_CHANNELS = 216
+  const EXPECTED_CHANNELS = 222
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
