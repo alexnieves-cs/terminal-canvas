@@ -346,7 +346,9 @@ app.whenReady().then(() => {
   // lane H) — a task handed to a cloud agent, read back as a pull request.
   // +1: cloud:merge (M544, lane H) — merge a ready lane's PR, asked first.
   // +1: cloud:radar (M545, lane H) — a cloud PR's head against local lanes.
-  const EXPECTED_CHANNELS = 220
+  // +2: film:night / export:night-film (M562–M563, lane L) — the night
+  // film's record read and its save.
+  const EXPECTED_CHANNELS = 222
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
