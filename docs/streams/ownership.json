@@ -119,7 +119,13 @@
       "scripts/verify-fork.cjs"
     ],
     "L": [
-      "scripts/verify-film.cjs"
+      "scripts/verify-film.cjs",
+      "scripts/film-sample.cjs",
+      "src/shared/night-film.ts",
+      "src/shared/night-film-sample.ts",
+      "src/shared/mp4-mux.ts",
+      "src/main/film-export.ts",
+      "src/renderer/film/**"
     ],
     "N": [
       "scripts/verify-demo.cjs"

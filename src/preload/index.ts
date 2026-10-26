@@ -339,7 +339,11 @@ const bridge: CanvasBridge = {
     canvasPng: () => ipcRenderer.invoke(IPC.EXPORT_CANVAS_PNG),
     deckPptx: (req: { path: string }) => ipcRenderer.invoke(IPC.DECK_EXPORT_PPTX, req),
     deckPdf: (req) => ipcRenderer.invoke(IPC.EXPORT_DECK_PDF, req),
-    flowchart: (req) => ipcRenderer.invoke(IPC.EXPORT_FLOWCHART, req)
+    flowchart: (req) => ipcRenderer.invoke(IPC.EXPORT_FLOWCHART, req),
+    nightFilm: (req) => ipcRenderer.invoke(IPC.EXPORT_NIGHT_FILM, req)
+  },
+  film: {
+    night: (req) => ipcRenderer.invoke(IPC.FILM_NIGHT, req)
   },
   tool: {
     generate: (req: { description: string; folder: string }) => ipcRenderer.invoke(IPC.TOOL_GENERATE, req)

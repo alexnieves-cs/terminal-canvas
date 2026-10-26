@@ -21,6 +21,7 @@ import { outward } from '../shared/outward'
 import type { CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult, PanelTextExportRequest, PanelTextExportResult } from '../shared/export'
 import type { DeckExportRequest, DeckExportResult } from '../shared/deck-pptx'
 import type { DeckExporter } from './deck-export'
+import type { FilmDoors } from './film-export'
 
 export interface ExporterDeps {
   log: Pick<ScrollbackLog, 'readAll'>
@@ -46,6 +47,9 @@ export interface Exporters {
   deckPptx(req: DeckExportRequest): Promise<DeckExportResult>
   /** M248. Built in deck-pdf.ts and joined onto this object in main/index.ts. */
   deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
+  /** M562–M563. Built in film-export.ts and joined on in bootstrap/panel-handlers.ts. */
+  filmNight?: FilmDoors['filmNight']
+  nightFilm?: FilmDoors['nightFilm']
 }
 
 const atomicWrite = (path: string, data: string | Buffer): void => {

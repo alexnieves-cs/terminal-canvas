@@ -33,7 +33,7 @@
 
 <p align="center"><sub>
   Design mockup of the 6.0 workspace, with sample data.
-  Every screen below is from the same set; none is a recording of a live session.
+  Every still below is from the same set; none is a recording of a live session.
 </sub></p>
 
 > **Status: `v6.0.1`.** macOS only, Apple Silicon by default. The app is
