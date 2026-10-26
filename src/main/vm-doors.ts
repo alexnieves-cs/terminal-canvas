@@ -1,6 +1,7 @@
 import type { AgentSessionEvent, AgentSessionSnapshot } from '../shared/agent-session'
 import type { TonightStatus } from '../shared/tonight'
 import type { VmLanes } from './vm-lanes'
+import { BACKENDS } from '../shared/agent-backends'
 
 /**
  * M553 (lane J). THE DOORS INTO A SANDBOXED LANE — what Tonight and auto
@@ -108,7 +109,8 @@ export function createVmDoors(deps: VmDoorsDeps): VmDoors {
   const enterOne = async (id: string): Promise<VmDoorResult> => {
     const snap = deps.agents.get(id)
     if (snap === undefined) return { kind: 'refused', reason: 'no such chat' }
-    if (snap.backend !== 'claude') return { kind: 'refused', reason: 'a sandboxed lane runs Claude Code only' }
+    // By the backend's ROW (M99, `registry.1`): the image ships one CLI, claude.
+    if (BACKENDS[snap.backend].binary !== 'claude') return { kind: 'refused', reason: 'a sandboxed lane runs Claude Code only' }
     if (deps.lanes.has(id)) return { kind: 'ok' }
     // A run already going on the Mac is not moved mid-turn: its next turn
     // would spawn in the VM with prompts off, a run nobody asked to sandbox.

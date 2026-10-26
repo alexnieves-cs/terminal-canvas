@@ -13453,8 +13453,8 @@ tr[data-session-row]:focus-within .sessions-world,
    colour — being in a VM is what the panel IS, not how it is doing. */
 .chat__vm {
   border: 1px dashed currentColor;
-  border-radius: 4px;
-  padding: 0 4px;
+  border-radius: var(--r-sm);
+  padding: 0 var(--sp-2);
 }
 /* ── /st:J ── */
 
