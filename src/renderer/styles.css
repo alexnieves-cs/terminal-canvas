@@ -13485,7 +13485,10 @@ tr[data-session-row]:focus-within .sessions-world,
 /* M559. A fork's caption in the compare view. */
 .replay__forked { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
 /* M558. "fork from here" on an answer: contextual, like `remember` beside it — shown on the row's hover or focus. */
-.chat__fork { align-self: flex-start; width: auto; margin-top: var(--sp-1); opacity: 0; transition: opacity var(--dur-1); }
+/* Beside "remember" on one line, never a line of its own: an extra row, even at
+   opacity 0, pushes every answer below it down and moves the chat scenes. */
+.chat__verbs { display: flex; gap: var(--sp-2); align-self: flex-start; }
+.chat__fork { width: auto; margin-top: var(--sp-1); opacity: 0; transition: opacity var(--dur-1); }
 .chat__row--assistant:hover .chat__fork, .chat__fork:focus-visible { opacity: 1; }
 .chat__fork-said { font-size: var(--t-xs); color: var(--fg-3); margin-top: var(--sp-1); }
 /* ── /st:K ── */
