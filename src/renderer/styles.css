@@ -13452,6 +13452,14 @@ tr[data-session-row]:focus-within .sessions-world,
 /* ── /st:J ── */
 
 /* ── st:K ── */
+/* M558 (lane K). Replay's "Branch from here": the button, and what a fork at this moment would get, said before the click. */
+.replay__branch { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
+.replay__branch-go { font: inherit; font-size: var(--t-sm); color: var(--fg); background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); cursor: pointer; }
+.replay__branch-go:hover:not(:disabled) { background: var(--s-3); }
+.replay__branch-go:disabled { cursor: default; color: var(--fg-4); }
+.replay__branch-why { font-size: var(--t-xs); color: var(--fg-3); min-width: 0; }
+/* M559. A fork's caption in the compare view. */
+.replay__forked { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
 /* ── /st:K ── */
 
 /* ── st:L ── */

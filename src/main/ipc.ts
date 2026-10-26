@@ -32,6 +32,7 @@ import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPr
 import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
 import type { TonightStatus } from '../shared/tonight'
+import type { ForkRequest, ForkResult, TurnSnapshotRow } from '../shared/turn-fork'
 import type { EventRow, RunRow, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -234,6 +235,9 @@ export interface AgentHandlers {
   tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }
   tonightStop?(): boolean
   tonightStatus?(): TonightStatus | null
+  /** M556–M558 (lane K). Optional, like tonight's: a harness without them answers empty / refused. */
+  forkTurns?(panelId: string): Promise<TurnSnapshotRow[]>
+  forkBranch?(req: ForkRequest): Promise<ForkResult>
   /** M98. The tools granted for a session, in grant order. */
   grants(id: string): string[]
   /** M98. Drop every grant for a session; it asks again. */
@@ -997,6 +1001,14 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TONIGHT_START, (_event, raw: unknown) => agents.tonightStart?.(raw) ?? { kind: 'refused', reason: 'tonight is not available in this process' })
   ipcMain.handle(IPC.TONIGHT_STOP, () => agents.tonightStop?.() ?? false)
   ipcMain.handle(IPC.TONIGHT_STATUS, () => agents.tonightStatus?.() ?? null)
+  ipcMain.handle(IPC.FORK_TURNS, (_event, panelId: unknown) => (typeof panelId === 'string' ? agents.forkTurns?.(panelId) ?? [] : []))
+  ipcMain.handle(IPC.FORK_BRANCH, (_event, req: unknown) => {
+    const r = req as Partial<ForkRequest> | null
+    if (r === null || typeof r !== 'object' || typeof r.fromPanelId !== 'string' || typeof r.toPanelId !== 'string' || typeof r.turn !== 'number') {
+      return { kind: 'refused', reason: 'a fork names a panel, a new panel id and a turn' }
+    }
+    return agents.forkBranch?.({ fromPanelId: r.fromPanelId, toPanelId: r.toPanelId, turn: r.turn }) ?? { kind: 'refused', reason: 'forks are not available in this process' }
+  })
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))

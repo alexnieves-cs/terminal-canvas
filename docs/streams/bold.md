@@ -113,6 +113,40 @@ prompts off without touching the Mac.
 - **M559** — compare: Replay's compare view shows the original and the fork.
 - **M560** — pruning: snapshot refs are bounded and removed with the panel.
 
+**Built (one PR, M556–M560).** Suite `verify:fork`, plain node against a real
+temporary repository. Decisions:
+
+- **A turn is a prompt.** Turn N is "after the agent answered the Nth message a
+  person typed", counted from the durable transcript (`promptCount`), not from the
+  process's result count, which restarts with the process. The UI says *message
+  N*, because Replay's own counter counts both sides.
+- **Off by default** (`agents.turnSnapshots`, "Snapshot each agent turn"): a
+  snapshot writes objects and a ref into the person's repository.
+- **Capture** (`src/main/turn-forks.ts`, called from the agent fan-out in
+  `bootstrap/agent-runtime.ts` on each `result`): `git add -A` into a *copy* of
+  the index, `write-tree`, `commit-tree` as "Terminal Canvas", `update-ref
+  refs/tc/turns/<panel>/<n>`. Plumbing on purpose: the person's commit hooks must
+  not run on a snapshot. An unchanged tree reuses the previous commit. Captures
+  per panel are serialised.
+- **The conversation is copied and cut, not `--fork-session`.** That flag forks at
+  the end of a session, and claude finds a session by its cwd's project folder,
+  which a fork in a new worktree does not share. Main cuts claude's JSONL before
+  prompt N+1, re-addresses every record (new `sessionId`, the fork's `cwd`) and
+  writes it under `~/.claude/projects/<slug of the fork's cwd>/`. A backend row
+  without `forksTurns` (every one but claude) forks the files only and says so.
+- **The door is Replay's "Branch from here"** (reached from the inspector's
+  "Replay this conversation…" and its palette row). The verb is
+  `canvas/useForkVerb.ts`; it places the fork beside the original and switches the
+  sheet to compare the two (M559), with a "branched from … after message N"
+  caption. No palette, agent-line or workflow door yet: picking a turn needs the
+  sheet.
+- **Pruning (M560):** capturing turn n deletes every snapshot past n (a recycled
+  id or a cleared chat) and the oldest past 50; closing a chat deletes all of
+  its snapshots. Fork worktrees are ordinary worktree records, removed the usual
+  way.
+- **Manual-only:** that claude resumes the cut copy from the fork's folder is
+  confirmed by hand, not by CI (listed in `docs/load-bearing.md`).
+
 ## L — The night as a film (M561–M564)
 
 - **M561** — the script, pure: from the night's event log and run ledger, a list

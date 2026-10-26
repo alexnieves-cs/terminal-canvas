@@ -146,6 +146,7 @@ workspace:share workspace:shares workspace:open-share workspace:share-member wor
 text:open text:close text:update text:remote
 relay:spawn relay:attach relay:detach relay:input relay:resize relay:control relay:kill
 relay:list relay:view relay:data relay:state world:events world:connection world:status world:retry boot:progress
+fork:turns fork:branch
 ```
 
 Direction is meaning, not convention. `preset:*` are main → renderer because the *menu* is

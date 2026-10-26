@@ -11,6 +11,7 @@ import { usePanelGestures } from './usePanelGestures'
 import { useShellTail } from './useShellTail'
 import { renderWorldLayers } from './WorldLayers'
 import { renderShellChrome } from './ShellChrome'
+import { useForkVerb } from './useForkVerb'
 import { renderInspector } from './InspectorPane'
 import { renderHostOverlays } from './HostOverlays'
 import { useDropVerbs } from './useDropVerbs'
@@ -3271,6 +3272,8 @@ export function Canvas({
   const { beginCreateVaultNote, beginWatcher, onFrontEnd, openAsChat, openAsChatVoid, openInTerminal, openVaultNote, setWatcherArmed } = useChatSwapVerbs({
     commitHistory, hostRef, mergedRef, nextIdRef, noteRootRef, onClosePanel, openAsChatRef, openFilePanel, openInTerminalRef, palette, panelsRef, placer, selectOnly, selectedIdRef, setEnteringPanelIds, setFocusedId, setInputMode, setPanels, setPendingFocusId, setSelectedIds, vaultRootRef, viewportRef, worldCentre
   })
+  // M558 (lane K). Replay's "Branch from here": the fork placed beside its original.
+  useForkVerb({ commitHistory, mergedRef, nextIdRef, panelsRef, placer, selectOnly, setPanels })
 
   // M500. The workflow panel's verbs (M133–M184), lifted into useWorkflowVerbs.ts at exactly this position.
   const { beginWorkflowTrigger, buildWorkflowWithAi, deleteWorkflowTemplate, openWorkflowPanel, reloadWorkflowDraft, runWorkflow, saveWorkflowCopy, saveWorkflowDraft, stopWorkflowRun } = useWorkflowVerbs({

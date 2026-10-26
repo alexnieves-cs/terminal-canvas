@@ -8,6 +8,7 @@ import type { CombineInputsResult, IntegrateRequest, IntegrateResult, Integratio
 import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { RadarLane, RadarReport } from './collision-radar'
 import type { TonightBatchSpec, TonightStatus } from './tonight'
+import type { ForkRequest, ForkResult, TurnSnapshotRow } from './turn-fork'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
 import type { Recipe } from './recipes'
@@ -882,6 +883,15 @@ export const IPC = {
   TONIGHT_START: 'tonight:start',
   TONIGHT_STOP: 'tonight:stop',
   TONIGHT_STATUS: 'tonight:status',
+  /**
+   * M556–M558 (lane K). A chat's turn snapshots (hidden refs under
+   * refs/tc/turns/<panel>/) and a fork from one: main makes the worktree at
+   * the snapshot and writes the conversation cut at that turn under the
+   * renderer-minted panel id, then the renderer places the chat beside the
+   * original. Refused by name — snapshots off, not a repository, no snapshot.
+   */
+  FORK_TURNS: 'fork:turns',
+  FORK_BRANCH: 'fork:branch',
   /**
    * M98. Session grants — `Allow for session`. The grant itself rides
    * `agent:answer`'s `scope`; these two read the granted tools for a panel
@@ -2048,6 +2058,11 @@ export interface CanvasBridge {
     start(batch: TonightBatchSpec): Promise<{ kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }>
     stop(): Promise<boolean>
     status(): Promise<TonightStatus | null>
+  }
+  /** M556–M558. See FORK_TURNS. */
+  fork: {
+    turns(panelId: string): Promise<TurnSnapshotRow[]>
+    branch(req: ForkRequest): Promise<ForkResult>
   }
   /** M312. See SETUP_READ. */
   setup: {

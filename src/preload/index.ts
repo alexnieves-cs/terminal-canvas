@@ -259,6 +259,10 @@ const bridge: CanvasBridge = {
     stop: () => ipcRenderer.invoke(IPC.TONIGHT_STOP),
     status: () => ipcRenderer.invoke(IPC.TONIGHT_STATUS)
   },
+  fork: {
+    turns: (panelId: string) => ipcRenderer.invoke(IPC.FORK_TURNS, panelId),
+    branch: (req: unknown) => ipcRenderer.invoke(IPC.FORK_BRANCH, req)
+  },
   setup: {
     read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
     save: (setup: unknown) => ipcRenderer.invoke(IPC.SETUP_SAVE, setup),
