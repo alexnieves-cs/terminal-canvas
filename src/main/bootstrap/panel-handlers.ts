@@ -14,6 +14,7 @@ import { searchPanels } from '../panel-search'
 import { SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from '../scrollback-log'
 import { resolveLinkOpen } from '../link-open'
 import { buildEnvReport, type CliName } from '../env-report'
+import { probeVmRuntimesLive } from '../vm-runtime'
 import { shellProbeOutcome, shellProbeFacts, reprobeShellEnv, whichFromEnv } from '../shell-env'
 import { discoverPreview } from '../preview-discover'
 import { capturePreview } from '../preview-capture'
@@ -82,6 +83,9 @@ export function createEnvReporter(state: MainState, stores: Stores, which: (comm
   return async (again: boolean) => {
     const env2 = again ? await reprobeShellEnv() : state.loginEnv
     const which2 = again ? (name: CliName) => whichFromEnv(name, env2) : which
+    // M550. Asked on every report, not cached: `container system start` is a
+    // thing a person does mid-session, and Check again must see it.
+    const vm = await probeVmRuntimesLive((name) => again ? whichFromEnv(name, env2) : which(name), env2)
     return buildEnvReport({
       env: env2,
       shell: shellProbeOutcome(),
@@ -92,7 +96,8 @@ export function createEnvReporter(state: MainState, stores: Stores, which: (comm
       now: again ? Date.now() : state.probedAt,
       control: { socket: stores.controlSocketPath, cliPath: join(stores.launcherDir, 'tc') },
       // M107. Which shells were asked and whether one answered — the third state.
-      probe: shellProbeFacts()
+      probe: shellProbeFacts(),
+      vm
     })
   }
 }
