@@ -12,6 +12,7 @@
  * ONCE, so a `brew install` mid-session is invisible until relaunch, and a
  * report that did not say when it looked would turn that limit into a lie.
  */
+import type { VmProbe } from '../shared/vm-lane'
 import { BINARY_PROBE_TIMEOUT_MS, REPORTED_CLIS, probeWithin, type CliName, type EnvReport } from '../shared/env-report'
 export { BINARY_PROBE_TIMEOUT_MS, INERT_ENV_REPORT, REPORTED_CLIS, classifyBinaryProbe, probeOutcome, probeWithin, versionWords, type BinaryProbeClass, type CliName, type EnvReport, type ProbeOutcome } from '../shared/env-report'
 
@@ -27,6 +28,8 @@ export interface EnvReportFacts {
   control: { socket: string; cliPath: string } | null
   /** M107. Absent for a caller that does not know (a fixture). */
   probe?: { shells: string[]; timedOut: boolean }
+  /** M550. The VM runtimes, probed by `probeVmRuntimes`; absent for a caller that did not ask. */
+  vm?: VmProbe
 }
 
 export function buildEnvReport(f: EnvReportFacts): EnvReport {
@@ -42,7 +45,8 @@ export function buildEnvReport(f: EnvReportFacts): EnvReport {
     layout: { path: f.layoutPath, backupWritten: f.backupWritten },
     envKeys: Object.keys(f.env).sort(),
     control: f.control,
-    ...(f.probe === undefined ? {} : { probe: { shells: [...f.probe.shells], folders: path === '' ? [] : path.split(':').filter((p) => p !== ''), timedOut: f.probe.timedOut } })
+    ...(f.probe === undefined ? {} : { probe: { shells: [...f.probe.shells], folders: path === '' ? [] : path.split(':').filter((p) => p !== ''), timedOut: f.probe.timedOut } }),
+    ...(f.vm === undefined ? {} : { vm: { chosen: f.vm.chosen, runtimes: f.vm.runtimes.map((r) => ({ ...r })) } })
   }
 }
 
