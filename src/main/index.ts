@@ -491,7 +491,9 @@ app.whenReady().then(async () => {
     originOf: async (cwd) => {
       const answer = await stores.gitRunner(['-C', cwd, 'remote', 'get-url', 'origin'])
       return answer.ok && answer.stdout.trim() !== '' ? answer.stdout.trim() : null
-    }
+    },
+    git: stores.gitRunner,
+    commonRootOf: (p) => stores.reviewEngine.commonRootOf(p)
   })
   app.on('will-quit', () => cloud.stop())
 

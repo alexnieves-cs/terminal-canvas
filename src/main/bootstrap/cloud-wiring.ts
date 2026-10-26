@@ -6,6 +6,10 @@ import { IPC, IPC_EVENTS, type CloudDispatchResult, type CloudLaneView, type Clo
 import type { CloudLane } from '../../shared/cloud-lane'
 import { createCloudLanePoller, dispatchCloudLane, mergeCloudLane, parseLanesFile, readCloudFacts, serializeLanes, type CloudBroker } from '../cloud-lanes'
 import { repoFromRemote } from '../github-publish'
+import { createCloudRadar } from '../cloud-radar'
+import type { GitRunner } from '../review-engine'
+import { RADAR_LANES_MAX, type RadarReport } from '../../shared/collision-radar'
+import { isSettled } from '../../shared/cloud-lane'
 import { confirm, liveWindow } from './dialogs'
 import { readyContents, type MainState } from './context'
 
@@ -26,6 +30,9 @@ export interface CloudWiringDeps {
   originOf: (cwd: string) => Promise<string | null>
   /** The file; a parameter so the IPC surface harness never touches userData. */
   file?: string
+  /** M545. git and the main tree of a path, for the radar; absent, the radar says it is not wired. */
+  git?: GitRunner
+  commonRootOf?: (path: string) => Promise<string>
 }
 
 export interface CloudWiring { stop(): void }
@@ -100,6 +107,18 @@ export function installCloudLanes(state: MainState, deps: CloudWiringDeps): Clou
     } finally {
       merging.delete(lane.id)
     }
+  })
+  const radar = deps.git === undefined || deps.commonRootOf === undefined ? undefined : createCloudRadar({ run: deps.git, commonRootOf: deps.commonRootOf })
+  ipcMain.handle(IPC.CLOUD_RADAR, async (_event, raw: unknown): Promise<RadarReport> => {
+    const lanes = Array.isArray(raw) ? raw.filter((l): l is { id: string; path: string } => typeof l?.id === 'string' && typeof l.path === 'string' && l.path.startsWith('/')).slice(0, RADAR_LANES_MAX) : []
+    // A live lane with a PR: a settled one has nothing left to collide with.
+    const live = poller.lanes().filter((l): l is CloudLane & { pr: number } => l.pr !== undefined && !isSettled(l.state))
+    if (radar === undefined) return { at: Date.now(), collisions: [], unread: live.map((l) => ({ id: l.workItemId ?? l.id, reason: 'the cloud radar is not wired in this process' })) }
+    if (live.length === 0 || lanes.length === 0) return { at: Date.now(), collisions: [], unread: [] }
+    const report = await radar(live.map((l) => ({ id: l.id, repo: l.repo, pr: l.pr })), lanes)
+    // Keyed by the lane's task, so the flag lands on the card the lane shows on.
+    const taskOf = (id: string): string => live.find((l) => l.id === id)?.workItemId ?? id
+    return { ...report, collisions: report.collisions.map((c) => ({ ...c, a: taskOf(c.a) })), unread: report.unread.map((u) => ({ ...u, id: taskOf(u.id) })) }
   })
   ipcMain.handle(IPC.CLOUD_DISPATCH, async (_event, raw: unknown): Promise<CloudDispatchResult> => {
     const r = (raw ?? {}) as Record<string, unknown>

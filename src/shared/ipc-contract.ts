@@ -901,6 +901,12 @@ export const IPC = {
    */
   CLOUD_MERGE: 'cloud:merge',
   /**
+   * M545. The collision radar for cloud lanes: each live lane's PR head
+   * (fetched into a hidden ref) against the local lanes the renderer names,
+   * as M479's report keyed by the lane's TASK id so a flag lands on its card.
+   */
+  CLOUD_RADAR: 'cloud:radar',
+  /**
    * M98. Session grants — `Allow for session`. The grant itself rides
    * `agent:answer`'s `scope`; these two read the granted tools for a panel
    * and drop them. Main holds them in memory only (never a file), so a
@@ -2106,6 +2112,8 @@ export interface CanvasBridge {
     forget(id: string): Promise<boolean>
     /** M544. See CLOUD_MERGE. */
     merge(id: string): Promise<CloudMergeResult>
+    /** M545. See CLOUD_RADAR. */
+    radar(lanes: RadarLane[]): Promise<RadarReport>
     onChanged(listener: (lane: CloudLaneView) => void): () => void
   }
   /** M480. See TONIGHT_START. */

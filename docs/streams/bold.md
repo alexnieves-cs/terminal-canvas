@@ -81,6 +81,16 @@ on" and a provider is a row in a table, not a code path.
   work, so it lands there or later.
 - **M545** — the morning queue ranks a ready cloud lane beside local lanes, and
   the collision radar trial-merges its head against local worktrees.
+  *Built:* the queue's module is stream C's, so cloud items are built in
+  `cloud-lane.ts` and merged in by the queue's own order, which
+  `verify:cloud morning.1` reads from its source. The radar fetches the PR head
+  into a hidden ref, `refs/tc/cloud/<lane>`, in the repository's main tree.
+  That is the one write: a fetch sends nothing but the ref name, it never
+  prompts, and git's own error text is not repeated, because a remote URL with
+  a token in it is what a fetch error prints.
+
+Lane H is complete at M545. The real-GitHub facts (Copilot's assignee login
+and branch prefix, the Claude Action's `claude/` branches) stay manual-only.
 
 ## I — Tournament mode (M546–M549)
 

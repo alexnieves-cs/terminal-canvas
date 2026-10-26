@@ -602,6 +602,81 @@ const LANE = { id: 'l', repo: 'o/r', issue: 12, provider: 'copilot', title: 't',
     return { pass: Object.values(doors).every(Boolean), detail: { doors, teammate } }
   })
 
+  // M545 — cloud.morning.1. Cloud lanes join the morning queue as its own
+  //        kinds — red checks failed, stopped on the person a decision, ready
+  //        checked with its PR's file count as the cost — leading to the card;
+  //        working and settled lanes ask nothing. The order matches the
+  //        queue's own MORNING_RANK, read from its source so the copy cannot drift.
+  check('cloud.morning.1 cloud lanes rank in the morning queue by its own order and cost, lead to the task\'s card, and quiet lanes add nothing', lane, (L) => {
+    const src = require('node:fs').readFileSync(join(ROOT, 'src/shared/return-briefing.ts'), 'utf8')
+    const m = /MORNING_RANK[^=]*=\s*\{([^}]*)\}/.exec(src)
+    const ranked = m === null ? [] : m[1].split(',').map((p) => p.split(':').map((x) => x.trim())).filter((p) => p.length === 2).sort((a, b) => Number(a[1]) - Number(b[1])).map((p) => p[0])
+    const tasks = { t1: { title: 'Fix parse', cardPanelId: 'wk1' }, t2: { title: 'Docs' }, t3: { title: 'Quiet' } }
+    const items = L.cloudMorningItems([
+      { workItemId: 't1', state: 'ready', pr: 40, provider: 'copilot', issue: 12, reason: 'every check passed on #40', stat: { files: 2 } },
+      { workItemId: 't2', state: 'failed', pr: 41, provider: 'claude-action', issue: 13, reason: 'verify failed on #41' },
+      { workItemId: 't3', state: 'working', pr: 42, provider: 'copilot', issue: 14, reason: 'x' },
+      { workItemId: 'gone', state: 'ready', pr: 43, provider: 'copilot', issue: 15, reason: 'x' }
+    ], (id) => tasks[id])
+    const local = [{ kind: 'failed', itemId: 'l1', title: 'L1', text: 'npm test failed' }, { kind: 'checked', itemId: 'l2', title: 'L2', text: '5 files', files: 5 }, { kind: 'review', itemId: 'l3', title: 'L3', text: '1 file', files: 1 }]
+    const q = L.withCloudMorning(local, items)
+    const order = q.map((i) => i.itemId)
+    const pass = JSON.stringify(ranked) === JSON.stringify(L.MORNING_ORDER) && items.length === 2 &&
+      items[0].kind === 'checked' && items[0].evidence?.kind === 'panel' && items[0].evidence.panelId === 'wk1' && items[0].files === 2 && /ready — 2 changed files/.test(items[0].text) &&
+      items[1].kind === 'failed' && /verify failed/.test(items[1].text) && items[1].evidence === undefined &&
+      order.join() === 'l1,t2,t1,l2,l3'
+    return { pass, detail: { ranked, items, order } }
+  })
+
+  // M545 — cloud.radar.1. Against REAL repositories in a temp folder: the PR
+  //        head is fetched into the hidden ref, a local lane touching the same
+  //        file is a collision, git's trial merge names the conflict, a lane
+  //        touching other files is not flagged, a lane of another repository
+  //        is never compared, and a fetch that fails is unread by name with no
+  //        git output repeated.
+  const radarMod = load('src/main/cloud-radar.ts', 'radar')
+  await checkAsync('cloud.radar.1 a cloud PR head is fetched into refs/tc/cloud, collides with a local lane on the same file and names git\'s conflict, leaves an unrelated lane and another repository alone, and a failed fetch is unread by name', radarMod, async (R) => {
+    const { execFileSync, execFile } = require('node:child_process')
+    const { mkdtempSync, writeFileSync, rmSync } = require('node:fs')
+    const { tmpdir } = require('node:os')
+    const dir = mkdtempSync(join(tmpdir(), 'tc-cloud-radar-'))
+    const g = (cwd, ...args) => execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], { encoding: 'utf8' }).trim()
+    try {
+      const origin = join(dir, 'origin.git')
+      execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin])
+      const seed = join(dir, 'seed')
+      execFileSync('git', ['clone', '-q', origin, seed])
+      g(seed, 'checkout', '-q', '-b', 'main')
+      writeFileSync(join(seed, 'a.ts'), 'one\n'); writeFileSync(join(seed, 'b.ts'), 'two\n')
+      g(seed, 'add', '.'); g(seed, 'commit', '-q', '-m', 'base'); g(seed, 'push', '-q', 'origin', 'main')
+      g(seed, 'checkout', '-q', '-b', 'copilot/fix-7')
+      writeFileSync(join(seed, 'a.ts'), 'cloud\n'); g(seed, 'commit', '-q', '-am', 'cloud')
+      g(seed, 'push', '-q', 'origin', 'copilot/fix-7:refs/pull/7/head')
+      const main = join(dir, 'main')
+      execFileSync('git', ['clone', '-q', origin, main])
+      g(main, 'worktree', 'add', '-q', '-b', 'tc/clash', join(dir, 'clash'))
+      writeFileSync(join(dir, 'clash', 'a.ts'), 'local\n'); g(join(dir, 'clash'), 'commit', '-q', '-am', 'local')
+      g(main, 'worktree', 'add', '-q', '-b', 'tc/other', join(dir, 'other'))
+      writeFileSync(join(dir, 'other', 'b.ts'), 'else\n'); g(join(dir, 'other'), 'commit', '-q', '-am', 'else')
+      const run = (args, opts) => new Promise((res) => {
+        // The origin is a folder; the radar knows repositories by their GitHub name.
+        if (args.includes('get-url')) { res({ ok: true, stdout: args[1] === join(dir, 'main') ? 'https://github.com/o/r.git\n' : 'https://github.com/x/y.git\n', notFound: false, code: 0, stderr: '' }); return }
+        execFile('git', args, { encoding: 'utf8', env: { ...process.env, ...(opts?.env ?? {}) } }, (err, stdout, stderr) => res({ ok: err === null, stdout, stderr, notFound: false, code: err === null ? 0 : (typeof err.code === 'number' ? err.code : 1) }))
+      })
+      const commonRootOf = async (p) => (p.startsWith(join(dir, 'clash')) || p.startsWith(join(dir, 'other')) || p === main ? main : p)
+      const scan = R.createCloudRadar({ run, commonRootOf, now: () => 5 })
+      const report = await scan([{ id: 'cl1', repo: 'o/r', pr: 7 }, { id: 'cl2', repo: 'o/r', pr: 99 }], [{ id: 'wClash', path: join(dir, 'clash') }, { id: 'wOther', path: join(dir, 'other') }, { id: 'wElse', path: seed }])
+      const ref = g(main, 'rev-parse', '--verify', 'refs/tc/cloud/cl1')
+      const hit = report.collisions.filter((c) => c.a === 'cl1')
+      const missing = report.unread.find((u) => u.id === 'cl2')
+      const pass = ref.length === 40 && hit.length === 1 && hit[0].b === 'wClash' && hit[0].files.join() === 'a.ts' && Array.isArray(hit[0].conflicts) && hit[0].conflicts.join() === 'a.ts' &&
+        !report.collisions.some((c) => c.b === 'wOther' || c.b === 'wElse') && missing !== undefined && /#99 could not be fetched/.test(missing.reason) && !/fatal|error:/.test(missing.reason)
+      return { pass, detail: { report, ref } }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
   if (results.some((r) => !r.pass)) process.exitCode = 1
 })()
