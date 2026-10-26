@@ -2338,6 +2338,10 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           { id: 'search.none', title: `No matches for “${ctx.searchQuery.trim()}”`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
           REASON_SEARCH_NO_MATCHES
         ))
+        // M604. The dead end gets a way on: what was typed is often the task
+        // itself ("fix the flaky login test"), so offer to start it.
+        const typed = ctx.searchQuery.trim()
+        out.push({ id: 'search.start-task', title: `Start a task: “${typed}”`, subtitle: 'opens New task with this as its sentence', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => actions.beginStartWork({ title: typed }) })
       }
     } else {
       // M122. What the answer LEFT OUT comes first: the cap, and the secrets the gate replaced.

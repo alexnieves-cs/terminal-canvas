@@ -25,7 +25,7 @@ export const HINTS: ReadonlyArray<Hint> = [
   // tmux notice beside it.
   // M399 (A5): the banner now carries the door itself, so the sentence no
   // longer sends a person looking for it.
-  { id: 'starter', text: 'New to terminal canvas? A starter canvas walks through one example of every kind of object.', where: 'launcher' }
+  { id: 'starter', text: 'New to Terminal Canvas? A starter canvas walks through one example of every kind of object.', where: 'launcher' }
 ]
 
 /** `where` narrows to one surface's hints; both surfaces read this one list (the Act III critic: two readers of one list had drifted). */

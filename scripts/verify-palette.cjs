@@ -1879,7 +1879,9 @@ const WS = [
   const blankBefore = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: '', searchResults: null })).filter((r) => r.scope === 'search')
   ok('search.2 the three empty states are three distinct rows: off (its reason), no-match (names the query), and nothing before the first keystroke',
     off.length === 1 && off[0].disabledReason === P.REASON_SEARCH_OFF &&
-      none.length === 1 && none[0].disabledReason === P.REASON_SEARCH_NO_MATCHES && /zzz/.test(none[0].subtitle || none[0].title) &&
+      // M604: the no-match row is followed by ONE live row, Start a task with the words.
+      none.length === 2 && none[0].disabledReason === P.REASON_SEARCH_NO_MATCHES && /zzz/.test(none[0].subtitle || none[0].title) &&
+      none[1].id === 'search.start-task' && none[1].disabledReason === undefined &&
       P.REASON_SEARCH_OFF !== P.REASON_SEARCH_NO_MATCHES &&
       blankBefore.length === 0,
     JSON.stringify({ off, none, blankBefore }))
@@ -2121,6 +2123,10 @@ const WS = [
     empty && empty.title === 'No matches for “zzqx”' && empty.subtitle === undefined &&
       hit && hit.title.startsWith('web front') && hit.subtitle === 'FAIL 3 the writer',
     JSON.stringify({ empty: empty && [empty.title, empty.subtitle], hit: hit && [hit.title, hit.subtitle] }))
+  // M604. No matches is not a dead end: the typed words can start a task.
+  const startRow = byId(P.buildCommands(ctx({ panels, searchQuery: 'zzqx', searchResults: { hits: [], capped: false, cap: 50, redacted: 0 } })), 'search.start-task')
+  ok('find.none.1 an empty search offers to start a task with the typed words',
+    startRow !== undefined && startRow.title === 'Start a task: “zzqx”' && startRow.disabledReason === undefined, JSON.stringify(startRow && [startRow.title, startRow.disabledReason]))
 }
 
 // M65 — sheet.1/.2. STARTING A PANEL. The sheet's row is the first thing under
