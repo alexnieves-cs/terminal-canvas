@@ -99,3 +99,4 @@ Plan: [docs/streams/bold.md](../streams/bold.md). 2026-10-26: Alex picked all se
 | PR | Milestone | What | Checks |
 |---|---|---|---|
 | this PR | M540 | Lanes H, I, J, K, L, N and O in `ownership.json` (each owns its `verify-<name>.cjs`; `bold.md` is shared), their `st:` fences, `streams.own.1` covers A–O, the run book's rows, `docs/streams/bold.md` | `verify:meta` streams.own.1 |
+| this PR | M550–M551 | Lane J: VM runtime probe (Apple container, OrbStack, Docker) in the environment report and its Environment row; the sandbox spec (`shared/vm-lane.ts`), its parser, the run/stop argv per runtime and the in-VM claude argv (`main/vm-sandbox.ts`); the egress decision | `verify:vm` vm.probe.1–5, vm.spec.1–4, vm.egress.1 |

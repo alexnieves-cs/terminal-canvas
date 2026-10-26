@@ -4,6 +4,8 @@
  * this file imports nothing, like every other shared contract, so the web
  * project can name the type without reaching into main.
  */
+import type { VmProbe } from './vm-lane'
+
 export type RequiredCli = 'claude' | 'codex' | 'git'
 /**
  * M531 (G1). Agent CLIs a built-in preset runs, probed so their presets and
@@ -40,6 +42,11 @@ export interface EnvReport {
    * reported — and a shell that did not answer is never `not-found`.
    */
   probe?: { shells: string[]; folders: string[]; timedOut: boolean }
+  /**
+   * M550 (lane J). The VM runtimes a sandboxed lane could use. OPTIONAL like
+   * the agent CLIs: none is ever a fault, and absent is an older main.
+   */
+  vm?: VmProbe
 }
 
 export type ProbeOutcome =
