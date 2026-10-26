@@ -13,7 +13,6 @@ import { arrangementTemplate } from '../orchestration/orch-arrangement'
 import { FocusTask } from '../focus/FocusTask'
 import type { FocusSide } from '../focus/focus-model'
 import { TeamView } from '../team/TeamView'
-import { LearnPage } from '../learn/LearnPage'
 import { useLessonHarvest } from '../learn/useLessonHarvest'
 import { panelPath } from '@renderer/palette/panel-name'
 import type { useAccounts } from '../account/useAccounts'
@@ -262,11 +261,6 @@ export function CenterPages({
       )}
       {/* The Team view: the same overlay cell, over the same mounted canvas.
           It reads nothing from the canvas — its tiles are people. */}
-      {centerView === 'learn' && (
-        <div className="shell__orch shell__orch--on" data-center-view="learn" role="presentation">
-          <LearnPage panels={panels} />
-        </div>
-      )}
       {centerView === 'team' && (
         <div className="shell__orch shell__orch--on" data-center-view="team" role="presentation">
           <TeamView accounts={accounts} />
@@ -347,7 +341,7 @@ export function CenterPages({
           Orchestrate does. `.shell__page` is absolutely positioned against
           `.shell`, so the hosts are direct children of it. TopBar used to
           portal them; that stand-in is gone. */}
-      {(centerView === 'sessions' || centerView === 'review') && (
+      {(centerView === 'sessions' || centerView === 'review' || centerView === 'learn') && (
         <div className="shell__page" data-center-view={centerView}>
           {centerView === 'sessions'
             ? <SessionsHost
@@ -392,7 +386,16 @@ export function CenterPages({
                   changes: () => null
                 }}
               />
-            : <ReviewHost />}
+            // M605. Review and Lessons are one page with two tabs; 'learn' stays
+            // its own center view so the palette's Show Lessons lands on its tab.
+            : <ReviewHost
+                tab={centerView === 'learn' ? 'lessons' : 'queue'}
+                onTab={(tab) => setCenterView(tab === 'lessons' ? 'learn' : 'review')}
+                groups={taskQueue.groups}
+                panels={panels}
+                onOpen={(itemId, side) => openFocusTask(itemId, side)}
+                onNewTask={() => paletteActions.beginStartWork()}
+              />}
         </div>
       )}
     </>

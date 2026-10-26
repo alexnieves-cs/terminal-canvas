@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { setLastNightRunner } from './last-night-door'
 import { notifyDone, notifyFailed } from '@renderer/shell/toast'
 import { lastNightWords, makeLastNightFilm, type LastNightDeps } from './last-night'
 
@@ -21,5 +22,7 @@ export function useLastNight(deps: Omit<LastNightDeps, 'onProgress'>): { progres
       else notifyFailed(words.sentence, words.detail)
     })
   }, [])
+  // M607. The palette's row reaches the same run while this hook is mounted.
+  useEffect(() => { setLastNightRunner(run); return () => setLastNightRunner(null) }, [run])
   return { progress, run }
 }

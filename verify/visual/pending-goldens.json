@@ -1,4 +1,9 @@
 {
   "why": "These redesign scenes have a `run` and no golden yet. A golden is written only after a person has looked at the capture on a Mac (docs/redesign/fix-list.md, Left for a Mac), so until then verify:meta visual.1 must not treat their absence as a hole. A scene leaves this list in the same commit that adds its golden: visual.1 fails if a listed scene already has one.",
-  "scenes": []
+  "scenes": [
+    "ui-review",
+    "ui-lessons",
+    "ui-settings",
+    "ui-topbar-1024"
+  ]
 }

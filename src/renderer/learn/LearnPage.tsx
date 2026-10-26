@@ -38,6 +38,8 @@ import { openSettingsPage } from '@renderer/settings/open'
  */
 export interface LearnPageProps {
   panels: readonly Panel[]
+  /** M605. The Review page's other tab, where lessons come from. */
+  onShowQueue?: () => void
 }
 
 const ago = (at: number, now: number): string => {
@@ -83,6 +85,7 @@ export function LearnPage(p: LearnPageProps): JSX.Element {
       ) : repos.length === 0 ? (
         <p className="learn__empty" data-learn-empty="none">
           Nothing learned yet. A lesson is kept when you discard a file in a review, or send a review comment to an agent.
+          {p.onShowQueue !== undefined && <>{' '}<button type="button" className="pf__verb pf__verb--word" data-learn-show-queue onClick={p.onShowQueue}>See what is ready to review</button></>}
         </p>
       ) : repos.map((repo) => <RepoSection key={repo.root} repo={repo} agents={read.agents} now={now} onChanged={refresh} />)}
     </section>

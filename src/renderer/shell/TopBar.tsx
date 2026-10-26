@@ -137,7 +137,8 @@ export function TopBar({
       <SegmentedControl<CenterView>
         className="shell__center-toggle"
         label="Center view"
-        value={centerView}
+        // M605. Lessons is a tab of the Review page, so Review stays lit on it.
+        value={centerView === 'learn' ? 'review' : centerView}
         onChange={onSetCenterView}
         // Each place is introduced by its PURPOSE under its name — the two
         // are different jobs, not two views of one thing, and a bare

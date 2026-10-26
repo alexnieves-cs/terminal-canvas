@@ -62,6 +62,7 @@ import { creationCommands } from './commands/creation-rows'
 import { buildCredentialRows } from './commands/credential-rows'
 import { buildEnvironmentRows } from './commands/environment-rows'
 import { pendingReadBatch } from '@renderer/chat/read-batch'
+import { runLastNight } from '@renderer/film/last-night-door'
 
 // --- The commands/ directory ------------------------------------------------
 // M278 split commands.ts by moving out everything that is DECLARATION rather
@@ -543,6 +544,8 @@ export interface PaletteActions {
   runTonight(op?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M548. Start a tournament on a task (its id, key or card), `stop` the live one, or `pick` an entrant (absent is the scorer's winner). */
   runTournament(op: string, value?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M606. Ask which agents race (`claude:opus codex`), then start the tournament on that task (a card id, item id or key). */
+  beginTournamentField(name: string): void
   /** M543. Hand a work card's task to a cloud agent (`copilot`, `claude-action`); main asks before anything is sent. */
   sendToCloud(panelId: string, provider: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M544. Merge the card's ready cloud lane through the broker; main re-checks it and asks first. */
@@ -1459,6 +1462,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   })
   // M570 (lane O). The Lessons page: what discards and sent review comments
   // taught. Always here — reading what was kept spends nothing.
+  // M607 (lane L's film, a second door). The briefing's "Last night ▸" goes
+  // away with the card; the film can still be made from here, any morning.
+  out.push({
+    id: 'film.last-night',
+    title: 'Render last night as a film',
+    subtitle: 'a 60-second time-lapse of what the agents did while you were away, saved where you choose',
+    searchText: 'film night time-lapse timelapse video last night replay movie overnight',
+    group: 'canvas',
+    run: () => { actions.say(runLastNight() ? 'Rendering last night\'s film — it is saved when it is done' : 'the night film is not available in this window') }
+  })
   out.push({
     id: 'learn.open',
     title: 'Show Lessons',
@@ -2527,6 +2540,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M548. The tournament's three rows: start on the selected card's task (its
   // check picks the winner), stop the live one, pick the winner it named.
   out.push(withReason({ id: 'task.tournament', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: run as a tournament', subtitle: 'the selected card\'s task on several agents at once, each in its own worktree — its check picks the winner', group: 'canvas', searchText: 'tournament compete agents race several models best of check winner bracket', run: () => { if (workPanelId !== undefined) void actions.runTournament(workPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } }, workPanelId === undefined ? 'select a work card first' : undefined))
+  // M606. The field is the person's to choose: the plain row runs the default
+  // field (claude opus and sonnet, then codex, copilot), this one asks first.
+  out.push(withReason({ id: 'task.tournament-field', ...hiddenAtRestIf(workPanelId === undefined), title: 'Task: run as a tournament with chosen agents…', subtitle: 'name two to six agents, such as claude:opus claude:sonnet codex', group: 'canvas', searchText: 'tournament choose agents field entrants models race compete', run: () => { if (workPanelId !== undefined) actions.beginTournamentField(workPanelId) } }, workPanelId === undefined ? 'select a work card first' : undefined))
   out.push({ id: 'task.tournament-stop', ...hiddenAtRestIf(true), title: 'Stop the tournament', subtitle: 'stop every entrant still running and score the field as it stands', group: 'canvas', searchText: 'tournament stop cancel bracket', run: () => { void actions.runTournament('stop').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
   out.push({ id: 'task.tournament-pick', ...hiddenAtRestIf(true), title: 'Pick the tournament\'s winner', subtitle: 'keep the winner as the task\'s lane and close the other entrants\' chats; their worktrees stay until you remove them', group: 'canvas', searchText: 'tournament pick winner accept keep bracket', run: () => { void actions.runTournament('pick').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
   out.push({ id: 'task.tournament-judge', ...hiddenAtRestIf(true), title: 'Judge the tournament', subtitle: 'a read-only claude chat compares the entrants that passed — advice; the scorer\'s pick stands until you choose', group: 'canvas', searchText: 'tournament judge compare review entrants bracket', run: () => { void actions.runTournament('judge').then((r) => actions.say(r.kind === 'refused' ? r.reason : r.note ?? '')) } })
