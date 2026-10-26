@@ -2603,6 +2603,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await settle()
         const seen = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('[data-launcher]'); if (!l) return false
           const presets = [...l.querySelectorAll('[data-launcher-preset] .launcher__verb-name')].map((n) => n.textContent)
+          // The preset list arrives over IPC after the launcher mounts; an object is truthy, so
+          // without this the wait could resolve on a launcher whose presets have not landed yet.
+          if (presets.length === 0) return false
           const codex = l.querySelector('[data-launcher-new-codex]')
           return { presets, codex: codex ? { disabled: codex.disabled, title: codex.title, hint: codex.querySelector('.launcher__verb-hint')?.textContent ?? '' } : null } })()`), 6000)
         ok(IDS[0], seen && seen.presets.length > 0 && seen.presets.every((t) => /^Start .+…$/.test(t)) &&

@@ -18,6 +18,7 @@ its own section, and records each decision it makes there.
 | L | The night as a film | M561–M564 | `verify:film` | M |
 | N | A live demo in the browser | M565–M569 | `verify:demo` | M |
 | O | A harness that learns | M570–M579 | `verify:learn` | L–XL |
+| P | Multiplayer canvas (added 2026-10-26) | M580–M589 | `verify:multiplayer` | M–L |
 | Q | The app, hosted (opens from any browser) | M590–M599 | `verify:host` | L |
 
 There is no lane M, so a lane id is never read as a milestone.
@@ -400,3 +401,59 @@ Decisions (lane Q):
   block, and a file that held nothing else); a skill is removed only while
   its hash matches what was written; a block someone removed by hand is not
   put back. The retired rule stays in the library, struck through, with why.
+## P — Multiplayer canvas (M580–M589)
+
+Added 2026-10-26 from the second direction list (Alex: "do 2 and 1"; #1 is this
+lane, #2 is lane Q, the hosted web version). The shared canvas itself already
+exists (M330–M348: accounts, presence and cursors, the per-field CRDT, roles,
+shared text, the relay, the collab server), and so does the team's approval
+queue (M375–M379). What a team still could not do on it was pass work to each
+other or review each other's results. This lane adds those two, in the same
+workspace Y.Doc, judged by the same one table in three places (renderer, main,
+server).
+
+- **M581 — the record and its rules** (`shared/canvas-ops.ts`, `shared/canvas-doc.ts`,
+  `shared/team-flow.ts`). Two new maps, `canvas:handoffs` and `canvas:reviews`,
+  field map per object, one field per person, each written once.
+- **M582 — main** (`main/presence/canvas-sync.ts` `teamFlow`/`writeFlow`,
+  `bootstrap/presence-wiring.ts` `createTeamFlowDoors`) and the doors
+  `team:flow`, `team:flow-write`, `team:flow-changed`.
+- **M583 — the screens**: Needs you's "Handed to you", "Review queue" and
+  "Waiting on your team" (`renderer/team-flow/`), and palette rows to hand off,
+  offer to anyone, ask for a review, take, approve and ask for changes.
+
+### P decisions
+
+- **A handoff moves responsibility, never a process.** An agent runs on one
+  Mac; what passes is who holds it (its *steward*): whose questions and review
+  it is. The panel's owner is its first steward. Moving the process is the
+  relay's job (M335) and is not reinvented here.
+- **A handoff settles by its replies, without its maker's machine.** "I'm
+  leaving, take this" is the common case, so an offer that waited for its maker
+  to come back online to close it would not be a handoff. Named: that person's
+  accept hands it, their decline ends it. Open to anyone: the first accept.
+- **The chain is ordered by the server, never by a clock.** Each handoff
+  carries `n`, its place in the panel's chain; the server checks it against
+  the handoffs already handed, and only the current steward may open the next,
+  one at a time. The steward is the taker of the highest `n`.
+- **Nobody reviews their own result.** The poster cannot claim or judge their
+  own review: the point is a second pair of eyes. One "changes" decides it over
+  any approvals (the asks' rule); otherwise one approval. The queue hides a
+  review as soon as it is decided, and its poster closes it with Done — only as
+  withdrawn or as the verdicts decided, never "approved" on their own word. It
+  is not closed automatically: a close one tick after the first verdict would
+  refuse a second reviewer's verdict in flight.
+- **One handoff per panel per update.** Each is judged against the chain as it
+  stood, so the server refuses a second in the same update, and `stewardOf`
+  breaks a tie by id so every reader agrees.
+- **Names are main's.** `team:flow-write` names a workspace, an object and a
+  choice, never a person; main writes the signed-in person, and the server
+  checks that against the connection. Words leave scrubbed and counted
+  (`redactSecrets` in canvas-sync, an existing caller).
+- **Between people only.** `teamFlow` is excluded from the verb table with its
+  reason: a plan or a workflow node that handed its own agent on, or approved
+  a review, would undo the person the queue asks for. The doors are the
+  Dock's rows and the palette.
+- **No new audit words yet.** The compliance trail's actions are pinned by a
+  migration's CHECK, and `server/` is lane D's: handoffs and reviews are not
+  rows on the trail until that request lands (`docs/streams/requests.md`).

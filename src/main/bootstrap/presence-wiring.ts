@@ -10,6 +10,7 @@ import type { AccountService } from '../account-session'
 import { recordDecision } from '../decision-audit'
 import { createTeamAskRouter, type TeamAskRouter } from '../team-ask-router'
 import type { TeamAskRow } from '../../shared/team-asks'
+import { EMPTY_TEAM_FLOW, type FlowRequest, type TeamFlowSnapshot } from '../../shared/team-flow'
 import type { Verdict } from '../../shared/canvas-ops'
 import { shareDecisionRow, type ShareDecision } from '../../shared/decision-audit'
 import { requestFromRenderer } from '../ipc'
@@ -105,7 +106,7 @@ function installId(userData: string): () => string {
 }
 
 /** The shared canvas over the layout store, the account and the window. */
-export function createCanvasSyncWiring(state: MainState, stores: Stores, account: AccountService, userData: string, onTeamAsks?: () => void): CanvasSync {
+export function createCanvasSyncWiring(state: MainState, stores: Stores, account: AccountService, userData: string, onTeamAsks?: () => void, onTeamFlow?: () => void): CanvasSync {
   const store = stores.layoutStore
   return createCanvasSync({
     host: installId(userData),
@@ -140,6 +141,8 @@ export function createCanvasSyncWiring(state: MainState, stores: Stores, account
     // M376. A peer answered a team ask: the owner's router decides (read at use).
     // M377. And a teammate's list changes with it.
     onAsks: (id) => { state.teamAsks?.asksChanged(id); onTeamAsks?.() },
+    // M582. A teammate's handoff or review changed: the person's queue is pushed again.
+    onFlow: () => { onTeamFlow?.() },
     refreshRole: (shareId) => account.workspaceRole(shareId),
     setRole: (id, role) => {
       const share = store.workspaceShare(id)
@@ -191,6 +194,41 @@ export function createTeamAskDoors(state: MainState, account: AccountService): {
       const verdict = state.canvasSync?.writeAsk(req.workspaceId, { kind: 'ask-answer', askId: req.askId, by: me, answer: req.answer }) ?? { ok: false, reason: 'sharing is not wired in this build' }
       // Our own write is not echoed by canvas-sync's observer, so the list
       // (which drops what this person answered) is pushed from here.
+      push()
+      return verdict
+    },
+    push
+  }
+}
+
+/**
+ * M582. The multiplayer canvas's doors: the person's queue of handoffs and
+ * reviews, and one write in THEIR name — main's signed-in person, never a
+ * name the renderer sent (the asks' rule). Names come from presence's roster
+ * when the person is in the room; a row never guesses one.
+ */
+export function createTeamFlowDoors(state: MainState, account: AccountService): { teamFlow: () => TeamFlowSnapshot; writeTeamFlow: (req: FlowRequest) => Verdict; push: () => void } {
+  const nameOf = (workspaceId: string, userId: string): string | null =>
+    state.presence?.rosters().find((r) => r.workspaceId === workspaceId)?.peers.find((p) => p.presence.userId === userId)?.presence.displayName ?? null
+  const snapshot = (): TeamFlowSnapshot => {
+    const flow = state.canvasSync?.teamFlow(nameOf) ?? EMPTY_TEAM_FLOW
+    const me = account.currentUserId()
+    // Whom a handoff can name: the people in the room now. A teammate who is
+    // not online is still reachable by an open offer to anyone.
+    const shared = new Set(flow.held.map((h) => h.workspaceId))
+    const teammates = (state.presence?.rosters() ?? []).filter((r) => shared.has(r.workspaceId)).flatMap((r) =>
+      r.peers.filter((p) => p.presence.userId !== me).map((p) => ({ workspaceId: r.workspaceId, userId: p.presence.userId, name: p.presence.displayName })))
+    const seen = new Set<string>()
+    return { ...flow, teammates: teammates.filter((t) => { const k = `${t.workspaceId}/${t.userId}`; if (seen.has(k)) return false; seen.add(k); return true }) }
+  }
+  // Background news like a roster: never pops a closed window open.
+  const push = (): void => { readyContents(state)?.send(IPC_EVENTS.TEAM_FLOW_CHANGED, snapshot()) }
+  return {
+    teamFlow: snapshot,
+    writeTeamFlow: (req) => {
+      if (account.currentUserId() === null) return { ok: false, reason: 'sign in to work with your team' }
+      const verdict = state.canvasSync?.writeFlow(req) ?? { ok: false, reason: 'sharing is not wired in this build' }
+      // Our own write is not echoed by canvas-sync's observer.
       push()
       return verdict
     },

@@ -28,6 +28,7 @@ import { forgetAgentLinksFor } from './agent-links-store'
 import { retainSelection } from './canvas-constants'
 import { applyDrag, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
+import { withHandoffs } from '@renderer/team-flow/useTeamFlow'
 import { forgetEdgesFor } from './useEdgeActivity'
 import { attentionCursor, setAttentionCursor } from '../world/world-flight'
 import { notifyRefused } from '../shell/toast'
@@ -416,7 +417,8 @@ export function usePanelGestures(deps: UsePanelGesturesDeps) {
     // sat visible one column to the left.
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
     // M308. The inbox's order — most unblocked first, snoozed skipped.
-    const queue = jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current)
+    // M583. A handoff to this person joins the cycle after the agents waiting on them.
+    const queue = jumpOrder(reachableQueue(withHandoffs(attentionIds()), known), inboxRef.current)
     // R-091. The same cursor the World's walk writes, so ⌘J here and ⌘J in
     // the room are one cycle. The world covers the canvas, so one press is
     // not handled twice.
@@ -450,7 +452,7 @@ export function usePanelGestures(deps: UsePanelGesturesDeps) {
   // does nothing, for Cmd+J's reason.
   const pillJump = useCallback(() => {
     const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
-    const id = nextAttentionId(jumpOrder(reachableQueue(attentionIds(), known), inboxRef.current), attentionCursor(), 1)
+    const id = nextAttentionId(jumpOrder(reachableQueue(withHandoffs(attentionIds()), known), inboxRef.current), attentionCursor(), 1)
     if (id === null) return
     setAttentionCursor(id)
     // #16. jumpToAttention opens the request itself (a permission in the queue).

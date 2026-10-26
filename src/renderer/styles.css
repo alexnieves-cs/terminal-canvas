@@ -13544,3 +13544,13 @@ tr[data-session-row]:focus-within .sessions-world,
 .learn-rule[data-learn-rule="retired"] { color: var(--fg-3); }
 .learn-rule[data-learn-rule="retired"] .learn-draft__text { text-decoration: line-through; color: var(--fg-3); }
 /* ── /st:O ── */
+
+/* ── st:P ── */
+/* M583. The multiplayer canvas's rows in Needs you (team-flow/TeamFlowSection):
+   the team asks' shape (M378), so a handoff and a review read as the same
+   kind of fact — each part on its own line, the note as the person wrote it. */
+.team-flow__note { margin: 0; font: var(--t-xs) var(--font-ui); color: var(--fg-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+.team-flow__title { margin: 0; font: var(--t-xs) var(--font-ui); color: var(--fg); overflow-wrap: anywhere; }
+.team-flow__verbs { margin-top: 0; padding: 0 var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); }
+.team-flow .rail-row__main, .team-flow .inbox__why, .team-flow .inbox__meta, .team-flow .team-flow__verbs { flex: 1 1 100%; }
+/* ── /st:P ── */

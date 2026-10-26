@@ -503,6 +503,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        presence:local / presence:rosters
                        team:list / team:observe
                        team:asks / team:ask-answer
+                       team:flow / team:flow-write
                        canvas:op / canvas:shared-view
                        workspace:share / workspace:shares
                        workspace:open-share / workspace:share-member
@@ -574,7 +575,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        settings:changed / spawn:open-sheet
                        agent:event (batched ~16ms) / watcher:state / vault:changed
                        presence:remote / team:observed / canvas:shared
-                       team:asks-changed
+                       team:asks-changed / team:flow-changed
                        auth:changed
                        text:remote
                        relay:data / relay:state
@@ -1373,6 +1374,10 @@ price of not killing something.
 | M454 | Without WebGL the flat room keeps the same words and the same doors. The doors between the canvas and the World go both ways. [Log](docs/build-log/m435-m456-redesign.md). |
 | M455 | Phase 4 on Linux: the fix list, the release-notes draft, dark shot fixes, the renderer budget, and the header rest rule so a skill count stays visible at rest. Goldens were not rewritten. [Log](docs/build-log/m435-m456-redesign.md). |
 | M456 | 6.0.0: the version, the release notes, and the GitHub release. The build is unsigned. The DMG is attached after a Mac package pass. [Log](docs/build-log/m435-m456-redesign.md). |
+| M580 | Lane P, the multiplayer canvas, joins the streams run: its files, its CSS fence and its plan in bold.md. [Log](docs/build-log/m580-m583-multiplayer.md). |
+| M581 | Handoffs and a shared review queue in the shared workspace doc, judged by the same one table in the app and the collab server: an agent is handed on only by whoever holds it now, taken or judged only in one's own name, and nobody reviews their own result. [Log](docs/build-log/m580-m583-multiplayer.md). |
+| M582 | Main's side: the person's queue and one write in their name (`team:flow`, `team:flow-write`, `team:flow-changed`); words scrubbed before they leave. [Log](docs/build-log/m580-m583-multiplayer.md). |
+| M583 | Needs you shows what was handed to you, the review queue and what you wait on the team for; the palette hands an agent off, offers it to anyone, and asks for a review. [Log](docs/build-log/m580-m583-multiplayer.md). |
 
 ### What's next — the v10 run (D01–D20)
 

@@ -23,7 +23,7 @@ import { installTmuxAdopt } from './tmux-adopt'
 import { installCloudLanes } from './bootstrap/cloud-wiring'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
-import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
+import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors, createTeamFlowDoors } from './bootstrap/presence-wiring'
 import { createRelayWiring } from './bootstrap/relay-wiring'
 import { startWorldSimWiring } from './bootstrap/world-sim-wiring'
 import { createWorldFeedWiring } from './bootstrap/world-feed-wiring'
@@ -138,7 +138,9 @@ state.presence = createPresenceWiring(state, stores, account)
 // The shared canvas binds into the hub's rooms (bindCanvas reads this at use).
 // M377. A teammate's side of the team queue; its list is pushed on every asks change.
 const teamAskDoors = createTeamAskDoors(state, account)
-state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'), teamAskDoors.push)
+// M582. Handoffs and the shared review queue, over the same binding.
+const teamFlowDoors = createTeamFlowDoors(state, account)
+state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'), teamAskDoors.push, teamFlowDoors.push)
 // M376. The team queue's owner side (off until agents.teamAsks is on).
 state.teamAsks = createTeamAskWiring(state, stores, account, app.getPath('userData'))
 const shareDoors = createShareDoors(state, stores, account)
@@ -388,6 +390,8 @@ app.whenReady().then(async () => {
       textUpdate: (id, update) => state.canvasSync?.textUpdate(id, update) ?? { ok: false, reason: 'sharing is not wired in this build' },
       teamAsks: teamAskDoors.teamAsks,
       answerTeamAsk: teamAskDoors.answerTeamAsk,
+      teamFlow: teamFlowDoors.teamFlow,
+      writeTeamFlow: teamFlowDoors.writeTeamFlow,
       ...shareDoors
     },
     // The pty relay: one socket per relay panel, held in main with the token.
