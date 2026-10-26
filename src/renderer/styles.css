@@ -13602,11 +13602,11 @@ tr[data-session-row]:focus-within .sessions-world,
 .shell:has(.rd-empty, [data-launcher]) .canvas-hud__tiers,
 .rd-empty__minimap { display: none; }
 /* M609. A crowded header gives up its path first, its name last. The path
-   and branch shrink a hundred times faster than the title, and the title
-   keeps 14 characters before it starts to ellipsise — "Claude — L…" lost the
-   one fact the header exists for while the path still showed in full. */
+   and branch shrink a hundred times faster than the title — "Claude — L…"
+   lost the one fact the header exists for while the path still showed in
+   full. No min-width on the title: a floor pushed a narrow chat's auto chip
+   and its dismiss out of the frame (shot inspector-caps hit-tests that). */
 .pf__chrome .pf__path, .pf__chrome .pf__branch { flex: 0 100 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pf__chrome .pf__title { min-width: min(14ch, 45%); }
 /* M609. The palette's band label ("COMMANDS") sat 8px left of the section
    headers under it. Same inset as .palette__section, with a hairline above
    so it reads as the bigger grouping rather than a misaligned header. */
