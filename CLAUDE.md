@@ -118,7 +118,7 @@ review:baseline review:at review:diff git:status git:root review:across review:i
 credential:list credential:set credential:delete credential:verify jira:list github:list
 broker:audit jira:transitions jira:comment jira:transition file:open file:read file:close
 fs:list toolbox:read toolbox:permissions file:write file:create diagnostics:sample
-diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx export:flowchart
+diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx export:flowchart export:night-film film:night
 tool:generate env:report tmux:adoptable link:open ledger:list
 ledger:usage ledger:timeline ledger:event spawn:sheet spawn:recent spawn:recent-used agent:create agent:send agent:interrupt agent:dispose
 agent:answer agent:list agent:transcript agent:import agent:clipboard-image

@@ -193,6 +193,28 @@ prompts off without touching the Mac.
 - **M564** — a "Last night" button on the morning queue, and a generated clip for
   the README in place of the mockups.
 
+**Decisions (lane L, 2026-10-26):**
+
+- **Drawn, not captured.** The plan said the World's replay drives the camera and
+  frames are captured. The World's journal holds one hour and a night is eight, and
+  a capture of the canvas is pixels the gate cannot scrub (the PNG door's exception,
+  `docs/load-bearing.md`, does not cover a second binary export). So the film is a
+  schematic of the canvas drawn from the script: the panels at their canvas
+  positions, coloured by the one state palette, a camera that pushes in on each
+  shot. Every word in it passed `outward` when the script was built.
+- **Encoded in the app, no ffmpeg.** WebCodecs (H.264, VideoToolbox on a Mac) in
+  the renderer, and a small MP4 writer of our own (`src/shared/mp4-mux.ts`) rather
+  than a library; a minute renders in about ten seconds.
+- **Where the night comes from.** The run ledger (main reads it through
+  `film:night`, since `ledger:timeline` is capped at 200 rows) and the Tonight
+  batch. The window is the batch when one ran, else the absence, else twelve hours.
+- **The README clip** is `docs/assets/night-film.gif`, the app's own film code run on
+  a labelled sample night by `scripts/film-sample.cjs`. It replaces `tour.gif` (a
+  slideshow of the mockups); the still mockups below it stay until real shots
+  replace them.
+- **Suite:** `verify:film` (`film.script.*`, `film.frame.*`, `film.window.1`,
+  `film.mux.*`, `film.door.*`, `film.wire.1`).
+
 ## N — A live demo in the browser (M565–M569)
 
 - **M565** — a web build target of the renderer with the `window.canvas` bridge

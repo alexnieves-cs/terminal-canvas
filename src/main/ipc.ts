@@ -49,7 +49,7 @@ import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, 
 import { INERT_EXPORTERS, type Exporters } from './export'
 import { INERT_TOOLS, type ToolHandlers } from './tool-generate'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
-import type { DeckPdfExportRequest, PanelTextExportRequest } from '../shared/export'
+import type { DeckPdfExportRequest, NightFilmExportRequest, NightFilmRecordRequest, PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -1173,6 +1173,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.EXPORT_DECK_PDF, (_event, req: DeckPdfExportRequest) => exporters.deckPdf(req))
   ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
+  // M562–M563 (lane L). Optional on the object so a harness that builds its own exporters still registers.
+  ipcMain.handle(IPC.FILM_NIGHT, (_event, req: NightFilmRecordRequest) => exporters.filmNight?.(req) ?? { kind: 'refused', reason: 'the night film is not wired' })
+  ipcMain.handle(IPC.EXPORT_NIGHT_FILM, (_event, req: NightFilmExportRequest) => exporters.nightFilm?.(req) ?? { kind: 'failed', reason: 'the night film is not wired' })
   // Shape-checked in main/flowchart-files.ts, which answers a refusal by name for anything malformed — so what arrives here is passed on untouched.
   ipcMain.handle(IPC.EXPORT_FLOWCHART, (_event, req: unknown) => flowcharts.export(req))
   ipcMain.handle(IPC.FLOWCHART_READ, (_event, req: unknown) => flowcharts.read(req))

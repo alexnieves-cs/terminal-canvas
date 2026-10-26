@@ -127,6 +127,7 @@
     "verify:rd-w6": "node scripts/verify-rd-w6.cjs",
     "verify:ux": "node scripts/verify-ux.cjs",
     "verify:auto": "node scripts/verify-auto.cjs",
+    "verify:film": "node scripts/verify-film.cjs",
     "verify:vm": "node scripts/verify-vm.cjs"
   },
   "dependencies": {
