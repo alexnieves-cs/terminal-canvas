@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
@@ -19,7 +19,9 @@ import type { Hub } from './hub'
  *   - the socket also checks `Origin` against `Host`, because a cookie is
  *     sent by the browser on a cross-site WebSocket too (SameSite does not
  *     cover a page on another site opening one to here — CSWSH);
- *   - failed sign-ins back off per address.
+ *   - failed sign-ins back off per address and for the host as a whole;
+ *   - nothing a request carries can throw the process down;
+ *   - with no token, the Host header must name loopback (DNS rebinding).
  */
 
 export interface HostOptions {
@@ -66,9 +68,23 @@ export function isLoopback(bind: string): boolean {
   return bind === '127.0.0.1' || bind === '::1' || bind === 'localhost'
 }
 
-/** What the cookie holds: a digest of the token, so the token itself is never stored in the browser. */
-export function cookieValue(token: string): string {
-  return createHash('sha256').update(`tc-host:${token}`).digest('hex')
+/** A token shorter than this is refused at start: the back-off slows a guesser, it does not stop one. */
+export const MIN_TOKEN = 16
+/** A cookie is good for this long after sign-in, then the person signs in again. */
+export const COOKIE_MAX_AGE_S = 30 * 24 * 3600
+
+function mac(token: string, issued: string): string {
+  return createHmac('sha256', `tc-host:${token}`).update(issued).digest('hex')
+}
+
+/**
+ * What the cookie holds: when it was issued and an HMAC of that under the
+ * token. Never the token itself, and not a fixed value either, so a stolen
+ * cookie dies of age (review finding 7) as well as on a token change.
+ */
+export function issueCookie(token: string, now = Date.now()): string {
+  const issued = String(Math.floor(now / 1000))
+  return `${issued}.${mac(token, issued)}`
 }
 
 function same(a: string, b: string): boolean {
@@ -77,19 +93,41 @@ function same(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y)
 }
 
+/** Never throws: a malformed cookie header is no cookie (an unauthenticated `%` used to kill the process). */
 function cookies(req: IncomingMessage): Map<string, string> {
   const out = new Map<string, string>()
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const i = part.indexOf('=')
-    if (i > 0) out.set(part.slice(0, i).trim(), decodeURIComponent(part.slice(i + 1).trim()))
+    if (i <= 0) continue
+    let value: string
+    try { value = decodeURIComponent(part.slice(i + 1).trim()) } catch { continue }
+    out.set(part.slice(0, i).trim(), value)
   }
   return out
 }
 
-export function signedIn(req: IncomingMessage, token: string): boolean {
+export function signedIn(req: IncomingMessage, token: string, now = Date.now()): boolean {
   if (token === '') return true
   const got = cookies(req).get(COOKIE)
-  return got !== undefined && same(got, cookieValue(token))
+  if (got === undefined) return false
+  const dot = got.indexOf('.')
+  if (dot <= 0) return false
+  const issued = got.slice(0, dot)
+  const age = now / 1000 - Number(issued)
+  if (!/^\d{1,12}$/.test(issued) || !(age >= -60 && age <= COOKIE_MAX_AGE_S)) return false
+  return same(got.slice(dot + 1), mac(token, issued))
+}
+
+/**
+ * No-token mode is "this machine only", and binding to loopback is not
+ * enough for that: a page on evil.example that rebinds its name to
+ * 127.0.0.1 reaches the port with `Host: evil.example` and a matching
+ * Origin (review finding 2, DNS rebinding). So without a token the Host
+ * header itself must name loopback.
+ */
+export function loopbackHost(req: IncomingMessage): boolean {
+  const host = (req.headers.host ?? '').toLowerCase()
+  return /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host)
 }
 
 /**
@@ -139,8 +177,20 @@ export function startHost(options: HostOptions): Promise<RunningHost> {
       'Set TC_HOST_TOKEN to a long random string, or bind to 127.0.0.1.'
     ))
   }
+  if (token !== '' && token.length < MIN_TOKEN) {
+    return Promise.reject(new Error(`TC_HOST_TOKEN is ${token.length} characters; use at least ${MIN_TOKEN} (openssl rand -hex 24)`))
+  }
   const root = resolve(options.webRoot)
+  /**
+   * The back-off. An attempt is COUNTED when it arrives, before its body is
+   * read, so a burst of parallel guesses cannot all pass one stale check
+   * (review finding 4). Per address, and also for the whole host: behind a
+   * proxy every address is the proxy's, and a guesser rotating addresses
+   * must still hit a ceiling.
+   */
   const failures = new Map<string, { count: number; until: number }>()
+  const recent: number[] = []
+  const GLOBAL_PER_MINUTE = 30
 
   const headers = (res: ServerResponse, type: string, cache: boolean): void => {
     res.setHeader('Content-Type', type)
@@ -152,32 +202,41 @@ export function startHost(options: HostOptions): Promise<RunningHost> {
 
   const hostInfo = (): string => `window.__TC_HOST__ = ${JSON.stringify({ home: homedir(), platform: process.platform, version: options.appVersion })};\n`
 
+  const tooMany = (res: ServerResponse, waitMs: number): void => {
+    res.statusCode = 429
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil(waitMs / 1000))))
+    res.end('too many tries; wait a moment')
+  }
+
   const signIn = (req: IncomingMessage, res: ServerResponse): void => {
     const address = req.socket.remoteAddress ?? '?'
     const now = Date.now()
+    while (recent.length > 0 && recent[0]! < now - 60_000) recent.shift()
+    if (recent.length >= GLOBAL_PER_MINUTE) { tooMany(res, recent[0]! + 60_000 - now); return }
     const f = failures.get(address)
-    if (f !== undefined && f.until > now) {
-      res.statusCode = 429
-      res.setHeader('Retry-After', String(Math.ceil((f.until - now) / 1000)))
-      res.end('too many tries; wait a moment')
-      return
+    if (f !== undefined && f.until > now) { tooMany(res, f.until - now); return }
+    // Counted now, as a failure until the body proves otherwise.
+    recent.push(now)
+    const count = (f?.count ?? 0) + 1
+    // 1s, 2s, 4s … capped at a minute: slow for a guesser, invisible for a typo.
+    failures.set(address, { count, until: now + Math.min(60_000, 1000 * 2 ** (count - 1)) })
+    if (failures.size > 10_000) {
+      for (const [key, entry] of failures) if (entry.until < now - 3_600_000) failures.delete(key)
     }
     let body = ''
     req.setEncoding('utf8')
     req.on('data', (chunk: string) => { body += chunk; if (body.length > 4096) req.destroy() })
     req.on('end', () => {
       const given = new URLSearchParams(body).get('token') ?? ''
-      if (token !== '' && same(cookieValue(given), cookieValue(token))) {
+      const digest = (t: string): string => createHash('sha256').update(t).digest('hex')
+      if (token !== '' && same(digest(given), digest(token))) {
         failures.delete(address)
         res.statusCode = 303
-        res.setHeader('Set-Cookie', `${COOKIE}=${cookieValue(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${secure(req) ? '; Secure' : ''}`)
+        res.setHeader('Set-Cookie', `${COOKIE}=${issueCookie(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${COOKIE_MAX_AGE_S}${secure(req) ? '; Secure' : ''}`)
         res.setHeader('Location', '/')
         res.end()
         return
       }
-      const count = (f?.count ?? 0) + 1
-      // 1s, 2s, 4s … capped at a minute: slow for a guesser, invisible for a typo.
-      failures.set(address, { count, until: now + Math.min(60_000, 1000 * 2 ** (count - 1)) })
       res.statusCode = 401
       headers(res, 'text/html; charset=utf-8', false)
       res.end(SIGN_IN(true))
@@ -186,6 +245,7 @@ export function startHost(options: HostOptions): Promise<RunningHost> {
 
   const serveFile = (req: IncomingMessage, res: ServerResponse, pathname: string): void => {
     const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1))
+    if (rel.includes('\0')) { res.statusCode = 400; res.end(); return }
     const file = normalize(join(root, rel))
     if (file !== root && !file.startsWith(root + sep)) { res.statusCode = 400; res.end(); return }
     if (!existsSync(file) || !statSync(file).isFile()) { res.statusCode = 404; res.end('not found'); return }
@@ -196,17 +256,20 @@ export function startHost(options: HostOptions): Promise<RunningHost> {
     res.end(readFileSync(file))
   }
 
-  const server = createServer((req, res) => {
+  /** Whether a request may go further than /healthz: a valid cookie, and in no-token mode a loopback Host. */
+  const admitted = (req: IncomingMessage): boolean => signedIn(req, token) && (token !== '' || loopbackHost(req))
+
+  const handle = (req: IncomingMessage, res: ServerResponse): void => {
     const url = new URL(req.url ?? '/', 'http://host')
     if (url.pathname === '/healthz') { headers(res, 'text/plain; charset=utf-8', false); res.end('ok'); return }
+    if (token === '' && !loopbackHost(req)) { res.statusCode = 403; res.end('this host answers only to 127.0.0.1'); return }
     if (url.pathname === '/__tc/sign-in' && req.method === 'POST') { signIn(req, res); return }
-    if (!signedIn(req, token)) {
+    if (!admitted(req)) {
+      res.statusCode = 401
       if (url.pathname === '/' || url.pathname === '/index.html') {
-        res.statusCode = 401
         headers(res, 'text/html; charset=utf-8', false)
         res.end(SIGN_IN(false))
       } else {
-        res.statusCode = 401
         res.end('sign in first')
       }
       return
@@ -214,20 +277,38 @@ export function startHost(options: HostOptions): Promise<RunningHost> {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; res.end(); return }
     if (url.pathname === '/host-info.js') { headers(res, 'text/javascript; charset=utf-8', false); res.end(hostInfo()); return }
     serveFile(req, res, url.pathname)
+  }
+
+  // Nothing a request carries may throw out of a listener: an uncaught throw
+  // there ends the process, which made a bad escape an unauthenticated kill
+  // switch (review finding 1). Every route answers 400 instead.
+  const server = createServer((req, res) => {
+    try {
+      handle(req, res)
+    } catch {
+      if (!res.headersSent) res.statusCode = 400
+      res.end()
+    }
   })
 
   // A frame is a PTY chunk or a door's answer; 64 MB covers a pasted image's base64 with room, and refuses a flood.
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 })
   server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url ?? '/', 'http://host')
-    if (url.pathname !== '/__tc/ws' || !signedIn(req, token) || !originAllowed(req)) {
+    let allowed = false
+    try {
+      const url = new URL(req.url ?? '/', 'http://host')
+      allowed = url.pathname === '/__tc/ws' && admitted(req) && originAllowed(req)
+    } catch { allowed = false }
+    if (!allowed) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
       socket.destroy()
       return
     }
     wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
       const link = hub.attach({ send: (text) => ws.send(text), close: (code, reason) => ws.close(code, reason) })
-      ws.on('message', (data) => link.message(data.toString()))
+      ws.on('message', (data) => {
+        try { link.message(data.toString()) } catch (error) { console.warn('[host] a frame failed', error) }
+      })
       ws.on('close', () => link.close())
       ws.on('error', () => link.close())
     })

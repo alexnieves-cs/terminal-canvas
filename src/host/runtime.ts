@@ -20,3 +20,18 @@ export const appVersion = typeof __TC_VERSION__ === 'string' ? __TC_VERSION__ : 
 
 /** The checkout the host was built from: `app.getAppPath()`, which main reads package.json beside. */
 export const appRoot = process.env['TC_HOST_APP_ROOT']?.trim() || process.cwd()
+
+/**
+ * The two secrets, read ONCE here and then removed from `process.env` by
+ * host-main.ts before main loads. Main spreads `process.env` into every PTY
+ * (shell-env.ts), so left there they would be one `env` away for any shell
+ * or any agent in one, prompt-injected or not (review finding 3).
+ */
+export const hostToken = process.env['TC_HOST_TOKEN']?.trim() ?? ''
+export const hostSecret = process.env['TC_HOST_SECRET']?.trim() ?? ''
+
+export function scrubSecretsFromEnv(): void {
+  delete process.env['TC_HOST_TOKEN']
+  delete process.env['TC_HOST_SECRET']
+}
+

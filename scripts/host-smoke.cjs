@@ -103,7 +103,7 @@ async function waitFor(url, ms) {
       const off = window.canvas.pty.onData((chunk) => { if (chunk.panelId === id) out += chunk.data })
       await window.canvas.pty.create({ panelId: id, cwd: window.canvas.home, command: '/bin/sh', args: [], cols: 80, rows: 24 })
       await new Promise((r) => setTimeout(r, 800))
-      await window.canvas.pty.write({ panelId: id, data: 'echo tc-host-$((40+2))\r' })
+      await window.canvas.pty.write({ panelId: id, data: 'echo tc-host-$((40+2)) tok=${TC_HOST_TOKEN:-none}\r' })
       const end = Date.now() + 10000
       while (!out.includes('tc-host-42') && Date.now() < end) await new Promise((r) => setTimeout(r, 200))
       off()
@@ -111,6 +111,7 @@ async function waitFor(url, ms) {
       return out
     })
     ok('smoke.pty.1 a terminal runs on the host and its output reaches the tab', transcript.includes('tc-host-42'), JSON.stringify(transcript.slice(-120)))
+    ok('smoke.env.1 the access token is not in a terminal\'s environment', transcript.includes('tc-host-42 tok=none'))
 
     const layout = await page.evaluate(async () => {
       const state = await window.canvas.layout.load()

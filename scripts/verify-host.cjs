@@ -78,6 +78,24 @@ function fakeSocket() {
     return { pass: all.every((f) => f === null), detail: all }
   })
 
+  await check('host.wire.4 a hostile frame is no frame: wrong tag payloads, deep nesting, and __proto__ cannot reach a handler', wire, (w) => {
+    const bad = ['{"t":"invoke","id":1,"channel":"x","args":[{"$tc":"map","v":1}]}', '{"t":"invoke","id":1,"channel":"x","args":[{"$tc":"bytes"}]}',
+      `{"t":"invoke","id":1,"channel":"x","args":[${'['.repeat(5000)}${']'.repeat(5000)}]}`, '{"t":"invoke","id":1,"channel":"x"}'].map((t) => w.decodeFrame(t))
+    const proto = w.decodeFrame('{"t":"invoke","id":1,"channel":"x","args":[{"__proto__":{"admin":true},"a":1}]}')
+    const arg = proto && proto.args[0]
+    const pass = bad.every((f) => f === null) && arg && arg.a === 1 && arg.admin === undefined && Object.getPrototypeOf(arg) === Object.prototype
+    return { pass, detail: { bad, admin: arg && arg.admin } }
+  })
+  {
+    const main = read('src/host/host-main.ts')
+    const rt = read('src/host/runtime.ts')
+    const scrub = main.indexOf('scrubSecretsFromEnv()')
+    const boot = main.indexOf("await import('../main/index')")
+    const pass = scrub > 0 && boot > scrub && /delete process\.env\['TC_HOST_TOKEN'\]/.test(rt) && /delete process\.env\['TC_HOST_SECRET'\]/.test(rt) &&
+      !/process\.env\['TC_HOST_(TOKEN|SECRET)'\]/.test(read('src/host/electron-shim.ts') + main)
+    ok('host.env.1 the token and the credential secret leave process.env before main loads, so no shell or agent inherits them', pass)
+  }
+
   // ── hub (M590) ──
   await check('host.hub.1 an invoke reaches its handler; a throw rejects with Electron\'s own wording', { mod: hubMod.mod && wire.mod ? { ...hubMod.mod, ...wire.mod } : undefined, error: hubMod.error || wire.error }, async (m) => {
     const hub = m.createHub()
@@ -186,7 +204,7 @@ function fakeSocket() {
     } catch (error) { gate.error = error.message; gate.mod = undefined }
   }
   const base = host ? `http://127.0.0.1:${host.port}` : ''
-  const cookie = gate.mod ? `tc_host=${gate.mod.cookieValue(TOKEN)}` : ''
+  const cookie = gate.mod ? `tc_host=${gate.mod.issueCookie(TOKEN)}` : ''
 
   await check('host.gate.2 before signing in only /healthz and the sign-in page answer', gate, async () => {
     const health = await fetch(`${base}/healthz`)
@@ -202,7 +220,7 @@ function fakeSocket() {
     await tick(1100)
     const right = await fetch(`${base}/__tc/sign-in`, { method: 'POST', body: `token=${TOKEN}`, headers: { 'content-type': 'application/x-www-form-urlencoded' }, redirect: 'manual' })
     const set = right.headers.get('set-cookie') ?? ''
-    const pass = wrong.status === 401 && again.status === 429 && right.status === 303 && /HttpOnly/.test(set) && /SameSite=Strict/.test(set) && !set.includes(TOKEN) && set.startsWith(cookie)
+    const pass = wrong.status === 401 && again.status === 429 && right.status === 303 && /HttpOnly/.test(set) && /SameSite=Strict/.test(set) && !set.includes(TOKEN) && /^tc_host=\d+\.[0-9a-f]{64};/.test(set)
     return { pass, detail: { wrong: wrong.status, again: again.status, right: right.status, set } }
   })
   await check('host.gate.4 signed in, the page and /host-info.js answer; a path outside the page\'s folder does not', gate, async () => {
@@ -241,7 +259,60 @@ function fakeSocket() {
     const pass = noCookie === 403 && foreign === 403 && answer.ok === true && answer.value.x instanceof Uint8Array && answer.value.at instanceof Date
     return { pass, detail: { noCookie, foreign, answer: answer.ok ?? answer.error } }
   })
+  await check('host.gate.6 nothing a request carries throws the host down: a bad cookie escape, a bad path escape, a "//" target', gate, async () => {
+    const net = require('node:net')
+    const raw = (text) => new Promise((done) => {
+      const sock = net.connect(host.port, '127.0.0.1', () => sock.write(text))
+      let got = ''
+      sock.on('data', (d) => { got += d })
+      sock.on('close', () => done(got.split('\r\n')[0]))
+      sock.on('error', () => done('error'))
+      setTimeout(() => { sock.destroy(); done(got.split('\r\n')[0] || 'timeout') }, 2000)
+    })
+    const badCookie = await raw('GET / HTTP/1.1\r\nHost: x\r\nCookie: tc_host=%\r\nConnection: close\r\n\r\n')
+    const badUpgrade = await raw('GET /__tc/ws HTTP/1.1\r\nHost: x\r\nCookie: tc_host=%E0%A4%A\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n')
+    const slashes = await raw('GET // HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n')
+    const badPath = await raw(`GET /%E0%A4%A HTTP/1.1\r\nHost: x\r\nCookie: ${cookie}\r\nConnection: close\r\n\r\n`)
+    const alive = (await fetch(`${base}/healthz`)).status === 200
+    return { pass: alive && /401/.test(badCookie) && /403/.test(badUpgrade) && /40\d/.test(slashes) && /400/.test(badPath), detail: { badCookie, badUpgrade, slashes, badPath, alive } }
+  })
+  await check('host.gate.7 a cookie is an issue time and an HMAC: a forged, an expired or another token\'s cookie is refused', gate, async (m) => {
+    const req = (c) => ({ headers: { cookie: `tc_host=${c}` } })
+    const now = Date.now()
+    const good = m.signedIn(req(m.issueCookie(TOKEN, now)), TOKEN, now)
+    const old = m.signedIn(req(m.issueCookie(TOKEN, now - (m.COOKIE_MAX_AGE_S + 60) * 1000)), TOKEN, now)
+    const other = m.signedIn(req(m.issueCookie('another-token-0123456789', now)), TOKEN, now)
+    const forged = m.signedIn(req(`${Math.floor(now / 1000)}.${'0'.repeat(64)}`), TOKEN, now)
+    const fixed = m.signedIn(req(require('node:crypto').createHash('sha256').update(`tc-host:${TOKEN}`).digest('hex')), TOKEN, now)
+    let short = ''
+    try { await m.startHost({ hub: m.createHub(), webRoot: ROOT, port: 0, bind: '127.0.0.1', token: 'short', appVersion: 't' }) } catch (error) { short = error.message }
+    return { pass: good && !old && !other && !forged && !fixed && /at least 16/.test(short), detail: { good, old, other, forged, fixed, short } }
+  })
+  await check('host.gate.8 a burst of parallel guesses is counted as it arrives: one passes the back-off, the rest are 429', gate, async () => {
+    await tick(1100)
+    const tries = await Promise.all(Array.from({ length: 6 }, () => fetch(`${base}/__tc/sign-in`, { method: 'POST', body: 'token=guess-guess-guess', headers: { 'content-type': 'application/x-www-form-urlencoded' }, redirect: 'manual' }).then((r) => r.status)))
+    const passed = tries.filter((s) => s === 401).length
+    return { pass: passed <= 1 && tries.filter((s) => s === 429).length >= 5, detail: tries }
+  })
   if (host) await host.close()
+
+  await check('host.gate.9 with no token, only a loopback Host is answered (a DNS-rebound name is refused, page and socket)', gate, async (m) => {
+    const open = await m.startHost({ hub: m.createHub(), webRoot, port: 0, bind: '127.0.0.1', token: '', appVersion: 't' })
+    const net = require('node:net')
+    const raw = (text) => new Promise((done) => {
+      const sock = net.connect(open.port, '127.0.0.1', () => sock.write(text))
+      let got = ''
+      sock.on('data', (d) => { got += d })
+      sock.on('close', () => done(got.split('\r\n')[0]))
+      sock.on('error', () => done('error'))
+      setTimeout(() => { sock.destroy(); done(got.split('\r\n')[0] || 'timeout') }, 2000)
+    })
+    const local = await raw(`GET / HTTP/1.1\r\nHost: 127.0.0.1:${open.port}\r\nConnection: close\r\n\r\n`)
+    const rebound = await raw(`GET / HTTP/1.1\r\nHost: evil.example:${open.port}\r\nConnection: close\r\n\r\n`)
+    const socket = await raw(`GET /__tc/ws HTTP/1.1\r\nHost: evil.example:${open.port}\r\nOrigin: http://evil.example:${open.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`)
+    await open.close()
+    return { pass: /200/.test(local) && /403/.test(rebound) && /403/.test(socket), detail: { local, rebound, socket } }
+  })
 
   // ── the Electron stand-in (M590) ──
   await check('host.shim.1 every value main imports from electron is something the stand-in exports', shim, (s) => {

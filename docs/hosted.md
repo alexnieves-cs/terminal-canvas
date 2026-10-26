@@ -101,12 +101,23 @@ the files and sign-ins in its volume.
   listens, and `host-main.ts` starts the gate before main loads, so a refused
   host has not started tmux or written a layout (`host.boot.1`).
 - **Everything but `/healthz` and the sign-in page needs the cookie.** The
-  cookie holds a digest of the token, never the token. It is `HttpOnly` and
-  `SameSite=Strict`, and it is compared in constant time. Failed sign-ins back
-  off per address, from 1 second up to a minute.
+  cookie holds an issue time and an HMAC of it under the token, never the
+  token. It is `HttpOnly` and `SameSite=Strict`, it is compared in constant
+  time, and it expires after 30 days. A token shorter than 16 characters is
+  refused at start.
+- **Failed sign-ins back off.** The wait doubles from 1 second up to a minute
+  per address, and the whole host takes at most 30 tries a minute. Each try is
+  counted when it arrives, so parallel guesses are counted too.
 - **The WebSocket also checks `Origin` against `Host`.** A browser sends cookies
   on a cross-site WebSocket too, so without this check any page you visit could
   drive your host.
+- **No-token mode answers only to a loopback `Host`.** Binding to 127.0.0.1 is
+  not enough by itself: a site that rebinds its DNS name to 127.0.0.1 would
+  otherwise reach the port.
+- **Nothing a request carries can crash the host.** Malformed cookies, paths
+  and frames get a 400 or are dropped.
+- **The token and `TC_HOST_SECRET` leave the environment before main loads,**
+  so no terminal or agent inherits them.
 - **Change the token to sign everyone out.** Old cookies stop matching.
 - **Credentials stay on the host.** `safeStorage` seals them with a key in the
   data folder (mode 0600) or derived from `TC_HOST_SECRET`. As on the Mac,

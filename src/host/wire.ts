@@ -119,25 +119,48 @@ export function pack(value: unknown): unknown {
   return out
 }
 
-/** The inverse of `pack`. Bytes come back as a `Uint8Array`, which is what IPC hands a renderer for a Buffer. */
-export function unpack(value: unknown): unknown {
+/** Deeper than this is not a value any door sends; it is a stack overflow someone is building. */
+const MAX_DEPTH = 200
+
+/** Keys a parsed object must never set on another: `out['__proto__'] = …` swaps out's prototype. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+/**
+ * The inverse of `pack`. Bytes come back as a `Uint8Array`, which is what IPC
+ * hands a renderer for a Buffer. It reads text from the other end of a
+ * socket, so it THROWS on anything malformed (a tag with the wrong payload,
+ * nesting past MAX_DEPTH) and `decodeFrame` turns that into "no frame".
+ */
+export function unpack(value: unknown, depth = 0): unknown {
+  if (depth > MAX_DEPTH) throw new Error('frame nested too deeply')
   if (value === null || typeof value !== 'object') return value
-  if (Array.isArray(value)) return value.map(unpack)
+  if (Array.isArray(value)) return value.map((v) => unpack(v, depth + 1))
   const record = value as Record<string, unknown>
   const tag = record[TAG]
   if (typeof tag === 'string') {
     const t = record as Tagged
     switch (t[TAG]) {
       case 'u': return undefined
-      case 'bytes': return base64ToBytes(t.b64)
-      case 'date': return new Date(t.v)
-      case 'map': return new Map(t.v.map(([k, v]) => [unpack(k), unpack(v)]))
-      case 'set': return new Set(t.v.map(unpack))
-      case 'error': { const e = new Error(t.message); e.name = t.name; return e }
+      case 'bytes':
+        if (typeof t.b64 !== 'string') throw new Error('bad bytes')
+        return base64ToBytes(t.b64)
+      case 'date':
+        if (typeof t.v !== 'number') throw new Error('bad date')
+        return new Date(t.v)
+      case 'map':
+        if (!Array.isArray(t.v) || !t.v.every((e) => Array.isArray(e) && e.length === 2)) throw new Error('bad map')
+        return new Map(t.v.map(([k, v]) => [unpack(k, depth + 1), unpack(v, depth + 1)]))
+      case 'set':
+        if (!Array.isArray(t.v)) throw new Error('bad set')
+        return new Set(t.v.map((v) => unpack(v, depth + 1)))
+      case 'error': { const e = new Error(String(t.message)); e.name = String(t.name); return e }
     }
   }
   const out: Record<string, unknown> = {}
-  for (const [key, v] of Object.entries(record)) out[key] = unpack(v)
+  for (const [key, v] of Object.entries(record)) {
+    if (UNSAFE_KEYS.has(key)) continue
+    out[key] = unpack(v, depth + 1)
+  }
   return out
 }
 
@@ -155,9 +178,14 @@ export function decodeFrame<T extends ClientFrame | HostFrame>(text: string): T 
   try { raw = JSON.parse(text) } catch { return null }
   if (raw === null || typeof raw !== 'object' || typeof (raw as { t?: unknown }).t !== 'string') return null
   const frame = raw as Record<string, unknown>
-  if (Array.isArray(frame['args'])) frame['args'] = (frame['args'] as unknown[]).map(unpack)
-  if ('value' in frame) frame['value'] = unpack(frame['value'])
-  if ('payload' in frame) frame['payload'] = unpack(frame['payload'])
+  try {
+    if (Array.isArray(frame['args'])) frame['args'] = (frame['args'] as unknown[]).map((a) => unpack(a))
+    else if (frame['t'] === 'invoke' || frame['t'] === 'send' || frame['t'] === 'event') return null
+    if ('value' in frame) frame['value'] = unpack(frame['value'])
+    if ('payload' in frame) frame['payload'] = unpack(frame['payload'])
+  } catch {
+    return null
+  }
   return frame as T
 }
 

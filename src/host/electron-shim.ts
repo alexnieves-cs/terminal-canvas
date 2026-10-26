@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { appRoot, appVersion, dataDir, hub } from './runtime'
+import { appRoot, appVersion, dataDir, hostSecret, hub } from './runtime'
 import type { MenuKey } from './wire'
 
 /**
@@ -473,8 +473,7 @@ export const net = {
  */
 function storageKey(): Buffer {
   // A secret the deployment injects survives a volume wipe; the key file does not have to.
-  const fromEnv = process.env['TC_HOST_SECRET']?.trim()
-  if (fromEnv) return createHash('sha256').update(fromEnv).digest()
+  if (hostSecret !== '') return createHash('sha256').update(hostSecret).digest()
   const file = join(dataDir, 'host-key')
   if (existsSync(file)) return Buffer.from(readFileSync(file, 'utf8').trim(), 'hex')
   mkdirSync(dataDir, { recursive: true })

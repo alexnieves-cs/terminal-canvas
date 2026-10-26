@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 import { app } from './electron-shim'
-import { appVersion, dataDir, hub } from './runtime'
+import { appVersion, dataDir, hostToken, hub, scrubSecretsFromEnv } from './runtime'
 import { isLoopback, startHost } from './server'
 
 /**
@@ -14,7 +14,7 @@ import { isLoopback, startHost } from './server'
  * `electron` import inside it is `electron-shim.ts` (scripts/build-host.cjs).
  */
 
-const token = process.env['TC_HOST_TOKEN']?.trim() ?? ''
+const token = hostToken
 const port = Number(process.env['PORT'] ?? '8080')
 // A token says "this is meant to be reached": listen everywhere. No token means this machine only.
 const bind = process.env['TC_HOST_BIND']?.trim() || (token !== '' ? '0.0.0.0' : '127.0.0.1')
@@ -23,6 +23,8 @@ async function boot(): Promise<void> {
   mkdirSync(dataDir, { recursive: true })
   const host = await startHost({ hub, webRoot: join(__dirname, '..', 'host-web'), port, bind, token, appVersion })
   console.log(`[host] Terminal Canvas ${appVersion} on http://${isLoopback(bind) ? '127.0.0.1' : bind}:${host.port} (data ${dataDir}${token === '' ? ', no sign-in: loopback only' : ''})`)
+  // Out of the environment before main can hand it to a shell.
+  scrubSecretsFromEnv()
   // Main's composition root, as the app runs it.
   await import('../main/index')
   const stop = (): void => {
