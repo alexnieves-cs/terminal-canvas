@@ -1334,7 +1334,7 @@ console.log('\n' + '='.repeat(60))
     }
   }
   const css = read('src/renderer/styles.css') || ''
-  const fenced = ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'N', 'O']
+  const fenced = ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'N', 'O', 'U']
   const badFences = fenced.filter((id) => {
     const a = css.indexOf(`/* ── st:${id} ── */`)
     const b = css.indexOf(`/* ── /st:${id} ── */`)

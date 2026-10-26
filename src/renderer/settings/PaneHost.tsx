@@ -11,6 +11,8 @@
 import { type JSX } from 'react'
 import type { SettingRow } from '@shared/ipc-contract'
 import { settingDef, type SettingValue } from '@shared/settings-schema'
+import { hostedWords } from '@shared/hosted-keys'
+import { isHosted } from '@renderer/hosted'
 
 export function PaneHost({ purpose, rows }: { purpose: string; rows: readonly SettingRow[] }): JSX.Element {
   return (
@@ -37,7 +39,7 @@ function SettingLine({ row }: { row: SettingRow }): JSX.Element {
     <li className="rd-settings__row" data-setting-id={row.id}>
       <span className="rd-settings__name">
         {row.label}
-        <span className="rd-settings__hint">{row.description}</span>
+        <span className="rd-settings__hint">{isHosted() ? hostedWords(row.description) : row.description}</span>
       </span>
       {row.type === 'boolean' ? (
         <button type="button" aria-pressed={row.value === true} aria-label={`${row.label}, ${shown(row)}`} onClick={() => write(row.value !== true)}>{shown(row)}</button>

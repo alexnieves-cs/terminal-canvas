@@ -1,6 +1,7 @@
 import { IPC_EVENTS } from '@shared/ipc-contract'
 import type { MenuKey } from '../host/wire'
 import type { HostLink } from './ipc-renderer'
+import { appChordOf, type KeyFacts } from '@shared/hosted-keys'
 import { keyOf, parseAccelerator, type Combo } from './keys'
 import './host.css'
 
@@ -152,9 +153,8 @@ export function answerAsks(link: HostLink): void {
 
 // ── keys ───────────────────────────────────────────────────────────────────
 
-function matches(combo: Combo, event: KeyboardEvent): boolean {
-  return combo.cmd === event.metaKey && combo.ctrl === event.ctrlKey && combo.alt === event.altKey &&
-    combo.shift === event.shiftKey && combo.key === keyOf(event)
+function matches(combo: Combo, k: KeyFacts): boolean {
+  return combo.cmd === k.meta && combo.ctrl === k.ctrl && combo.alt === k.alt && combo.shift === k.shift && combo.key === k.key
 }
 
 /**
@@ -169,40 +169,56 @@ function matches(combo: Combo, event: KeyboardEvent): boolean {
  * or a renderer listener: in the app an accelerator is consumed by the menu
  * before the page sees it, and the renderer was written for that.
  *
- * Off a Mac, Ctrl is the terminal's (Ctrl+C is SIGINT), so the edit keys are
- * left alone there and only the paste event is taken.
+ * M610. Every key is first put in ⌘ space (`appChordOf`, shared/hosted-keys.ts):
+ * ⌥ stands for ⌘ on the chords a browser keeps (⌘N/⌘T/⌘W), and off a Mac Ctrl
+ * stands for ⌘ — Ctrl+Shift inside a terminal or field, where Ctrl is the
+ * shell's (Ctrl+C is SIGINT) or the field's. The renderer's own listeners
+ * read `metaKey`, so a translated key that no menu item answers is sent on to
+ * the page as the ⌘ chord it stands for. Before M610 off a Mac only the menu's
+ * Ctrl accelerators worked and every renderer chord was unreachable.
  */
+const FIELD = '.xterm, input, textarea, select, [contenteditable=""], [contenteditable="true"]'
+
 export function bindKeys(link: HostLink): void {
   let menu: Array<{ id: string; combo: Combo }> = []
   link.onMenu((items: MenuKey[]) => {
+    // Matched in ⌘ space, after translation, on every platform.
     menu = items.flatMap((item) => {
-      const combo = parseAccelerator(item.accelerator, isMac)
+      const combo = parseAccelerator(item.accelerator, true)
       return combo === null ? [] : [{ id: item.id, combo }]
     })
   })
-  const edit = (event: KeyboardEvent): string | null => {
-    if (!isMac || !event.metaKey || event.ctrlKey || event.altKey) return null
-    const key = keyOf(event)
-    if (key === 'z') return event.shiftKey ? IPC_EVENTS.EDIT_REDO : IPC_EVENTS.EDIT_UNDO
-    if (key === 'c' && !event.shiftKey) return IPC_EVENTS.EDIT_COPY
+  const edit = (k: KeyFacts): string | null => {
+    if (!k.meta || k.ctrl || k.alt) return null
+    if (k.key === 'z') return k.shift ? IPC_EVENTS.EDIT_REDO : IPC_EVENTS.EDIT_UNDO
+    if (k.key === 'c' && !k.shift) return IPC_EVENTS.EDIT_COPY
     return null
   }
-  window.addEventListener('keydown', (event) => {
-    if (event.isComposing || document.querySelector('.tc-host-scrim') !== null) return
-    const channel = edit(event)
-    if (channel !== null) {
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      link.emitLocal(channel)
-      return
-    }
-    // Cmd+V is left to the browser, which fires `paste` below with the clipboard's text.
-    if (isMac && event.metaKey && keyOf(event) === 'v') return
-    const hit = menu.find((m) => matches(m.combo, event))
-    if (hit === undefined) return
+  const take = (event: KeyboardEvent): void => {
     event.preventDefault()
     event.stopImmediatePropagation()
-    link.menu(hit.id)
+  }
+  window.addEventListener('keydown', (event) => {
+    // A key this listener sent on is the page's now.
+    if (!event.isTrusted || event.isComposing || document.querySelector('.tc-host-scrim') !== null) return
+    const raw: KeyFacts = { meta: event.metaKey, ctrl: event.ctrlKey, alt: event.altKey, shift: event.shiftKey, key: keyOf(event) }
+    const inField = event.target instanceof Element && event.target.closest(FIELD) !== null
+    const translated = appChordOf(raw, isMac, inField)
+    // Untranslated off a Mac, Ctrl is the page's and the terminal's, never the menu's.
+    if (translated === null && !isMac) return
+    const k = translated ?? raw
+    const channel = edit(k)
+    if (channel !== null) { take(event); link.emitLocal(channel); return }
+    // Cmd+V is left to the browser, which fires `paste` below with the clipboard's text.
+    if (k.meta && k.key === 'v') return
+    const hit = menu.find((m) => matches(m.combo, k))
+    if (hit !== undefined) { take(event); link.menu(hit.id); return }
+    if (translated === null) return
+    take(event)
+    event.target?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: event.key, code: event.code, location: event.location, repeat: event.repeat,
+      metaKey: k.meta, ctrlKey: k.ctrl, altKey: k.alt, shiftKey: k.shift, bubbles: true, cancelable: true, composed: true
+    }))
   }, true)
   window.addEventListener('paste', (event) => {
     if (document.querySelector('.tc-host-scrim') !== null) return

@@ -137,9 +137,14 @@ What depends on being a Mac window is either missing or works differently:
   `capturePage`/`printToPDF`. On a host they fail rather than save.
 - **Files on your computer.** Open and save dialogs take a path *on the host*.
   A file dropped on the tab has no host path. Exports save on the host.
-- **Some keys.** A browser keeps ⌘N, ⌘T and ⌘W for itself, so use the palette
-  for New task. Copy, paste, undo and redo work, and paste uses this computer's
-  clipboard. Other menu keys are matched in the tab and run on the host.
+- **Some keys move.** A browser keeps ⌘N, ⌘T and ⌘W for itself, so in a tab
+  those chords take ⌥ instead (⌥N is New task). Off a Mac, Ctrl stands for ⌘;
+  inside a terminal or a text field, where Ctrl is the shell's or the field's,
+  Ctrl+Shift does. Settings ▸ Keyboard prints each chord as this tab takes it.
+  Copy, paste, undo and redo work, and paste uses this computer's clipboard.
+  Menu keys are matched in the tab and run on the host.
+- **No Finder.** Reveal-in-Finder rows are left out of the palette, since the
+  Finder they would open is the host's.
 - **Mac-only parts.** There is no dock badge, notifications, menu-bar item,
   global hotkey or Apple-container VM lanes (lane J).
 - **More than one tab.** A newer tab takes over (see above).

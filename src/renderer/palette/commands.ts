@@ -63,6 +63,8 @@ import { buildCredentialRows } from './commands/credential-rows'
 import { buildEnvironmentRows } from './commands/environment-rows'
 import { pendingReadBatch } from '@renderer/chat/read-batch'
 import { runLastNight } from '@renderer/film/last-night-door'
+import { isHosted } from '@renderer/hosted'
+import { hostedWords } from '@shared/hosted-keys'
 
 // --- The commands/ directory ------------------------------------------------
 // M278 split commands.ts by moving out everything that is DECLARATION rather
@@ -2654,8 +2656,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // and letting a selection stand in for it changed the subject of ~40 rows at
   // once (measured: a renderer crash in verify:panels:product) — so the
   // sentence names the difference instead.
-  if (ctx.capturedId === null && ctx.selectedIds.length > 0) {
-    return out.map((row) => (row.disabledReason === REASON_NO_FOCUS ? { ...row, disabledReason: REASON_NO_FOCUS_SELECTED } : row))
-  }
-  return out
+  const said = ctx.capturedId === null && ctx.selectedIds.length > 0
+    ? out.map((row) => (row.disabledReason === REASON_NO_FOCUS ? { ...row, disabledReason: REASON_NO_FOCUS_SELECTED } : row))
+    : out
+  return isHosted() ? forATab(said) : said
+}
+
+/**
+ * M610. In a browser tab served by `tc host` the Finder is the server's — a
+ * Reveal row would open a window nobody in front of this tab can see — and
+ * "the Mac" a subtitle names is the host.
+ */
+function forATab(rows: Command[]): Command[] {
+  return rows
+    .filter((row) => !row.id.startsWith('worktree.reveal.'))
+    .map((row) => (row.subtitle === undefined ? row : { ...row, subtitle: hostedWords(row.subtitle) }))
 }

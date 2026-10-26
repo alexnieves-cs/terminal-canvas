@@ -9,5 +9,6 @@ import { hostInfo } from './os'
  */
 const info = hostInfo()
 const g = globalThis as unknown as { __TC_HOST_ARGV__: string[]; __TC_HOST_PLATFORM__: string }
-g.__TC_HOST_ARGV__ = [`--tc-version=${info.version}`]
+// M610. `--tc-hosted=1` tells the renderer it is in a tab (window.canvas.hosted).
+g.__TC_HOST_ARGV__ = [`--tc-version=${info.version}`, '--tc-hosted=1']
 g.__TC_HOST_PLATFORM__ = info.platform

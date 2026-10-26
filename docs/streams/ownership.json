@@ -16,7 +16,8 @@
     "L": "M561-M564",
     "N": "M565-M569",
     "O": "M570-M579",
-    "Q": "M590-M599"
+    "Q": "M590-M599",
+    "U": "M600-M614"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -147,6 +148,12 @@
       ".github/workflows/host.yml",
       "docs/hosted.md",
       ".dockerignore"
+    ],
+    "U": [
+      "src/renderer/primitives/useModalFocus.ts",
+      "src/renderer/review/**",
+      "src/shared/hosted-keys.ts",
+      "src/renderer/hosted.ts"
     ]
   }
 }
