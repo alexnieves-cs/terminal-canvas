@@ -13,7 +13,7 @@ import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
 import { parseAutoCheck } from '../../shared/auto'
 import { parseTonightBatch } from '../../shared/tonight'
 import { BACKENDS, backendOf, type AgentBackend } from '../../shared/agent-backends'
-import { capSentence, type AgentCreateResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
+import { capSentence, type AgentCreateResult, type AutoStartResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
 import type { AgentHandlers } from '../ipc'
 import type { Places } from './places'
 import type { Stores } from './stores'
@@ -228,19 +228,36 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     autoStart: (req) => {
       const check = parseAutoCheck(req.check)
       if (check.kind === 'refused') return check
-      return state.agents?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit, ...(check.check === undefined ? {} : { check: check.check }) }) ?? { kind: 'refused', reason: 'the agent runtime is not available' }
+      const start = (): AutoStartResult => state.agents?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit, ...(check.check === undefined ? {} : { check: check.check }) }) ?? { kind: 'refused', reason: 'the agent runtime is not available' }
+      if (req.sandboxed !== true) return start()
+      // M553. Sandboxed: into its VM first (the Mac process stopped, the lane
+      // entered), then the ordinary start. A refusal names why; the run never
+      // falls back to the Mac with prompts on.
+      const doors = state.vmDoors
+      if (doors === null) return { kind: 'refused', reason: 'sandboxed lanes are not available in this process' }
+      return doors.enterForAuto(req.id).then((r) => r.kind === 'refused' ? r : start())
     },
     autoStop: (id) => state.agents?.stopAuto(id) ?? false,
     // M480. Parsed by name here, like autoStart's check; the runner refuses a
     // second batch while one is live and a task whose chat has no session.
-    tonightStart: (raw) => {
+    tonightStart: async (raw) => {
       if (state.tonight === null) return { kind: 'refused', reason: 'the agent runtime is not available' }
       const parsed = parseTonightBatch(raw)
       if (parsed.kind === 'refused') return parsed
+      // M553. Every sandboxed task's chat goes into its VM before the batch
+      // starts, all or none, and stays there until the batch ends.
+      const boxed = parsed.batch.tasks.filter((t) => t.sandboxed === true).map((t) => t.panelId)
+      if (boxed.length > 0) {
+        if (state.vmDoors === null) return { kind: 'refused', reason: 'sandboxed lanes are not available in this process' }
+        const entered = await state.vmDoors.enterForTonight([...new Set(boxed)])
+        if (entered.kind === 'refused') return entered
+      }
       const r = state.tonight.start(parsed.batch)
       const status = state.tonight.status()
+      if (r.kind === 'refused' && boxed.length > 0) state.vmDoors?.releaseTonight()
       return r.kind === 'refused' ? r : status === null ? { kind: 'refused', reason: 'the batch ended before it began' } : { kind: 'started', status }
     },
+    vmLanes: () => ({ lanes: state.vmLanes?.list() ?? [], egress: state.vmEgress?.list() ?? [] }),
     tonightStop: () => state.tonight?.stop() ?? false,
     tonightStatus: () => state.tonight?.status() ?? null,
     importSession: ({ fromPanelId, toPanelId }) => {

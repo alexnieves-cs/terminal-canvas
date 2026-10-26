@@ -24,7 +24,8 @@ import type { AutoCheck, AutoModeId, AutoState, AutoStuckReason, AutoStatus, Aut
 
 /** M97. `agent:auto-start`'s request and its named answer. */
 /** M475. `check` gates done on a command's exit; main parses it by name (`parseAutoCheck`). */
-export interface AutoStartRequest { id: string; mode: AutoModeId; task?: string; limit?: number; check?: AutoCheck }
+/** M553. `sandboxed: true` runs it in a VM with prompts off (lane J); refused by name while `vm.lanes` is off. */
+export interface AutoStartRequest { id: string; mode: AutoModeId; task?: string; limit?: number; check?: AutoCheck; sandboxed?: boolean }
 export type AutoStartResult = { kind: 'started'; limit: number } | { kind: 'refused'; reason: string }
 
 /**

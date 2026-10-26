@@ -113,7 +113,11 @@
       "scripts/verify-tournament.cjs"
     ],
     "J": [
-      "scripts/verify-vm.cjs"
+      "scripts/verify-vm.cjs",
+      "src/shared/vm-lane.ts",
+      "src/main/vm-*.ts",
+      "src/renderer/chat/vm-lanes-store.ts",
+      "docs/streams/vm-lane/**"
     ],
     "K": [
       "scripts/verify-fork.cjs"

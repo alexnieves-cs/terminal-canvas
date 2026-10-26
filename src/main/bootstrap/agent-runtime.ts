@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { homedir, networkInterfaces } from 'node:os'
+import { connect as netConnect } from 'node:net'
 import { join } from 'node:path'
 import { AgentSessionManager } from '../agent-session'
 import { claudeCliRunner } from '../claude-cli-runner'
@@ -9,7 +10,9 @@ import { runAutoCheck } from '../auto-check-runner'
 import { createTonightRunner } from '../tonight-runner'
 import { app, powerSaveBlocker } from 'electron'
 import { createVmLanes } from '../vm-lanes'
-import { probeVmRuntimesLive } from '../vm-runtime'
+import { probeVmRuntimesLive, vmProxyPlace } from '../vm-runtime'
+import { createEgressLog, createVmProxy } from '../vm-proxy'
+import { createVmDoors } from '../vm-doors'
 import { whichFromEnv } from '../shell-env'
 import { VM_DEFAULT_CPUS, VM_DEFAULT_IMAGE, VM_DEFAULT_MEMORY_MIB } from '../../shared/vm-lane'
 import { createPoolCaller } from '../pool-caller'
@@ -52,6 +55,14 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
   // panel marked sandboxed runs in a VM, every other spawn is untouched. The
   // probe runs once here and again on every environment report (state.vmProbe).
   void probeVmRuntimesLive((name) => whichFromEnv(name, env), env).then((p) => { state.vmProbe = p }, () => { /* the report says why */ })
+  // M554. One allowlisting proxy per place a runtime's VMs reach the Mac,
+  // started on the first sandboxed run and never before: an app that never
+  // runs one never listens. Every CONNECT lands in the egress log, in memory
+  // and appended to userData/vm-lanes/egress.jsonl.
+  const vmStateRoot = join(app.getPath('userData'), 'vm-lanes')
+  const egress = createEgressLog((line) => { mkdirSync(vmStateRoot, { recursive: true }); appendFileSync(join(vmStateRoot, 'egress.jsonl'), line) })
+  state.vmEgress = egress
+  const proxies = new Map<string, { reach: string; port: number }>()
   const vmLanes = createVmLanes({
     inner: claudeCliRunner,
     runCheck: runAutoCheck,
@@ -59,14 +70,25 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     mkdir: (path) => mkdirSync(path, { recursive: true }),
     rm: (path) => rmSync(path, { recursive: true, force: true }),
     home: homedir(),
-    stateRoot: join(app.getPath('userData'), 'vm-lanes'),
+    stateRoot: vmStateRoot,
     runtime: () => state.vmProbe?.chosen ?? null,
-    settings: () => ({ image: VM_DEFAULT_IMAGE, cpus: VM_DEFAULT_CPUS, memoryMiB: VM_DEFAULT_MEMORY_MIB, allow: [] }),
-    // M554 starts the proxy; until then no lane can be entered.
-    proxy: () => null,
-    loginEnv: env
+    settings: () => ({
+      image: String(layoutStore.getSetting('vm.image') || VM_DEFAULT_IMAGE),
+      cpus: Number(layoutStore.getSetting('vm.cpus')) || VM_DEFAULT_CPUS,
+      memoryMiB: Number(layoutStore.getSetting('vm.memoryMiB')) || VM_DEFAULT_MEMORY_MIB,
+      allow: String(layoutStore.getSetting('vm.allowHosts') ?? '').split(',').map((h) => h.trim()).filter((h) => h !== '')
+    }),
+    proxy: (runtime) => {
+      const place = vmProxyPlace(runtime, networkInterfaces())
+      const live = place === null ? undefined : proxies.get(place.bind)
+      return live === undefined ? null : { host: live.reach, port: live.port }
+    },
+    newToken: () => randomBytes(24).toString('hex'),
+    loginEnv: env,
+    onChange: (lanes) => { state.window?.webContents.send(IPC_EVENTS.VM_LANES_CHANGED, lanes) }
   })
   state.vmLanes = vmLanes
+  const vmProxy = createVmProxy({ lanes: vmLanes, dial: (host, port) => netConnect(port, host), log: (e) => egress.add(e), now: Date.now })
 
   // The bare name is kept when the probe found nothing: the spawn then fails
   // with ENOENT and the session reads `exited` with the reason in its stderr
@@ -138,6 +160,36 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     spentOf: (id) => { const snap = agents.get(id); return snap?.meter?.spentUsd ?? snap?.costUsd ?? 0 },
     blocker: { start: () => powerSaveBlocker.start('prevent-app-suspension'), stop: (id) => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id) } },
     now: Date.now,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+    // M553. A finished batch releases the sandboxed lanes it held.
+    onStatus: (status) => state.vmDoors?.tonightStatus(status)
+  })
+
+  // M553 (lane J). The doors into a sandboxed lane. `prepare` re-probes and
+  // starts the proxy where the chosen runtime's VMs reach the Mac.
+  state.vmDoors = createVmDoors({
+    lanes: vmLanes,
+    agents,
+    enabled: () => layoutStore.getSetting('vm.lanes') === true,
+    prepare: async () => {
+      state.vmProbe = await probeVmRuntimesLive((name) => whichFromEnv(name, env), env)
+      const runtime = state.vmProbe.chosen
+      if (runtime === null) return { kind: 'refused', reason: 'no VM runtime is usable on this Mac — see Environment… for why' }
+      const place = vmProxyPlace(runtime, networkInterfaces())
+      if (place === null) return { kind: 'refused', reason: 'the VM network is not up — run `container system start`, then try again' }
+      if (!proxies.has(place.bind)) {
+        try {
+          // Each bind address gets its own server, so the proxy serves the Apple and docker networks at once.
+          const one = proxies.size === 0 ? vmProxy : createVmProxy({ lanes: vmLanes, dial: (host, port) => netConnect(port, host), log: (e) => egress.add(e), now: Date.now })
+          const port = await one.listen(place.bind)
+          proxies.set(place.bind, { reach: place.reach, port })
+        } catch (error) {
+          return { kind: 'refused', reason: `the sandbox network proxy could not listen on ${place.bind}: ${error instanceof Error ? error.message : String(error)}` }
+        }
+      }
+      return { kind: 'ok' }
+    },
     setTimer: (fn, ms) => setTimeout(fn, ms),
     clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
   })

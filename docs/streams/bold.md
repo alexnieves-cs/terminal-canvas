@@ -138,6 +138,28 @@ prompts off without touching the Mac.
   is code the agent may have written with prompts off, and running it on the Mac
   would hand the Mac exactly what the VM keeps off it.
 
+- **Off by default twice.** The `vm.lanes` setting (never `planWritable`)
+  must be on AND the task must ask. Tonight takes it per task (`sandboxed: true`
+  in the batch) or for the whole night (`tonight sandboxed`); auto mode has one
+  extra palette row, present only while the setting is on, so no default
+  surface or golden changes.
+- **Entering stops the Mac process and waits for its exit**; a Tonight batch
+  holds its lanes until the batch ends (a task paused by a usage limit resumes
+  as a new auto run, which must start in the same VM); an auto run's lane
+  leaves when the run resolves, and the chat's next message runs on the Mac with
+  its prompts again.
+- **One proxy per place a VM reaches the Mac**, started on the first sandboxed
+  run: the vmnet bridge's `.1` for Apple's runtime, loopback (reached as
+  `host.docker.internal`) for Docker and OrbStack. Lanes are told apart by Basic
+  proxy credentials, a fresh 48-hex secret per lane; every CONNECT is logged,
+  allowed or refused, to `userData/vm-lanes/egress.jsonl`.
+- **The VM's egress is not an `outward` door**: `outward`/`redactSecrets` gate
+  TEXT the app sends; this is the agent's own traffic, gated by host instead. It
+  got a fresh-context critic as a boundary.
+- **Morning-queue label: a request, not an edit.** The queue (`task-queue.ts`)
+  is lane C's; the chat header and Tonight's status rows carry `sandboxed` now, and
+  `requests.md` asks for the queue's row.
+
 ## K — Fork from any turn (M556–M560)
 
 - **M556** — a snapshot per turn: at each turn boundary, the lane's tree is

@@ -228,10 +228,12 @@ export interface AgentHandlers {
   /** M74. */
   importSession(req: AgentImportRequest): AgentImportResult
   /** M97. */
-  autoStart(req: AutoStartRequest): AutoStartResult
+  autoStart(req: AutoStartRequest): AutoStartResult | Promise<AutoStartResult>
   autoStop(id: string): boolean
   /** M480. Tonight's doors (main/tonight-runner.ts). Optional, so a harness mirror without them answers by name. */
-  tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }
+  tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string } | Promise<{ kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }>
+  /** M553. See VM_LANES. Optional, like Tonight's: a harness mirror without it answers empty. */
+  vmLanes?(): import('../shared/vm-lane').VmLanesView
   tonightStop?(): boolean
   tonightStatus?(): TonightStatus | null
   /** M98. The tools granted for a session, in grant order. */
@@ -997,6 +999,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TONIGHT_START, (_event, raw: unknown) => agents.tonightStart?.(raw) ?? { kind: 'refused', reason: 'tonight is not available in this process' })
   ipcMain.handle(IPC.TONIGHT_STOP, () => agents.tonightStop?.() ?? false)
   ipcMain.handle(IPC.TONIGHT_STATUS, () => agents.tonightStatus?.() ?? null)
+  ipcMain.handle(IPC.VM_LANES, () => agents.vmLanes?.() ?? { lanes: [], egress: [] })
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))

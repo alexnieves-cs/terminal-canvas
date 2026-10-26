@@ -1,6 +1,6 @@
 import type { AgentProcess, AgentRunner, AgentSpawn } from './agent-runner'
 import type { AutoCheckResult } from '../shared/auto'
-import { parseVmLaneSpec, VM_AUTH_ENV_KEYS, VM_DEFAULT_ALLOW, VM_RUNTIME_BINARY, type VmLaneSpec, type VmRuntimeId } from '../shared/vm-lane'
+import { parseVmLaneSpec, VM_AUTH_ENV_KEYS, VM_DEFAULT_ALLOW, VM_RUNTIME_BINARY, type VmLaneInfo, type VmLaneSpec, type VmRuntimeId } from '../shared/vm-lane'
 import { shellQuote, vmAgentArgv, vmRunArgs, vmStopArgs } from './vm-sandbox'
 
 /**
@@ -58,19 +58,15 @@ export interface VmLanesDeps {
   /** The runtime the probe chose, or null when none is usable. */
   runtime(): VmRuntimeId | null
   settings(): VmLaneSettings
-  /** Where a VM reaches the app's allowlisting proxy, or null while it is not listening (M554). */
-  proxy(): { host: string; port: number } | null
+  /** Where a VM of this runtime reaches the app's allowlisting proxy, or null while it is not listening (M554). */
+  proxy(runtime: VmRuntimeId): { host: string; port: number } | null
+  /** A fresh per-lane proxy secret (16+ letters and digits). */
+  newToken(): string
   loginEnv: Record<string, string>
   onChange?(lanes: VmLaneInfo[]): void
 }
 
-export interface VmLaneInfo {
-  panelId: string
-  laneId: string
-  runtime: VmRuntimeId
-  /** True while the agent's VM process is live. */
-  running: boolean
-}
+export type { VmLaneInfo }
 
 export interface VmLanes {
   /** Mark a chat panel sandboxed. Refused by name when no runtime, no proxy or no token can make it safe. */
@@ -81,6 +77,8 @@ export interface VmLanes {
   list(): VmLaneInfo[]
   /** M554. The hosts a lane's proxy lets through, by lane id; empty for an unknown lane, so its traffic is refused. */
   allowOf(laneId: string): readonly string[]
+  /** M554. The lane's proxy secret; undefined for an unknown lane. */
+  tokenOf(laneId: string): string | undefined
   /** The manager's runner: sandboxed panels into a VM, everything else untouched. */
   runner: AgentRunner
   runCheck: VmLanesDeps['runCheck']
@@ -140,7 +138,7 @@ export function createVmLanes(deps: VmLanesDeps): VmLanes {
     lane.spawned = true
     lane.running = true
     changed()
-    const proc = deps.inner({ command: run.binary, args: run.args, cwd: spawn.cwd, env: clientEnv(lane.spec), ...(spawn.closeStdin === true ? { closeStdin: true } : {}) })
+    const proc = deps.inner({ command: run.binary, args: run.args, cwd: spawn.cwd, env: { ...clientEnv(lane.spec), ...run.env }, ...(spawn.closeStdin === true ? { closeStdin: true } : {}) })
     proc.onExit(() => {
       // Only the lane's CURRENT process clears the flag; a lane left meanwhile is gone from the map.
       if (lanes.get(lane.panelId) !== lane) return
@@ -164,7 +162,7 @@ export function createVmLanes(deps: VmLanesDeps): VmLanes {
     // still apply; the VM itself is stopped by name after, however it ended.
     const line = [run.binary, ...run.args].map(shellQuote).join(' ')
     try {
-      return await deps.runCheck({ ...spec, command: line, env: { ...clientEnv(lane.spec), SHELL: spec.env['SHELL'] ?? '/bin/sh' } })
+      return await deps.runCheck({ ...spec, command: line, env: { ...clientEnv(lane.spec), ...run.env, SHELL: spec.env['SHELL'] ?? '/bin/sh' } })
     } finally {
       stop(lane.spec, 'check')
     }
@@ -176,7 +174,7 @@ export function createVmLanes(deps: VmLanesDeps): VmLanes {
       if (existing !== undefined) return { kind: 'ok', laneId: existing.spec.laneId, runtime: existing.spec.runtime }
       const runtime = deps.runtime()
       if (runtime === null) return { kind: 'refused', reason: 'no VM runtime is usable on this Mac — see Environment… for why' }
-      const proxy = deps.proxy()
+      const proxy = deps.proxy(runtime)
       if (proxy === null) return { kind: 'refused', reason: 'the sandbox network proxy is not running, so a VM would have no allowlist' }
       const settings = deps.settings()
       const laneId = laneIdOf(panelId)
@@ -184,7 +182,7 @@ export function createVmLanes(deps: VmLanesDeps): VmLanes {
         runtime, laneId, worktree: cwd, stateDir: `${deps.stateRoot.replace(/\/+$/, '')}/${laneId}`,
         image: settings.image, cpus: settings.cpus, memoryMiB: settings.memoryMiB,
         allow: [...VM_DEFAULT_ALLOW, ...settings.allow],
-        proxy, authKeys: VM_AUTH_ENV_KEYS.filter((k) => (deps.loginEnv[k] ?? '') !== '')
+        proxy: { ...proxy, token: deps.newToken() }, authKeys: VM_AUTH_ENV_KEYS.filter((k) => (deps.loginEnv[k] ?? '') !== '')
       }, deps.home)
       if (parsed.kind === 'refused') return parsed
       // Fresh every time: a folder a crash left would hold a transcript at the
@@ -209,6 +207,7 @@ export function createVmLanes(deps: VmLanesDeps): VmLanes {
     has: (panelId) => lanes.has(panelId),
     list,
     allowOf: (laneId) => [...lanes.values()].find((l) => l.spec.laneId === laneId)?.spec.allow ?? [],
+    tokenOf: (laneId) => [...lanes.values()].find((l) => l.spec.laneId === laneId)?.spec.proxy.token,
     runner,
     runCheck,
     disposeAll() {

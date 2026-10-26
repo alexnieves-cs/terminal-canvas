@@ -520,6 +520,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        env:report / tmux:adoptable / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
                        check:output / combine:run / lane:merge / lane:radar
                        tonight:start / tonight:stop / tonight:status
+                       vm:lanes / vm:lanes-changed
                        combine:inputs / combine:integrate / combine:receipts
                        job:list / job:recover
                        agent:cancel-queued / agent:terminate

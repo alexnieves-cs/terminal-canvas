@@ -92,8 +92,13 @@ export interface VmLaneSpec {
   memoryMiB: number
   /** Hosts the proxy lets through (M554). Never empty: the model's API is always one. */
   allow: string[]
-  /** Where the VM reaches the app's proxy. */
-  proxy: { host: string; port: number }
+  /**
+   * Where the VM reaches the app's proxy, and the lane's own secret for it
+   * (M554). The proxy reads the lane from the credentials, so one proxy
+   * serves every lane with each lane's own allowlist, and nothing else on
+   * the network can borrow it.
+   */
+  proxy: { host: string; port: number; token: string }
   /** Names from `VM_AUTH_ENV_KEYS` present in the login env. */
   authKeys: string[]
 }
@@ -145,7 +150,8 @@ export function parseVmLaneSpec(raw: unknown, home: string): { kind: 'ok'; spec:
   if (!allow.includes('api.anthropic.com')) return { kind: 'refused', reason: 'the allowlist must hold api.anthropic.com, or the agent cannot reach its model' }
   const proxy = r.proxy as Record<string, unknown> | null | undefined
   if (typeof proxy !== 'object' || proxy === null || typeof proxy.host !== 'string' || proxy.host === '' || /[\s/@]/.test(proxy.host) ||
-    typeof proxy.port !== 'number' || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535) {
+    typeof proxy.port !== 'number' || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535 ||
+    typeof proxy.token !== 'string' || !/^[A-Za-z0-9]{16,128}$/.test(proxy.token)) {
     return { kind: 'refused', reason: 'a sandboxed lane has no network but its proxy, and the proxy is not named' }
   }
   if (!Array.isArray(r.authKeys) || r.authKeys.some((k) => !VM_AUTH_ENV_KEYS.includes(k as string))) {
@@ -156,7 +162,7 @@ export function parseVmLaneSpec(raw: unknown, home: string): { kind: 'ok'; spec:
     kind: 'ok',
     spec: {
       runtime: r.runtime as VmRuntimeId, laneId: r.laneId, worktree, stateDir, image: r.image,
-      cpus: r.cpus, memoryMiB: r.memoryMiB, allow, proxy: { host: proxy.host, port: proxy.port },
+      cpus: r.cpus, memoryMiB: r.memoryMiB, allow, proxy: { host: proxy.host, port: proxy.port, token: proxy.token },
       authKeys: [...new Set(r.authKeys as string[])]
     }
   }
@@ -183,6 +189,21 @@ export interface VmEgressEntry {
   host: string
   port: number
   allowed: boolean
+}
+
+/** M552. One sandboxed lane, as main reports it to every surface. */
+export interface VmLaneInfo {
+  panelId: string
+  laneId: string
+  runtime: VmRuntimeId
+  /** True while the agent's VM process is live. */
+  running: boolean
+}
+
+/** M553. `vm:lanes`'s answer: the lanes now, and the egress log's newest entries (the deep-detail layer). */
+export interface VmLanesView {
+  lanes: VmLaneInfo[]
+  egress: VmEgressEntry[]
 }
 
 /** The label a sandboxed lane wears everywhere it shows (chip, morning queue, Tonight row). */

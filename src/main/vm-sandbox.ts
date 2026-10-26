@@ -74,8 +74,16 @@ export const VM_HOME = '/home/agent'
  * the agent runs. Auth keys are `-e NAME`: the runtime inherits the value
  * from the spawn's env, so it never sits on an argv.
  */
-export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: readonly string[] }, role: 'agent' | 'check' = 'agent'): { binary: string; args: string[] } {
-  const proxy = `http://${spec.proxy.host}:${spec.proxy.port}`
+/** The proxy variables, both spellings: curl reads only the lower-case http_proxy, node's agents the upper. */
+export const VM_PROXY_KEYS: readonly string[] = ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']
+
+/**
+ * `env` is what the runtime's CLIENT process must hold for the `-e NAME`
+ * entries to inherit: the proxy URL with the lane's secret. The caller adds
+ * it to the client's env; it never appears on the argv.
+ */
+export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: readonly string[] }, role: 'agent' | 'check' = 'agent'): { binary: string; args: string[]; env: Record<string, string> } {
+  const proxy = `http://${spec.laneId}:${spec.proxy.token}@${spec.proxy.host}:${spec.proxy.port}`
   const mount = (source: string, target: string): string[] => ['--mount', `type=bind,source=${source},target=${target}`]
   const args = [
     ...(spec.runtime === 'orbstack' ? ['--context', 'orbstack'] : []),
@@ -93,8 +101,8 @@ export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: read
     '--workdir', VM_WORK,
     '-e', `TC_VM_LANE=${spec.laneId}`,
     '-e', `TC_VM_PROXY=${spec.proxy.host}:${spec.proxy.port}`,
-    '-e', `HTTPS_PROXY=${proxy}`, '-e', `HTTP_PROXY=${proxy}`,
-    '-e', `https_proxy=${proxy}`, '-e', `http_proxy=${proxy}`,
+    // By name, like the token: the lane's proxy secret is in the URL.
+    ...VM_PROXY_KEYS.flatMap((k) => ['-e', k]),
     '-e', 'NO_PROXY=', '-e', 'no_proxy=',
     // claude refuses bypassPermissions as root unless told it is sandboxed;
     // the entry script runs it as `agent`, and this says what the box is.
@@ -103,7 +111,7 @@ export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: read
     spec.image,
     inner.command, ...inner.args
   ]
-  return { binary: VM_RUNTIME_BINARY[spec.runtime], args }
+  return { binary: VM_RUNTIME_BINARY[spec.runtime], args, env: Object.fromEntries(VM_PROXY_KEYS.map((k) => [k, proxy])) }
 }
 
 /** Stop then remove, by name. Both are safe on a VM that is already gone; the caller ignores their exit codes. */

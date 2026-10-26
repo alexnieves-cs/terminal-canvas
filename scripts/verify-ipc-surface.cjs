@@ -335,7 +335,9 @@ app.whenReady().then(() => {
   // and git's trial merge of each pair; read-only.
   // +3: tonight:start / tonight:stop / tonight:status (M480, stream C) — the
   // night's batch named by the renderer, run and stopped by main.
-  const EXPECTED_CHANNELS = 214
+  // +1: vm:lanes (M553, lane J) — the sandboxed lanes and the egress log, read
+  // on load (their push, vm:lanes-changed, is an event and not counted here).
+  const EXPECTED_CHANNELS = 215
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

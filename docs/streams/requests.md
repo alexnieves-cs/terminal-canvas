@@ -54,3 +54,9 @@ Format:
 - File: src/renderer/styles.css
 - Smallest change: the reduced-motion block near `.canvas--behind-orch` sets `.orch__connector--lit { animation: none; }`, but the base rule `.orch__connector--lit { … animation: edge-current … }` comes later at the same specificity, so it wins and the lit connector still animates under reduced motion (only the global block's `.01ms` keeps it invisible). Re-state `@media (prefers-reduced-motion: reduce) { .orch__connector--lit { animation: none; } }` from inside your `st:` block. Found by `verify:panels:orchestrate` orch-parity.app.3, which now counts only animations with a visible duration (M458).
 - Status: open
+
+### Q-008 · The morning queue should say a task ran sandboxed
+- From: J · To: C (owner of `src/renderer/shell/task-queue.ts`)
+- File: src/renderer/shell/task-queue.ts
+- Smallest change: a task whose last auto run was sandboxed (lane J, M553) reads `sandboxed` beside its verdict in the queue's row — "checked · sandboxed". Main already knows: the Tonight status row carries `sandboxed: true`, and `vm:lanes` lists the lane while it runs; what is missing is a field the queue keeps after the lane has left (e.g. `auto.sandboxed` on the panel's resolved run). Until then the chat header shows `sandboxed` only while the run is live.
+- Status: open

@@ -228,7 +228,7 @@ export function createTonightRunner(deps: TonightDeps): TonightRunner {
         spec: batch,
         status: {
           state: 'running', startedAt: now, awake: true,
-          tasks: batch.tasks.map((t) => ({ id: t.id, panelId: t.panelId, title: t.title, state: 'queued' as const, attempts: 0, spentUsd: 0, checkFailures: 0, ...(t.check === undefined ? {} : { check: t.check.command }) }))
+          tasks: batch.tasks.map((t) => ({ id: t.id, panelId: t.panelId, title: t.title, state: 'queued' as const, attempts: 0, spentUsd: 0, checkFailures: 0, ...(t.check === undefined ? {} : { check: t.check.command }), ...(t.sandboxed === true ? { sandboxed: true as const } : {}) }))
         },
         blockerId, timer: null, unsubscribe: () => {}, resume: new Set(), starting: false
       }
