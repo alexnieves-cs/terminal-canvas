@@ -60,6 +60,9 @@ export function vmAliveArgs(id: VmRuntimeId): string[] {
 /** The VM's name: one per lane, so a stale one is found and removed by name. */
 export const vmName = (laneId: string): string => `tc-lane-${laneId}`
 
+/** The image's network lock (docs/streams/vm-lane/tc-vm-entry.sh). */
+export const VM_ENTRY = '/usr/local/bin/tc-vm-entry'
+
 /** Inside the VM: where the worktree lands, and the agent's home. */
 export const VM_WORK = '/work'
 export const VM_HOME = '/home/agent'
@@ -84,7 +87,7 @@ export const VM_PROXY_KEYS: readonly string[] = ['HTTPS_PROXY', 'HTTP_PROXY', 'h
  */
 export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: readonly string[] }, role: 'agent' | 'check' = 'agent'): { binary: string; args: string[]; env: Record<string, string> } {
   const proxy = `http://${spec.laneId}:${spec.proxy.token}@${spec.proxy.host}:${spec.proxy.port}`
-  const mount = (source: string, target: string): string[] => ['--mount', `type=bind,source=${source},target=${target}`]
+  const mount = (source: string, target: string, readonly = false): string[] => ['--mount', `type=bind,source=${source},target=${target}${readonly ? ',readonly' : ''}`]
   const args = [
     ...(spec.runtime === 'orbstack' ? ['--context', 'orbstack'] : []),
     'run', '--rm', '-i',
@@ -98,6 +101,12 @@ export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: read
     '--cap-add', 'NET_ADMIN',
     ...mount(spec.worktree, VM_WORK),
     ...mount(spec.stateDir, `${VM_HOME}/.claude`),
+    // Over the read-write worktree, later mounts win for their path.
+    ...(spec.readOnly ?? []).flatMap((name) => mount(`${spec.worktree}/${name}`, `${VM_WORK}/${name}`, true)),
+    // The lock is the image's entry script, named here rather than trusted
+    // to the image's own ENTRYPOINT: an image without it fails to start,
+    // never runs an agent with no firewall.
+    '--entrypoint', VM_ENTRY,
     '--workdir', VM_WORK,
     '-e', `TC_VM_LANE=${spec.laneId}`,
     '-e', `TC_VM_PROXY=${spec.proxy.host}:${spec.proxy.port}`,

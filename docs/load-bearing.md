@@ -5681,8 +5681,11 @@ bypassPermissions`. Entering kills the chat's Mac process and WAITS for its exit
 on the Mac's claude with prompts on. A Tonight batch holds its lanes until the batch ends, because a
 task paused by a usage limit resumes as a new auto run that must start in the same VM. The proxy
 (`vm-proxy.ts`) reads the lane from Basic proxy credentials, tunnels only CONNECT to 443 on that
-lane's list, refuses plain HTTP, and logs every CONNECT before answering. `verify:vm` vm.run.*,
-vm.doors.*, vm.proxy.*.
+lane's list, refuses plain HTTP, and logs every CONNECT before answering. The worktree mount is
+read-write but its `.git`, `.claude`, `.mcp.json` and `.gitmodules` are re-mounted READ-ONLY: written
+from a VM with prompts off they run code on the Mac later (`core.fsmonitor` at the app's next git
+call). Paths are `realpath`ed, then refused when they hold `,` `"` or `=` — `--mount` is a CSV whose
+last `source=` wins. `verify:vm` vm.run.*, vm.doors.*, vm.proxy.*, vm.spec.5–6.
 
 **Manual-only, added by lane J (M555).** None of these is covered by `verify:vm`, whose runtime is a
 fake; each is a box in `docs/streams/vm-lane/MAC-CHECK.md`, unconfirmed until ticked there:

@@ -1,6 +1,6 @@
 import type { AgentProcess, AgentRunner, AgentSpawn } from './agent-runner'
 import type { AutoCheckResult } from '../shared/auto'
-import { parseVmLaneSpec, VM_AUTH_ENV_KEYS, VM_DEFAULT_ALLOW, VM_RUNTIME_BINARY, type VmLaneInfo, type VmLaneSpec, type VmRuntimeId } from '../shared/vm-lane'
+import { parseVmLaneSpec, VM_AUTH_ENV_KEYS, VM_DEFAULT_ALLOW, VM_READ_ONLY_NAMES, VM_RUNTIME_BINARY, type VmLaneInfo, type VmLaneSpec, type VmRuntimeId } from '../shared/vm-lane'
 import { shellQuote, vmAgentArgv, vmRunArgs, vmStopArgs } from './vm-sandbox'
 
 /**
@@ -52,6 +52,9 @@ export interface VmLanesDeps {
   exec(binary: string, args: string[], env: Record<string, string>): void
   mkdir(path: string): void
   rm(path: string): void
+  /** The path with every symlink resolved (`realpathSync`); throws for a path that does not exist. */
+  realpath(path: string): string
+  exists(path: string): boolean
   home: string
   /** `userData/vm-lanes`; each lane's state folder is a child of it. */
   stateRoot: string
@@ -92,9 +95,17 @@ interface Lane {
   running: boolean
 }
 
+/**
+ * A plain name for the VM and its state folder, unique per panel id: the
+ * cleaned prefix is for a person reading `container list`, the hash of the
+ * WHOLE id is what keeps two panels whose ids clean to the same prefix from
+ * sharing (and stopping) one VM.
+ */
 export function laneIdOf(panelId: string): string {
-  const clean = panelId.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 40)
-  return clean === '' ? 'lane' : clean
+  const clean = panelId.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 30)
+  let h = 0x811c9dc5
+  for (let i = 0; i < panelId.length; i++) { h ^= panelId.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
+  return `${clean === '' ? 'lane' : clean}-${h.toString(16).padStart(8, '0')}`
 }
 
 /** The VM's process gets the login env's PATH and HOME and the token by name — never the app's socket, panel token or anything else. */
@@ -178,8 +189,12 @@ export function createVmLanes(deps: VmLanesDeps): VmLanes {
       if (proxy === null) return { kind: 'refused', reason: 'the sandbox network proxy is not running, so a VM would have no allowlist' }
       const settings = deps.settings()
       const laneId = laneIdOf(panelId)
+      // Symlinks resolved BEFORE the home check: a link to ~ is ~.
+      let worktree: string
+      try { worktree = deps.realpath(cwd) } catch { return { kind: 'refused', reason: `the chat's folder ${cwd} does not exist` } }
       const parsed = parseVmLaneSpec({
-        runtime, laneId, worktree: cwd, stateDir: `${deps.stateRoot.replace(/\/+$/, '')}/${laneId}`,
+        runtime, laneId, worktree,
+        readOnly: VM_READ_ONLY_NAMES.filter((n) => deps.exists(`${worktree.replace(/\/+$/, '')}/${n}`)), stateDir: `${deps.stateRoot.replace(/\/+$/, '')}/${laneId}`,
         image: settings.image, cpus: settings.cpus, memoryMiB: settings.memoryMiB,
         allow: [...VM_DEFAULT_ALLOW, ...settings.allow],
         proxy: { ...proxy, token: deps.newToken() }, authKeys: VM_AUTH_ENV_KEYS.filter((k) => (deps.loginEnv[k] ?? '') !== '')

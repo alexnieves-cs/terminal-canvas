@@ -30,11 +30,20 @@ iptables -A OUTPUT -o lo -j ACCEPT
 iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A OUTPUT -p tcp -d "$proxy_ip" --dport "$proxy_port" -j ACCEPT
 iptables -P OUTPUT DROP || fail "could not set the OUTPUT policy"
-# IPv6: nothing at all. A host without ip6tables has no IPv6 route to lock.
-if command -v ip6tables >/dev/null 2>&1; then
-  ip6tables -F OUTPUT 2>/dev/null || true
-  ip6tables -A OUTPUT -o lo -j ACCEPT 2>/dev/null || true
-  ip6tables -P OUTPUT DROP 2>/dev/null || true
+# IPv6: nothing at all, and FAIL CLOSED here too. If the v6 lock cannot be
+# set (no ip6tables, or a kernel without ip6 netfilter) the agent may start
+# only when the VM has no routable IPv6 address — anything beyond loopback
+# and link-local (fe80::/10) in /proc/net/if_inet6.
+v6_locked=no
+if command -v ip6tables >/dev/null 2>&1 \
+  && ip6tables -F OUTPUT 2>/dev/null \
+  && ip6tables -A OUTPUT -o lo -j ACCEPT 2>/dev/null \
+  && ip6tables -P OUTPUT DROP 2>/dev/null; then
+  v6_locked=yes
+fi
+if [ "$v6_locked" = no ] && [ -r /proc/net/if_inet6 ] \
+  && awk '$1 != "00000000000000000000000000000001" && $1 !~ /^fe[89ab]/ { found = 1 } END { exit !found }' /proc/net/if_inet6; then
+  fail "IPv6 is routable here and could not be locked"
 fi
 
 # Every lane hands over the worktree and its state folder; make sure the

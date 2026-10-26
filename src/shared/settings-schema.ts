@@ -249,7 +249,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // Comma-separated, beyond the model's own hosts, which are always allowed.
     id: 'vm.allowHosts',
     label: 'Sandboxed lane network allowlist',
-    description: 'hosts a sandboxed lane may reach besides Claude\'s own, comma-separated (a leading *. allows subdomains) — e.g. registry.npmjs.org, github.com',
+    description: 'hosts a sandboxed lane may reach besides Claude\'s own, comma-separated (a leading *. allows subdomains) — e.g. registry.npmjs.org; every host here is a way out for what the agent reads, so avoid wide wildcards like *.amazonaws.com',
     keywords: ['sandbox', 'vm', 'network', 'allowlist', 'egress', 'hosts', 'proxy', 'firewall'],
     type: 'text',
     default: '',

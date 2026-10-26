@@ -209,6 +209,7 @@ function rig(over = {}) {
     runCheck: async (spec) => { checks.push(spec); return { exitCode: 0, output: 'ok' } },
     exec: (binary, args) => execs.push([binary, ...args].join(' ')),
     mkdir: (p) => fsOps.push(`mkdir ${p}`), rm: (p) => fsOps.push(`rm ${p}`),
+    realpath: (p) => p, exists: (p) => p.endsWith('/.git') || p.endsWith('/.claude'),
     home: HOME, stateRoot: '/Users/fixture/Library/Application Support/tc/vm-lanes',
     runtime: () => 'apple', settings: () => ({ image: 'terminal-canvas/lane:1', cpus: 2, memoryMiB: 2048, allow: ['registry.npmjs.org'] }),
     proxy: () => ({ host: '192.168.64.1', port: 47801 }), newToken: () => 'laneToken0123456789ab',
@@ -218,6 +219,9 @@ function rig(over = {}) {
   return { lanes, spawns, execs, fsOps, checks, kills, procs }
 }
 const WT = '/Users/fixture/Library/Application Support/tc/worktrees/fix-login'
+// The lane id carries a hash of the whole panel id; the names below are derived, not spelled.
+const LID = (id) => lanesMod.mod.laneIdOf(id)
+const VMN = (id) => `tc-lane-${LID(id)}`
 const chatEnv = (id) => ({ PATH: '/usr/bin', TC_PANEL_ID: id, TC_PANEL_TOKEN: 'tok', TC_CONTROL_SOCKET: '/tmp/tc.sock', CLAUDE_CODE_OAUTH_TOKEN: 'sk-fixture', GITHUB_TOKEN: 'ghp-fixture' })
 const HOST_ARGS = ['-p', '--output-format', 'stream-json', '--permission-prompt-tool', 'stdio', '--resume', 'sess-1']
 
@@ -234,7 +238,7 @@ check('vm.run.1 a panel not in a lane spawns exactly as before; a lane\'s spawn 
       vm.command === 'container' && vm.args[0] === 'run' && afterImage[0] === 'claude' && afterImage.join(' ').includes('--session-id sess-1') &&
       afterImage.slice(-2).join(' ') === '--permission-mode bypassPermissions' &&
       vm.env.CLAUDE_CODE_OAUTH_TOKEN === 'sk-fixture' && !('GITHUB_TOKEN' in vm.env) && !('TC_PANEL_TOKEN' in vm.env) && !('TC_CONTROL_SOCKET' in vm.env) &&
-      !vm.args.some((a) => a.includes('sk-fixture') || a.includes('laneToken')) && vm.env.HTTPS_PROXY === 'http://chat-1:laneToken0123456789ab@192.168.64.1:47801' && r.lanes.list()[0].running === true,
+      !vm.args.some((a) => a.includes('sk-fixture') || a.includes('laneToken')) && vm.env.HTTPS_PROXY === `http://${LID('chat-1')}:laneToken0123456789ab@192.168.64.1:47801` && r.lanes.list()[0].running === true,
     detail: { entered, env: Object.keys(vm.env), tail: afterImage }
   }
 })
@@ -246,11 +250,11 @@ check('vm.run.2 enter is refused by name with no runtime, no proxy or no token; 
   const home = rig().lanes.enter('a', HOME)
   const r = rig()
   r.lanes.enter('chat-1', WT)
-  const state = '/Users/fixture/Library/Application Support/tc/vm-lanes/chat-1'
+  const state = `/Users/fixture/Library/Application Support/tc/vm-lanes/${LID('chat-1')}`
   return {
     pass: none.kind === 'refused' && /no VM runtime/.test(none.reason) && noProxy.kind === 'refused' && /proxy/.test(noProxy.reason) &&
       noToken.kind === 'refused' && /setup-token/.test(noToken.reason) && home.kind === 'refused' &&
-      r.fsOps.join('|') === `rm ${state}|mkdir ${state}` && r.execs.join('|') === 'container stop --time 5 tc-lane-chat-1|container delete --force tc-lane-chat-1',
+      r.fsOps.join('|') === `rm ${state}|mkdir ${state}` && r.execs.join('|') === `container stop --time 5 ${VMN('chat-1')}|container delete --force ${VMN('chat-1')}`,
     detail: { none, noProxy, noToken, fs: r.fsOps, execs: r.execs }
   }
 })
@@ -270,7 +274,7 @@ check('vm.run.3 a kill stops the VM by name as well as the client; a later spawn
   r.execs.length = 0; r.fsOps.length = 0
   r.lanes.disposeAll()
   return {
-    pass: r.kills.length === 1 && afterKill.join('|') === 'container stop --time 5 tc-lane-chat-1|container delete --force tc-lane-chat-1' && stopped &&
+    pass: r.kills.length === 1 && afterKill.join('|') === `container stop --time 5 ${VMN('chat-1')}|container delete --force ${VMN('chat-1')}` && stopped &&
       second.join(' ').includes('--resume sess-1') && r.lanes.list().length === 0 && r.execs.length === 4 &&
       r.fsOps.filter((o) => o.startsWith('rm ')).length === 2 && r.lanes.leave('chat-1') === false,
     detail: { afterKill, execs: r.execs, fs: r.fsOps }
@@ -280,6 +284,39 @@ check('vm.run.3 a kill stops the VM by name as well as the client; a later spawn
 // A command with a quote in it: the VM's sh must receive exactly this text.
 const CHECK_LINE = "npm test -- --grep \"it's\""
 const quote = (w) => `'${w.replace(/'/g, `'\\''`)}'`
+// The critic's findings (M552 hardening): each pinned.
+check('vm.spec.5 the home check cannot be dodged by /., //, a trailing slash or case; a comma, quote or = in a path (a --mount injection) is refused', lane, (L) => {
+  const tries = ['/Users/fixture/.', '/Users//fixture', '/users/fixture', '/Users/fixture/', '/USERS/FIXTURE/../fixture',
+    '/Users/fixture/x,source=/Users/fixture', '/Users/fixture/a"b', '/Users/fixture/a=b', '/Users/fixture/a\nb']
+  const accepted = tries.filter((w) => L.parseVmLaneSpec({ ...SPEC, worktree: w }, HOME).kind !== 'refused')
+  const spaces = L.parseVmLaneSpec({ ...SPEC, worktree: '/Users/fixture/My Projects/app' }, HOME)
+  return { pass: accepted.length === 0 && spaces.kind === 'ok', detail: { accepted } }
+})
+
+check('vm.spec.6 .git and the agent configs are re-mounted read-only over the worktree, and the image\'s network lock is named as the entrypoint', { mod: lane.mod && sandbox.mod ? { L: lane.mod, S: sandbox.mod } : undefined, error: lane.error || sandbox.error }, ({ L, S }) => {
+  const spec = L.parseVmLaneSpec({ ...SPEC, readOnly: ['.git', '.claude', '../etc', 'src'] }, HOME).spec
+  const { args } = S.vmRunArgs(spec, { command: 'claude', args: [] })
+  const mounts = args.flatMap((a, i) => args[i - 1] === '--mount' ? [a] : [])
+  const ep = args[args.indexOf('--entrypoint') + 1]
+  return {
+    pass: JSON.stringify(spec.readOnly) === JSON.stringify(['.git', '.claude']) && mounts.length === 4 &&
+      mounts[2] === `type=bind,source=${SPEC.worktree}/.git,target=/work/.git,readonly` && mounts[3].endsWith('target=/work/.claude,readonly') &&
+      ep === '/usr/local/bin/tc-vm-entry' && args.indexOf('--entrypoint') < args.indexOf(spec.image),
+    detail: { mounts, ep }
+  }
+})
+
+check('vm.run.6 two panel ids that clean to the same name get different lanes; a lane id is always a plain name', lanesMod, (M) => {
+  const a = M.laneIdOf('chat/1'), b = M.laneIdOf('chat:1'), c = M.laneIdOf('x'.repeat(200)), d = M.laneIdOf('///')
+  return { pass: a !== b && /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/.test(c) && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(d) && a.startsWith('chat-1-'), detail: [a, b, c.length, d] }
+})
+
+check('vm.run.7 a lane mounts the chat folder with its symlinks resolved, so a link to home is refused; a missing folder is refused', lanesMod, () => {
+  const linked = rig({ realpath: (p) => p === '/Users/fixture/link' ? HOME : p }).lanes.enter('a', '/Users/fixture/link')
+  const gone = rig({ realpath: () => { throw new Error('ENOENT') } }).lanes.enter('a', WT)
+  return { pass: linked.kind === 'refused' && /home folder/.test(linked.reason) && gone.kind === 'refused' && /does not exist/.test(gone.reason), detail: { linked, gone } }
+})
+
 // M553 — the doors. A fake manager: get/terminate/subscribe, status events on demand.
 const doorsMod = load('src/main/vm-doors.ts', 'doors')
 const tonightMod = load('src/shared/tonight.ts', 'tonight')
@@ -364,8 +401,8 @@ const asyncChecks = (async () => {
     await r.lanes.runCheck({ command: 'npm test', cwd: WT, env: chatEnv('other'), timeoutMs: 1000, signal: new AbortController().signal })
     const [inVm, onMac] = r.checks
     ok('vm.run.4 the lane\'s check line is a quoted container run named -check ending in sh -c and the exact command; its VM is stopped after; the other panel\'s check is untouched',
-      inVm.command.startsWith("'container' 'run'") && inVm.command.includes("'tc-lane-chat-1-check'") && inVm.command.endsWith(` 'sh' '-c' ${quote(CHECK_LINE)}`) && quote("it's") === `'it'\\''s'` &&
-        !('TC_PANEL_TOKEN' in inVm.env) && r.execs.join('|') === 'container stop --time 5 tc-lane-chat-1-check|container delete --force tc-lane-chat-1-check' &&
+      inVm.command.startsWith("'container' 'run'") && inVm.command.includes(`'${VMN('chat-1')}-check'`) && inVm.command.endsWith(` 'sh' '-c' ${quote(CHECK_LINE)}`) && quote("it's") === `'it'\\''s'` &&
+        !('TC_PANEL_TOKEN' in inVm.env) && r.execs.join('|') === `container stop --time 5 ${VMN('chat-1')}-check|container delete --force ${VMN('chat-1')}-check` &&
         onMac.command === 'npm test' && onMac.env.TC_PANEL_ID === 'other', inVm.command.slice(-80))
     const r2 = rig()
     r2.lanes.enter('chat-1', WT)
@@ -403,6 +440,11 @@ const asyncChecks = (async () => {
     const codex = await doorRig().doors.enterForAuto('codex-1')
     const hang = doorRig({ hang: true })
     const hung = await hang.doors.enterForAuto('chat-1')
+    const busy = doorRig()
+    busy.snaps.get('chat-1').auto = { mode: 'complete', state: 'running', turn: 1, limit: 5 }
+    const live = await busy.doors.enterForAuto('chat-1')
+    ok('vm.doors.4 a chat with an auto run already live on the Mac is refused before anything is entered or killed',
+      live.kind === 'refused' && /already running/.test(live.reason) && busy.entered.length === 0 && busy.terminated.length === 0, JSON.stringify(live))
     ok('vm.doors.3 all or none: one refused lane takes back the ones entered before it; a codex chat is refused; a Mac process that will not exit leaves the lane and refuses',
       partial.kind === 'refused' && bad.inLane.size === 0 && codex.kind === 'refused' && /Claude Code only/.test(codex.reason) &&
         hung.kind === 'refused' && /did not stop/.test(hung.reason) && hang.inLane.size === 0,

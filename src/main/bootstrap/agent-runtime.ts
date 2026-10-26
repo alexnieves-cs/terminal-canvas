@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { homedir, networkInterfaces } from 'node:os'
 import { connect as netConnect } from 'node:net'
 import { join } from 'node:path'
@@ -69,7 +69,9 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     exec: (binary, args, execEnv) => { execFile(whichFromEnv(binary, env) ?? binary, args, { env: execEnv, timeout: 30_000 }, () => { /* a VM already gone is the common case */ }) },
     mkdir: (path) => mkdirSync(path, { recursive: true }),
     rm: (path) => rmSync(path, { recursive: true, force: true }),
-    home: homedir(),
+    realpath: (path) => realpathSync(expandTilde(path)),
+    exists: (path) => existsSync(path),
+    home: realpathSync(homedir()),
     stateRoot: vmStateRoot,
     runtime: () => state.vmProbe?.chosen ?? null,
     settings: () => ({

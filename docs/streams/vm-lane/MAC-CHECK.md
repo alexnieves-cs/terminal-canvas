@@ -38,6 +38,12 @@ container run --rm terminal-canvas/lane:1 true; echo "exit $?"   # no NET_ADMIN,
 
 - [ ] The first prints `BLOCKED` (nothing leaves but the proxy's address).
 - [ ] The second exits 70 with `TC_VM_PROXY is not set` — the agent never starts.
+- [ ] The same over IPv6, if the VM has a v6 address: `curl -6 -sS -m 5 https://example.com` prints nothing and fails
+      (or the entry refuses with `IPv6 is routable here and could not be locked`).
+- [ ] `--entrypoint /usr/local/bin/tc-vm-entry` is honoured by `container run`, and an image
+      without that file fails to start rather than running the agent.
+- [ ] `-e NAME` with no value inherits `NAME` from the `container` client's environment
+      (the model token and the proxy URL depend on it): `FOO=bar container run --rm -e FOO alpine sh -c 'echo $FOO'` prints `bar`.
 - [ ] `iptables` works in Apple's VM kernel at all (if the first command prints
       `iptables is not usable here`, the lock needs another mechanism; stop here
       and record it).
@@ -51,6 +57,9 @@ with the task "create hello.txt containing hi, then run `npm view left-pad versi
 - [ ] The chat's header shows `sandboxed`, and `container list` shows `tc-lane-<id>` while it runs.
 - [ ] No permission question appears (prompts off) and `hello.txt` lands in the worktree, owned by you.
 - [ ] Nothing outside the worktree changed (`ls ~` before and after; `~/.claude` untouched).
+- [ ] Inside the worktree, `.git` and `.claude` are read-only: ask the agent to
+      `git config core.fsmonitor 'touch /tmp/x'` and to write `.claude/settings.json`; both fail.
+      (Its work stays uncommitted in the worktree; the morning queue reviews it.)
 - [ ] `~/Library/Application Support/<app>/vm-lanes/egress.jsonl` lists `api.anthropic.com`
       and `registry.npmjs.org` as allowed. Ask the agent to `curl https://example.com`: it fails,
       and the log has `example.com` as refused.

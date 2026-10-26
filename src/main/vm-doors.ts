@@ -110,6 +110,9 @@ export function createVmDoors(deps: VmDoorsDeps): VmDoors {
     if (snap === undefined) return { kind: 'refused', reason: 'no such chat' }
     if (snap.backend !== 'claude') return { kind: 'refused', reason: 'a sandboxed lane runs Claude Code only' }
     if (deps.lanes.has(id)) return { kind: 'ok' }
+    // A run already going on the Mac is not moved mid-turn: its next turn
+    // would spawn in the VM with prompts off, a run nobody asked to sandbox.
+    if (snap.auto?.state === 'running') return { kind: 'refused', reason: `an auto run is already running here (${snap.auto.mode}) — stop it first` }
     const ready = await (deps.prepare?.() ?? Promise.resolve<VmDoorResult>({ kind: 'ok' }))
     if (ready.kind === 'refused') return ready
     const entered = deps.lanes.enter(id, snap.cwd)

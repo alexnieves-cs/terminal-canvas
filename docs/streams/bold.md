@@ -156,6 +156,15 @@ prompts off without touching the Mac.
 - **The VM's egress is not an `outward` door**: `outward`/`redactSecrets` gate
   TEXT the app sends; this is the agent's own traffic, gated by host instead. It
   got a fresh-context critic as a boundary.
+- **The critic's findings, fixed before merge.** The worktree's `.git`, `.claude`,
+  `.mcp.json` and `.gitmodules` are re-mounted read-only (a VM-written
+  `core.fsmonitor` or hook would run on the Mac at the app's next git call); the
+  chat folder is `realpath`ed and the home check is normalised and case-folded; a
+  `,` `"` or `=` in a path is refused (it would inject `--mount` options); the
+  image's lock is named as `--entrypoint`; IPv6 fails closed too; a chat with a
+  live Mac auto run is refused before anything is killed; lane ids carry a hash
+  of the whole panel id. Residual, by design: an allowed host is still a way out
+  for what the agent reads, and the setting's copy says so.
 - **Morning-queue label: a request, not an edit.** The queue (`task-queue.ts`)
   is lane C's; the chat header and Tonight's status rows carry `sandboxed` now, and
   `requests.md` asks for the queue's row.
