@@ -20,6 +20,7 @@ import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { installMenuBar } from './menu-bar'
 import { installTmuxAdopt } from './tmux-adopt'
+import { installCloudLanes } from './bootstrap/cloud-wiring'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
@@ -482,6 +483,17 @@ app.whenReady().then(async () => {
   // window is read at use (rule 1): it can be closed and remade.
   installMenuBar(() => state.window)
   installTmuxAdopt(() => state.loginEnv)
+  // M543. Cloud lanes: beside registerIpcHandlers like tmux:adopt, since they
+  // need the control wiring's broker and a positional parameter would shift
+  // every harness entry. The origin is read per dispatch, at use.
+  const cloud = installCloudLanes(state, {
+    broker: control.broker,
+    originOf: async (cwd) => {
+      const answer = await stores.gitRunner(['-C', cwd, 'remote', 'get-url', 'origin'])
+      return answer.ok && answer.stdout.trim() !== '' ? answer.stdout.trim() : null
+    }
+  })
+  app.on('will-quit', () => cloud.stop())
 
   // A second launch of this build reaches the running instance here rather
   // than starting a process of its own. Restoring is not optional: on darwin
