@@ -191,7 +191,8 @@ function numberOf(body: string): number | null {
 // ── Reading the facts ──────────────────────────────────────────────────────
 
 export type FactsResult =
-  | { kind: 'facts'; facts: CloudFacts }
+  /** `headSha` is the commit the checks were read on — what a merge must pin. */
+  | { kind: 'facts'; facts: CloudFacts; headSha?: string }
   /** The issue or repository is gone (404, 410): the lane settles rather than polling forever. */
   | { kind: 'gone'; reason: string }
   | { kind: 'no-credential' | 'unavailable' | 'malformed'; reason: string }
@@ -356,7 +357,8 @@ export async function readCloudFacts(broker: CloudBroker, lane: CloudLane): Prom
   const { headSha: _sha, ...prFact } = pr
   return {
     kind: 'facts',
-    facts: { issue, pr: prFact, checks, reviews: toReviews(reviewsRaw.value), ...(checksIncomplete ? { checksIncomplete } : {}) }
+    facts: { issue, pr: prFact, checks, reviews: toReviews(reviewsRaw.value), ...(checksIncomplete ? { checksIncomplete } : {}) },
+    ...(pr.headSha === null ? {} : { headSha: pr.headSha })
   }
 }
 
@@ -383,10 +385,21 @@ export interface CloudLanePoller {
   wake(): void
   lanes(): CloudLane[]
   reasonOf(id: string): string
+  /** M544. The lane's PR diff stat as last read, for the card's rest line. */
+  statOf(id: string): CloudDiffStat | undefined
   stop(): void
 }
 
-interface Tracked { lane: CloudLane; reason: string; unchanged: number; timer: unknown; busy: boolean }
+/** M544. A PR's size as GitHub states it on the single-PR read. */
+export interface CloudDiffStat { additions: number; deletions: number; files: number }
+const statOfPr = (pr: PrFact | null): CloudDiffStat | undefined =>
+  pr === null || pr.additions === undefined || pr.deletions === undefined || pr.changedFiles === undefined
+    ? undefined
+    : { additions: pr.additions, deletions: pr.deletions, files: pr.changedFiles }
+const sameStat = (a?: CloudDiffStat, b?: CloudDiffStat): boolean =>
+  a === b || (a !== undefined && b !== undefined && a.additions === b.additions && a.deletions === b.deletions && a.files === b.files)
+
+interface Tracked { lane: CloudLane; reason: string; unchanged: number; timer: unknown; busy: boolean; stat?: CloudDiffStat }
 
 /**
  * One timer per lane, re-armed after each poll from `nextPollMs`, so a lane
@@ -436,8 +449,10 @@ export function createCloudLanePoller(deps: PollerDeps): CloudLanePoller {
       const next: CloudLane = { ...t.lane, ...(pr === undefined ? {} : { pr }) }
       // A PR appearing answers a failed hand-off: someone handed it over.
       if (pr !== undefined) delete next.handoff
-      const prMoved = next.pr !== t.lane.pr || (t.lane.handoff !== undefined && next.handoff === undefined)
+      const stat = statOfPr(read.facts.pr)
+      const prMoved = next.pr !== t.lane.pr || (t.lane.handoff !== undefined && next.handoff === undefined) || !sameStat(stat, t.stat)
       t.lane = next
+      t.stat = stat
       settle(t, derived.state, derived.reason, prMoved)
     } finally {
       t.busy = false
@@ -463,11 +478,85 @@ export function createCloudLanePoller(deps: PollerDeps): CloudLanePoller {
     wake() { for (const t of tracked.values()) if (!t.busy) arm(t) },
     lanes: () => [...tracked.values()].map((t) => t.lane),
     reasonOf: (id) => tracked.get(id)?.reason ?? '',
+    statOf: (id) => tracked.get(id)?.stat,
     stop() {
       for (const t of tracked.values()) if (t.timer !== undefined) deps.clearTimer(t.timer)
       tracked.clear()
     }
   }
+}
+
+// ── Merging from the canvas ────────────────────────────────────────────────
+
+export interface MergeAsk { message: string; detail: string }
+export type MergeResult =
+  | { kind: 'merged'; sha: string }
+  | { kind: 'cancelled' }
+  | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
+export interface MergeDeps { broker: CloudBroker; confirm: (ask: MergeAsk) => Promise<boolean>; now: () => number }
+
+/** The changed files shown in the merge ask; more than this is counted, not listed. */
+export const MERGE_FILES_SHOWN = 12
+
+/**
+ * M544. MERGE A READY LANE, judged on facts read NOW rather than on the card's
+ * copy: the lane is re-read, re-derived, and merged only when that says
+ * `ready`. The merge pins the head the checks were read on (`sha`), so a push
+ * that lands between the ask and the press is refused by GitHub (409) instead
+ * of merging code nobody saw pass. The ask lists the files that will land.
+ * A squash, because that is how this repository merges its own PRs.
+ */
+export async function mergeCloudLane(deps: MergeDeps, lane: CloudLane): Promise<MergeResult> {
+  if (lane.pr === undefined) return { kind: 'refused', reason: 'this lane has no pull request yet' }
+  const read = await readCloudFacts(deps.broker, lane)
+  if (read.kind === 'gone') return { kind: 'refused', reason: read.reason }
+  if (read.kind !== 'facts') return { kind: read.kind === 'no-credential' ? 'no-credential' : 'unavailable', reason: read.reason }
+  const pr = read.facts.pr
+  if (pr === null) return { kind: 'refused', reason: 'the lane\'s pull request could not be found' }
+  const derived = cloudLaneState(lane, read.facts, deps.now())
+  if (derived.state !== 'ready') return { kind: 'refused', reason: `#${pr.number} is not ready to merge — ${derived.reason}` }
+  if (read.headSha === undefined) return { kind: 'refused', reason: `#${pr.number}'s head commit could not be read, so a merge cannot be pinned to what passed` }
+
+  const files = await deps.broker.call({ service: 'github', method: 'GET', path: `/repos/${lane.repo}/pulls/${pr.number}/files?per_page=100` })
+  const listed = files.ok && files.status === 200 ? toDiffFiles(files.body) : null
+  const stat = statOfPr(pr)
+  const size = stat === undefined ? '' : ` (+${stat.additions} −${stat.deletions} in ${stat.files} file${stat.files === 1 ? '' : 's'})`
+  const lines = listed === null
+    ? ['The file list could not be read — open the pull request to see it.']
+    : [...listed.slice(0, MERGE_FILES_SHOWN).map((f) => `${f.status === 'removed' ? '−' : f.status === 'added' ? '+' : '~'} ${f.path}  +${f.additions} −${f.deletions}`),
+        ...(listed.length > MERGE_FILES_SHOWN ? [`… and ${(stat?.files ?? listed.length) - MERGE_FILES_SHOWN} more`] : [])]
+  const ask: MergeAsk = {
+    message: `Merge #${pr.number} into ${lane.repo}?`,
+    detail: `${derived.reason.charAt(0).toUpperCase()}${derived.reason.slice(1)}. This squash-merges commit ${read.headSha.slice(0, 7)}${size} — if anything is pushed before you press Merge, GitHub refuses it.\n\n${lines.join('\n')}`
+  }
+  if (!(await deps.confirm(ask))) return { kind: 'cancelled' }
+  const body = JSON.stringify({ sha: read.headSha, merge_method: 'squash' })
+  const done = await deps.broker.call({ service: 'github', method: 'PUT', path: `/repos/${lane.repo}/pulls/${pr.number}/merge`, body, personConfirmed: true })
+  if (!done.ok) return refusalOf(done)
+  if (done.status === 200) {
+    try {
+      const v = JSON.parse(done.body) as { merged?: unknown; sha?: unknown }
+      if (v.merged === true && typeof v.sha === 'string') return { kind: 'merged', sha: v.sha }
+    } catch { /* fall through to the plain answer */ }
+    return { kind: 'unavailable', reason: `GitHub answered 200 but did not say #${pr.number} merged — open it to check` }
+  }
+  if (done.status === 409) return { kind: 'refused', reason: `#${pr.number} moved after it was checked — nothing was merged; look at the new commits first` }
+  if (done.status === 405) return { kind: 'refused', reason: `GitHub will not merge #${pr.number}${suffix(done.body)}` }
+  if (done.status === 401 || done.status === 403) return { kind: 'refused', reason: `GitHub refused the merge (${done.status})${suffix(done.body)} — the credential may not be allowed to write to ${lane.repo}` }
+  return { kind: 'unavailable', reason: `GitHub answered ${done.status}${suffix(done.body)} — nothing was merged` }
+}
+
+export interface DiffFile { path: string; status: string; additions: number; deletions: number }
+export function toDiffFiles(body: string): DiffFile[] | null {
+  let v: unknown
+  try { v = JSON.parse(body) } catch { return null }
+  if (!Array.isArray(v)) return null
+  return v.flatMap((f) => {
+    const r = (f ?? {}) as Record<string, unknown>
+    return typeof r.filename === 'string' && typeof r.additions === 'number' && typeof r.deletions === 'number'
+      ? [{ path: r.filename, status: typeof r.status === 'string' ? r.status : 'modified', additions: r.additions, deletions: r.deletions }]
+      : []
+  })
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────

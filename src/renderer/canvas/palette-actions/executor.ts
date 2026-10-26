@@ -142,6 +142,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'arrange-task': return self.arrangeTask(step.args.panel as string)
       case 'fit-task': return self.fitTask()
       case 'tonight': return self.runTonight(a.op)
+      case 'cloud-merge': return self.mergeCloud(step.args.panel as string)
       case 'cloud-send': return self.sendToCloud(step.args.panel as string, String(a.provider ?? ''))
       case 'preview-width': return self.setPreviewWidth(a.device!)
       case 'preview-capture': return self.capturePreview()

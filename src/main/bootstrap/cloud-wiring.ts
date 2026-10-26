@@ -2,9 +2,9 @@ import { join } from 'node:path'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { app, ipcMain } from 'electron'
-import { IPC, IPC_EVENTS, type CloudDispatchResult, type CloudLaneView } from '../../shared/ipc-contract'
+import { IPC, IPC_EVENTS, type CloudDispatchResult, type CloudLaneView, type CloudMergeResult } from '../../shared/ipc-contract'
 import type { CloudLane } from '../../shared/cloud-lane'
-import { createCloudLanePoller, dispatchCloudLane, parseLanesFile, readCloudFacts, serializeLanes, type CloudBroker } from '../cloud-lanes'
+import { createCloudLanePoller, dispatchCloudLane, mergeCloudLane, parseLanesFile, readCloudFacts, serializeLanes, type CloudBroker } from '../cloud-lanes'
 import { repoFromRemote } from '../github-publish'
 import { confirm, liveWindow } from './dialogs'
 import { readyContents, type MainState } from './context'
@@ -43,7 +43,10 @@ export function installCloudLanes(state: MainState, deps: CloudWiringDeps): Clou
     }
   }
 
-  const view = (lane: CloudLane): CloudLaneView => ({ ...lane, reason: poller.reasonOf(lane.id) })
+  const view = (lane: CloudLane): CloudLaneView => {
+    const stat = poller.statOf(lane.id)
+    return { ...lane, reason: poller.reasonOf(lane.id), ...(stat === undefined ? {} : { stat }) }
+  }
   const poller = createCloudLanePoller({
     read: (lane) => readCloudFacts(deps.broker, lane),
     now: () => Date.now(),
@@ -72,6 +75,22 @@ export function installCloudLanes(state: MainState, deps: CloudWiringDeps): Clou
     poller.forget(id)
     save(poller.lanes())
     return true
+  })
+  ipcMain.handle(IPC.CLOUD_MERGE, async (_event, id: unknown): Promise<CloudMergeResult> => {
+    const lane = typeof id === 'string' ? poller.lanes().find((l) => l.id === id) : undefined
+    if (lane === undefined) return { kind: 'refused', reason: 'no such cloud lane' }
+    const result = await mergeCloudLane({
+      broker: deps.broker,
+      now: () => Date.now(),
+      confirm: async (ask) => {
+        const win = liveWindow(state)
+        if (win === null) return false
+        return confirm(win, { message: ask.message, detail: ask.detail, verb: 'Merge' })
+      }
+    }, lane)
+    // Read it back at once, so the card says merged without waiting a poll.
+    if (result.kind === 'merged') await poller.pollNow(lane.id)
+    return result
   })
   ipcMain.handle(IPC.CLOUD_DISPATCH, async (_event, raw: unknown): Promise<CloudDispatchResult> => {
     const r = (raw ?? {}) as Record<string, unknown>

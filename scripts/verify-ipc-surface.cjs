@@ -344,7 +344,8 @@ app.whenReady().then(() => {
   // night's batch named by the renderer, run and stopped by main.
   // +4: cloud:list / cloud:dispatch / cloud:refresh / cloud:forget (M543,
   // lane H) — a task handed to a cloud agent, read back as a pull request.
-  const EXPECTED_CHANNELS = 218
+  // +1: cloud:merge (M544, lane H) — merge a ready lane's PR, asked first.
+  const EXPECTED_CHANNELS = 219
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

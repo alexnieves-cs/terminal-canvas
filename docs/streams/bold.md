@@ -72,6 +72,13 @@ on" and a provider is a row in a table, not a code path.
   one request every door sends; a teammate's plan cannot `cloud-send`.
 - **M544** — review and merge from the canvas: the review layer reads the PR's
   diff, and Accept merges through the broker.
+  *Built:* the card's PR link opens the PR's files on GitHub, and the card
+  shows its size. Merge appears only on a ready lane; main re-reads the lane
+  and merges only if it is ready now, pinned to the head its checks passed on
+  (a later push makes GitHub refuse with 409), after an ask that lists the
+  files. Reading a cloud PR inside the in-app review layer is not built: that
+  layer reads a local worktree, and fetching the PR into one is M545's radar
+  work, so it lands there or later.
 - **M545** — the morning queue ranks a ready cloud lane beside local lanes, and
   the collision radar trial-merges its head against local worktrees.
 

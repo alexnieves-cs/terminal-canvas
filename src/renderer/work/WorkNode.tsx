@@ -100,6 +100,8 @@ export interface WorkNodeProps {
    * anything is sent, so the menu row starts the ask rather than the send.
    */
   onSendToCloud?: (panelId: string, provider: string) => void
+  /** M544. Merge the card's ready cloud lane — the canvas door of `cloud-merge`. */
+  onMergeCloud?: (panelId: string) => void
   /** M115. Open the pull request from the lane. */
   onOpenPr: (itemId: string) => void
   /** M115. The PR door's synchronous refusal (`prRefusalSync`), or null when the door is open — the lane's standing is asked at the click. */
@@ -257,8 +259,10 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
               {cloud !== undefined && cloudWord !== undefined && (
                 <div><dt>cloud</dt><dd data-work-cloud={cloud.state} data-tone={cloudWord.tone} title={cloud.reason}>
                   {cloudWord.word}
-                  {cloud.pr !== undefined && <>{' · '}<a href={`https://github.com/${cloud.repo}/pull/${cloud.pr}`} data-work-cloud-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
-                    onClick={(e) => { e.preventDefault(); openLink(`https://github.com/${cloud.repo}/pull/${cloud.pr as number}`) }}>#{cloud.pr}</a></>}
+                  {/* M544. The link opens the PR's files: reviewing it is reading those. */}
+                  {cloud.pr !== undefined && <>{' · '}<a href={`https://github.com/${cloud.repo}/pull/${cloud.pr}/files`} data-work-cloud-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
+                    onClick={(e) => { e.preventDefault(); openLink(`https://github.com/${cloud.repo}/pull/${cloud.pr as number}/files`) }}>#{cloud.pr}</a></>}
+                  {cloud.stat !== undefined && <span data-work-cloud-stat>{` · +${cloud.stat.additions} −${cloud.stat.deletions}`}</span>}
                 </dd></div>
               )}
               {props.execution !== undefined && <div><dt>execution</dt><dd data-work-execution data-tone={props.execution.tone}>{props.execution.word}</dd></div>}
@@ -396,6 +400,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   </ul>
                 </MenuContent>
               </Menu>
+              {cloud?.state === 'ready' && props.onMergeCloud !== undefined && verb('cloud-merge', 'Merge', null, () => props.onMergeCloud?.(panel.rect.id))}
               {props.onSendToCloud !== undefined && (
                 <Menu open={cloudOpen} onOpenChange={setCloudOpen}>
                   {menuVerb('cloud', 'Cloud…', null)}

@@ -469,6 +469,87 @@ const LANE = { id: 'l', repo: 'o/r', issue: 12, provider: 'copilot', title: 't',
     return { pass: Object.values(doors).every(Boolean), detail: { doors, teammate } }
   })
 
+  // M544 — cloud.merge.1. A merge is judged on facts read NOW: a ready lane
+  //        asks with its files and size, then PUTs a squash pinned to the head
+  //        the checks passed on, person-confirmed. A lane whose checks went red
+  //        is refused before any ask; a cancel writes nothing; a push between
+  //        ask and press (409) is refused by name; a 200 without `merged` is
+  //        not called merged.
+  await checkAsync('cloud.merge.1 a ready lane merges pinned to its checked head after an ask listing its files; red checks refuse unasked, cancel writes nothing, a moved head and an unclear 200 are not merges', main, async (M) => {
+    const PR = { number: 40, state: 'open', draft: false, body: 'Fixes #12', head: { ref: 'copilot/fix-12', sha: SHA }, additions: 30, deletions: 2, changed_files: 2, created_at: '2026-10-26T01:00:00Z' }
+    const routes = (conclusion, put) => fakeBroker({
+      'GET /repos/o/r/issues/12': { body: { state: 'open' } },
+      'GET /repos/o/r/pulls/40': { body: PR },
+      [`GET /repos/o/r/commits/${SHA}/check-runs?per_page=100&page=1`]: { body: { total_count: 1, check_runs: [{ id: 1, name: 'verify', status: 'completed', conclusion }] } },
+      [`GET /repos/o/r/commits/${SHA}/status`]: { body: { statuses: [] } },
+      'GET /repos/o/r/pulls/40/reviews?per_page=100': { body: [] },
+      'GET /repos/o/r/pulls/40/files?per_page=100': { body: [{ filename: 'src/a.ts', status: 'modified', additions: 28, deletions: 2 }, { filename: 'test/a.test.ts', status: 'added', additions: 2, deletions: 0 }] },
+      ...(put === undefined ? {} : { 'PUT /repos/o/r/pulls/40/merge': put })
+    })
+    const at = { ...LANE, pr: 40, state: 'ready' }
+    const asks = []
+    const deps = (broker, yes = true) => ({ broker, now: () => 1, confirm: async (a) => { asks.push(a); return yes } })
+    const good = routes('success', { body: { merged: true, sha: 'b'.repeat(40) } })
+    const merged = await M.mergeCloudLane(deps(good), at)
+    const put = good.calls.find((c) => c.method === 'PUT')
+    const ask = asks[0]
+    asks.length = 0
+    const red = routes('failure', { body: { merged: true, sha: 'b'.repeat(40) } })
+    const refusedRed = await M.mergeCloudLane(deps(red), at)
+    const redAsked = asks.length
+    const cancelB = routes('success', { body: { merged: true, sha: 'b'.repeat(40) } })
+    const cancelled = await M.mergeCloudLane(deps(cancelB, false), at)
+    const moved = await M.mergeCloudLane(deps(routes('success', { status: 409, body: { message: 'Head branch was modified' } })), at)
+    const vague = await M.mergeCloudLane(deps(routes('success', { body: {} })), at)
+    const noPr = await M.mergeCloudLane(deps(fakeBroker({})), LANE)
+    const pass = merged.kind === 'merged' && put !== undefined && put.personConfirmed === true && JSON.parse(put.body).sha === SHA && JSON.parse(put.body).merge_method === 'squash' &&
+      /src\/a\.ts/.test(ask?.detail ?? '') && /\+30 −2 in 2 files/.test(ask?.detail ?? '') && ask.detail.includes(SHA.slice(0, 7)) &&
+      refusedRed.kind === 'refused' && /not ready/.test(refusedRed.reason) && redAsked === 0 && !red.calls.some((c) => c.method !== 'GET') &&
+      cancelled.kind === 'cancelled' && !cancelB.calls.some((c) => c.method === 'PUT') &&
+      moved.kind === 'refused' && /moved/.test(moved.reason) && vague.kind === 'unavailable' && noPr.kind === 'refused'
+    return { pass, detail: { merged, put: put && { body: put.body, personConfirmed: put.personConfirmed }, ask, refusedRed, cancelled, moved, vague, noPr } }
+  })
+
+  // M544 — cloud.merge.2. The poller keeps the PR's size beside the lane and
+  //        reports a change in it (a new push) even when the state word holds.
+  await checkAsync('cloud.merge.2 the poller keeps the PR diff stat and reports a change in it as a change', main, async (M) => {
+    let size = 30
+    const facts = () => ({ kind: 'facts', facts: { issue: { number: 12, state: 'open' }, pr: { number: 40, state: 'open', merged: false, draft: false, body: 'Fixes #12', head: 'h', createdAt: 5, additions: size, deletions: 1, changedFiles: 2 }, checks: [{ name: 'verify', status: 'completed', conclusion: 'success' }], reviews: [] } })
+    const changes = []
+    const poller = M.createCloudLanePoller({ read: async () => facts(), now: () => 1, hidden: () => false, setTimer: () => 0, clearTimer: () => {}, changed: (l) => changes.push(l.state) })
+    poller.watch({ ...LANE, pr: 40 })
+    await new Promise((r) => setTimeout(r, 0))
+    const first = poller.statOf('l')
+    size = 31
+    await poller.pollNow('l')
+    const second = poller.statOf('l')
+    await poller.pollNow('l')
+    poller.stop()
+    const pass = first?.additions === 30 && first.files === 2 && second?.additions === 31 && changes.join() === 'ready,ready'
+    return { pass, detail: { first, second, changes } }
+  })
+
+  // M544 — cloud.merge.doors.1. `cloud-merge` has its four doors on one
+  //        mergeCloud, the card shows Merge only when the lane is ready, and a
+  //        teammate's plan is refused.
+  check('cloud.merge.doors.1 cloud-merge: the card\'s Merge (ready only), the palette row, an agent line and an action node bind to one mergeCloud, and a teammate caller is refused', plan, (P) => {
+    const read = (f) => require('node:fs').readFileSync(join(ROOT, f), 'utf8')
+    const card = read('src/renderer/work/WorkNode.tsx')
+    const facts = { panels: [{ id: 'wk1', kind: 'work' }] }
+    const bound = P.buildPlan(P.parsePlanLine('cloud-merge wk1'), facts)
+    const step = bound?.kind === 'plan' ? bound.plan.steps[0] : undefined
+    const teammate = step === undefined ? null : P.agentDoorRefusal(step, facts, { teammateId: 'tm1' })
+    const doors = {
+      card: card.includes("cloud?.state === 'ready' && props.onMergeCloud !== undefined && verb('cloud-merge'") && /onMergeCloud=\{\(panelId\) =>[^\n]*mergeCloud\(panelId\)/.test(read('src/renderer/canvas/PanelNode.tsx')),
+      palette: read('src/renderer/palette/commands.ts').includes("id: 'task.cloud.merge'"),
+      agent: step?.verb === 'cloud-merge' && step.args.panel === 'wk1',
+      workflow: verbs.mod?.V9_DOORS?.['cloud-merge']?.workflow === 'an action node whose line is: cloud-merge wk1',
+      executor: /case 'cloud-merge': return self\.mergeCloud\(/.test(read('src/renderer/canvas/palette-actions/executor.ts')),
+      teammate: typeof teammate === 'string' && teammate.length > 0
+    }
+    return { pass: Object.values(doors).every(Boolean), detail: { doors, teammate } }
+  })
+
   console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
   if (results.some((r) => !r.pass)) process.exitCode = 1
 })()

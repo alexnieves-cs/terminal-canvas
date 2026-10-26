@@ -259,6 +259,7 @@ const bridge: CanvasBridge = {
     dispatch: (req: unknown) => ipcRenderer.invoke(IPC.CLOUD_DISPATCH, req),
     refresh: (id: string) => ipcRenderer.invoke(IPC.CLOUD_REFRESH, id),
     forget: (id: string) => ipcRenderer.invoke(IPC.CLOUD_FORGET, id),
+    merge: (id: string) => ipcRenderer.invoke(IPC.CLOUD_MERGE, id),
     onChanged: (listener) => subscribe<CloudLaneView>(IPC_EVENTS.CLOUD_CHANGED, listener)
   },
   tonight: {

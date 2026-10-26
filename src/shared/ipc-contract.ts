@@ -895,6 +895,12 @@ export const IPC = {
   CLOUD_REFRESH: 'cloud:refresh',
   CLOUD_FORGET: 'cloud:forget',
   /**
+   * M544. Merge a ready lane's PR through the broker. Main re-reads the PR,
+   * merges only when it is ready NOW, pins the head the checks passed on, and
+   * asks first with the files that will land.
+   */
+  CLOUD_MERGE: 'cloud:merge',
+  /**
    * M98. Session grants — `Allow for session`. The grant itself rides
    * `agent:answer`'s `scope`; these two read the granted tools for a panel
    * and drop them. Main holds them in memory only (never a file), so a
@@ -1369,7 +1375,14 @@ export const IPC_EVENTS = {
 /** M543. A cloud lane as the renderer shows it: the record and the sentence its state was derived with. */
 export interface CloudLaneView extends CloudLane {
   reason: string
+  /** M544. The PR's size as last read; absent until a PR is read. */
+  stat?: { additions: number; deletions: number; files: number }
 }
+
+export type CloudMergeResult =
+  | { kind: 'merged'; sha: string }
+  | { kind: 'cancelled' }
+  | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
 
 /**
  * M543. What the renderer names when it sends a task to the cloud. The
@@ -2091,6 +2104,8 @@ export interface CanvasBridge {
     dispatch(req: CloudDispatchRequest): Promise<CloudDispatchResult>
     refresh(id: string): Promise<CloudLaneView | null>
     forget(id: string): Promise<boolean>
+    /** M544. See CLOUD_MERGE. */
+    merge(id: string): Promise<CloudMergeResult>
     onChanged(listener: (lane: CloudLaneView) => void): () => void
   }
   /** M480. See TONIGHT_START. */
