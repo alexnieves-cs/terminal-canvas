@@ -98,4 +98,5 @@ Plan: [docs/streams/bold.md](../streams/bold.md). 2026-10-26: Alex picked all se
 
 | PR | Milestone | What | Checks |
 |---|---|---|---|
-| this PR | M540 | Lanes H, I, J, K, L, N and O in `ownership.json` (each owns its `verify-<name>.cjs`; `bold.md` is shared), their `st:` fences, `streams.own.1` covers A–O, the run book's rows, `docs/streams/bold.md` | `verify:meta` streams.own.1 |
+| #60 | M540 | Lanes H, I, J, K, L, N and O in `ownership.json` (each owns its `verify-<name>.cjs`; `bold.md` is shared), their `st:` fences, `streams.own.1` covers A–O, the run book's rows, `docs/streams/bold.md` | `verify:meta` streams.own.1 |
+| this PR (#66) | M561–M564 | Lane L, the night as a film: a pure 60-second script from the ledger and Tonight batch (`shared/night-film.ts`), drawn offscreen from that script (never captured), encoded to H.264 by WebCodecs and written by an in-repo MP4 muxer; `film:night` and `export:night-film` in main (only muxer-shaped bytes, .mp4 name, the gate's count back); a Last night button on the briefing card; the README clip rendered by the same code on a sample night (replaces `tour.gif`). Fresh-context critic's findings fixed in the PR | `verify:film` (film.script/frame/window/mux/door/wire) |
