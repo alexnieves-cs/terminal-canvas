@@ -103,9 +103,12 @@ export interface ReturnBriefingCardProps {
   onGoToPanel: (panelId: string) => void
   onReview: (itemId: string) => void
   onDecision: (panelId: string, requestId?: string) => void
+  /** M564. Render last night as a 60-second film; `filmProgress` is 0 → 1 while it renders. */
+  onLastNight?: () => void
+  filmProgress?: number | null
 }
 
-export function ReturnBriefingCard({ briefing, onGoToPanel, onReview, onDecision }: ReturnBriefingCardProps): JSX.Element {
+export function ReturnBriefingCard({ briefing, onGoToPanel, onReview, onDecision, onLastNight, filmProgress }: ReturnBriefingCardProps): JSX.Element {
   const [openOutput, setOpenOutput] = useState<string | null>(null)
   const now = Date.now()
   const act = (e: BriefEvidence): void => {
@@ -170,6 +173,13 @@ export function ReturnBriefingCard({ briefing, onGoToPanel, onReview, onDecision
       {briefing.quietCount > 0 && <p className="briefing__quiet">{briefing.quietCount} other task{briefing.quietCount === 1 ? '' : 's'} had nothing new.</p>}
       <div className="briefing__verbs">
         <button type="button" className="resume-banner__go" data-briefing-dismiss {...shellControl(dismissReturn)}>Got it</button>
+        {/* M564. The night as a film: drawn from the record, every word through the outward gate, saved where the person picks. */}
+        {onLastNight !== undefined && (
+          <button type="button" className="rail-row__verb" data-last-night-film={filmProgress == null ? 'idle' : 'rendering'} disabled={filmProgress != null}
+            title="Render last night as a 60-second film and save it" {...shellControl(onLastNight)}>
+            {filmProgress == null ? 'Last night ▸' : `Rendering… ${Math.round(filmProgress * 100)}%`}
+          </button>
+        )}
       </div>
     </aside>
   )

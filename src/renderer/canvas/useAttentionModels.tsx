@@ -15,6 +15,7 @@ import { useDecisionInbox } from '@renderer/shell/useDecisionInbox'
 import { useTaskQueue } from '@renderer/shell/useTaskQueue'
 import { useAwaySince } from '@renderer/shell/presence'
 import { ReturnBriefingCard, useReturnBriefing } from '@renderer/shell/ReturnBriefing'
+import { useLastNight } from '@renderer/film/useLastNight'
 import type { ResumeSummary } from '@shared/resume-summary'
 import { getChat } from '@renderer/chat/chat-store'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
@@ -211,6 +212,8 @@ export function useAttentionModels(deps: UseAttentionModelsDeps) {
     inbox,
     labelOf: panelLabelOf
   })
+  // M564 (lane L). The morning queue's "Last night" film, of the canvas as it stands.
+  const lastNight = useLastNight({ panels: displayPanels, labelOf: panelLabel, queue: briefing?.queue ?? [], awaySince })
   // M318. The same decisions grouped by TASK — why each is stopped, its next
   // step, what waits on it — with failed checks, unreviewed changes and
   // decisions a restart lost. Timelines are read only while the popover shows.
@@ -331,6 +334,8 @@ export function useAttentionModels(deps: UseAttentionModelsDeps) {
         jumpToAttention(panelId)
         if (requestId !== undefined) chromeRef.current.openAttentionAt(requestId)
       }}
+      onLastNight={lastNight.run}
+      filmProgress={lastNight.progress}
     />
   ) : resumeSummary !== null && panels.length > 0 ? resumeOf('card') : null
   // #10. Outside the navigator, Resume is a one-line STRIP in its own grid row
