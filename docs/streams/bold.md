@@ -107,6 +107,46 @@ One task, N agents, each in its own worktree; the task's check decides.
 - **M549** — the judge: an optional agent writes a short comparison of the
   passing entrants; `combine` can take the best parts.
 
+Decisions (lane I):
+
+- **An entrant is a chat session, by backend and model, not a terminal
+  preset.** Only a chat has a turn end, a spend meter and M475's check gate;
+  a terminal preset has none of the three, so "the check decides" could not
+  hold for it. (2026-10-26, M546.)
+- **The check is required.** A spec without one is refused by name: ranking
+  N claimed dones by diff size is ranking by who did the least.
+- **Eligibility before every metric.** Only `checked` with a non-empty, readable
+  diff can win; then diff size 0.4, overlap with lanes outside the tournament
+  0.3, cost 0.2, time 0.1, each min–max over the passing field, ties kept in
+  the order given. Entrants never count overlap against each other.
+- **An unreported cost is the middle of the field, never $0**, and a dollar
+  budget over a backend that reports no cost is refused unless a time limit
+  holds it.
+- **Main runs, the renderer names and places** (M547–M548). The renderer
+  mints each entrant's panel id and places the chats beside the card; main
+  makes each worktree, creates each chat through the same door as
+  `agent:create`, and starts each checked run. Entrants fork from the main
+  tree, whatever folder of the repository the task's lane was in.
+- **A tournament starts from a task that has a lane and a check.** The lane
+  says which repository; a never-started task is refused by name rather than
+  guessed into one. The default field is claude opus and sonnet plus every
+  other agent found, up to four.
+- **The bracket is a screen-space overlay, not a new panel kind** (M548): it
+  holds no authored state, draws nothing until a tournament has run, and so
+  changes no resting scene and no golden. Its colour is the entrant's tone
+  through `[data-tone]`.
+- **Pick keeps the winner and closes the other chats; it removes no
+  worktree.** The winner becomes the task's lane (`panelId`, `worktreeId`),
+  so Review, Open PR and the morning queue read it through their own doors.
+  Losing branches may hold work a person wants; the Worktrees list removes a
+  lane on purpose. Only a scored, eligible entrant can be picked.
+- **The judge is advice, never a second scorer** (M549): a read-only (plan
+  mode) claude chat at the main tree, shown only the passing entrants.
+  Combine opens the task's Combine tab, which already checks a combined tree
+  before anything lands, rather than growing a second merge path.
+- **The door is the card's Swarm… menu**, not a new card button, so the
+  card's resting face is unchanged.
+
 ## J — Sandboxed lanes in a micro-VM (M550–M555)
 
 A Tonight lane can run its agent inside a throwaway Linux VM, so it can run with

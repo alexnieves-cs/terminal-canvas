@@ -1,6 +1,7 @@
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type Dispatch, type SetStateAction, type JSX, type MouseEvent, type CSSProperties } from 'react'
+import { TournamentBracket } from '@renderer/tournament/TournamentBracket'
 import { useHistoryVerbs } from './useHistoryVerbs'
 import { useRunningSessions } from './useRunningSessions'
 import { useSnapAndAgentLinks } from './useSnapAndAgentLinks'
@@ -3930,6 +3931,8 @@ export function Canvas({
           selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
           engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
           onJump={pillJump} onSend={sendFromPill} openRef={pillOpenRef} />
+        {/* M548. The live tournament's bracket, in screen space; nothing at all until one has run. */}
+        <TournamentBracket run={paletteActions.runTournament} say={paletteActions.say} />
         {/* M408 (D1). The right-click menu, in screen space beside the pill. */}
         {contextMenu.element}
         {/* M69. The far-view tier, provided once for every kind's frame. */}

@@ -55,6 +55,7 @@ export type BoardActions = Pick<PaletteActions,
   | 'arrangeTask'
   | 'fitTask'
   | 'runTonight'
+  | 'runTournament'
   | 'sendToCloud'
   | 'mergeCloud'
   | 'focusTask'
@@ -125,6 +126,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       if (r.kind === 'refused') return r
       return { kind: 'ran', note: tonightWords({ kind: 'started', tasks: tasks.length, checked: tasks.filter((t) => t.check !== undefined).length, skipped: skipped.length }) }
     },
+    // M548. The tournament reads the board, the panels and the worktree lanes — Canvas's, the same delegation.
+    runTournament: async (op, value) => boardVerbsRef.current?.tournament?.(op, value) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     // M543. Every door lands here, the card's Cloud menu included. The task
     // becomes a request in cloudDispatchFor (shared, so a door cannot build a
     // second shape); main resolves the repository, scrubs, asks and sends.

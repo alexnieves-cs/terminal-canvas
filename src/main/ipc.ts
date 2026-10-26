@@ -32,6 +32,7 @@ import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPr
 import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
 import type { TonightStatus } from '../shared/tonight'
+import type { TournamentStatus } from '../shared/tournament'
 import type { EventRow, RunRow, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -234,6 +235,10 @@ export interface AgentHandlers {
   tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }
   tonightStop?(): boolean
   tonightStatus?(): TonightStatus | null
+  /** M547. The tournament's doors (main/tournament-runner.ts). Optional, for the same reason as Tonight's. */
+  tournamentStart?(raw: unknown): Promise<{ kind: 'started'; status: TournamentStatus } | { kind: 'refused'; reason: string }>
+  tournamentStop?(): boolean
+  tournamentStatus?(): TournamentStatus | null
   /** M98. The tools granted for a session, in grant order. */
   grants(id: string): string[]
   /** M98. Drop every grant for a session; it asks again. */
@@ -997,6 +1002,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TONIGHT_START, (_event, raw: unknown) => agents.tonightStart?.(raw) ?? { kind: 'refused', reason: 'tonight is not available in this process' })
   ipcMain.handle(IPC.TONIGHT_STOP, () => agents.tonightStop?.() ?? false)
   ipcMain.handle(IPC.TONIGHT_STATUS, () => agents.tonightStatus?.() ?? null)
+  ipcMain.handle(IPC.TOURNAMENT_START, (_event, raw: unknown) => agents.tournamentStart?.(raw) ?? { kind: 'refused', reason: 'tournaments are not available in this process' })
+  ipcMain.handle(IPC.TOURNAMENT_STOP, () => agents.tournamentStop?.() ?? false)
+  ipcMain.handle(IPC.TOURNAMENT_STATUS, () => agents.tournamentStatus?.() ?? null)
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))

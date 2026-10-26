@@ -348,7 +348,9 @@ app.whenReady().then(() => {
   // +1: cloud:radar (M545, lane H) — a cloud PR's head against local lanes.
   // +2: film:night / export:night-film (M562–M563, lane L) — the night
   // film's record read and its save.
-  const EXPECTED_CHANNELS = 222
+  // +3: tournament:start / tournament:stop / tournament:status (M547, lane I)
+  // — N entrants on one task, each in its own lane, run and scored by main.
+  const EXPECTED_CHANNELS = 225
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

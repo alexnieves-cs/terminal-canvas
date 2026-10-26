@@ -8,6 +8,7 @@ import type { CombineInputsResult, IntegrateRequest, IntegrateResult, Integratio
 import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { RadarLane, RadarReport } from './collision-radar'
 import type { TonightBatchSpec, TonightStatus } from './tonight'
+import type { TournamentStatus } from './tournament'
 import type { CloudLane, CloudProviderId } from './cloud-lane'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
@@ -896,6 +897,16 @@ export const IPC = {
   TONIGHT_START: 'tonight:start',
   TONIGHT_STOP: 'tonight:stop',
   TONIGHT_STATUS: 'tonight:status',
+  /**
+   * M547. A TOURNAMENT's doors over the runner: start one (parsed by name in
+   * main; main makes each entrant's worktree and chat through the create
+   * door and starts its checked auto run), stop it (every run stopped, the
+   * field scored as it stands), and read its status. The renderer mints the
+   * entrants' panel ids and places their chats; main runs them.
+   */
+  TOURNAMENT_START: 'tournament:start',
+  TOURNAMENT_STOP: 'tournament:stop',
+  TOURNAMENT_STATUS: 'tournament:status',
   /**
    * M543. CLOUD LANES (lane H): a task handed to a cloud agent and read back
    * as a pull request (main/cloud-lanes.ts). `dispatch` asks the person in
@@ -2134,6 +2145,12 @@ export interface CanvasBridge {
     start(batch: TonightBatchSpec): Promise<{ kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }>
     stop(): Promise<boolean>
     status(): Promise<TonightStatus | null>
+  }
+  /** M547. See TOURNAMENT_START. The spec is `shared/tournament.ts`'s, each entrant naming its panel. */
+  tournament: {
+    start(spec: unknown): Promise<{ kind: 'started'; status: TournamentStatus } | { kind: 'refused'; reason: string }>
+    stop(): Promise<boolean>
+    status(): Promise<TournamentStatus | null>
   }
   /** M312. See SETUP_READ. */
   setup: {

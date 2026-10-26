@@ -72,6 +72,8 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   'swarm',
   // M480. A night of auto runs across every lane: the person's to start.
   'tonight',
+  // M548. Several agents and worktrees at once, and Pick closes chats: the person's to start and to pick.
+  'tournament',
   // M543. Sends the task to GitHub as an issue someone else's agent picks up.
   'cloud-send',
   // M544. A merge lands code on someone's default branch.

@@ -110,7 +110,9 @@
       "scripts/verify-cloud.cjs"
     ],
     "I": [
-      "scripts/verify-tournament.cjs"
+      "scripts/verify-tournament.cjs",
+      "src/shared/tournament.ts",
+      "src/main/tournament-runner.ts"
     ],
     "J": [
       "scripts/verify-vm.cjs"

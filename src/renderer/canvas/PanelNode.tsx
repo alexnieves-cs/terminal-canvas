@@ -459,6 +459,8 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
       // action every other door takes — with the shape chosen, so
       // the sheet opens on it rather than on a blank arrangement.
       onSwarm={(itemId, preset) => paletteActionsRef.current?.beginStartWork({ itemId, swarm: preset })}
+      // M548. The tournament verb, through the same palette member its row and line call; a refusal lands on the card.
+      onTournament={(itemId) => { void paletteActionsRef.current?.runTournament(itemId).then((r) => { if (r.kind === 'refused') patchWorkItem(itemId, { note: r.reason }) }) }}
       onMergeCloud={(panelId) => { const a = paletteActionsRef.current; if (a !== undefined && a !== null) void a.mergeCloud(panelId).then((r) => a.say(r.kind === 'refused' ? r.reason : r.note ?? '')) }}
       onSendToCloud={(panelId, provider) => { const a = paletteActionsRef.current; if (a !== undefined && a !== null) void a.sendToCloud(panelId, provider).then((r) => a.say(r.kind === 'refused' ? r.reason : r.note ?? '')) }}
       agentAvailable={claudeAvailable(presetRows) || codexAvailable(presetRows)}
