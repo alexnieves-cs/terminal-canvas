@@ -14,6 +14,13 @@ Five streams run at once on separate branches, each opened as its own PR against
 | E | Cut and untangle | M495–M509 | Cut list, Follow, `Canvas.tsx` split, memory cap, command panels |
 | F | Visual and motion polish | M510–M519 | State at a glance, one motion system, layout fixes; plan in [polish.md](polish.md) |
 | G | Borrowed ideas | M530–M539 | The gaps a scan of similar apps found: more agents built in, answers from the phone, allow every pending read, exact Claude states; plan in [borrow.md](borrow.md) |
+| H | Cloud lanes | M540–M545 | A lane whose agent runs in the cloud and comes back as a PR, in the same morning queue; plan in [bold.md](bold.md) |
+| I | Tournament mode | M546–M549 | One task on N agents, the check picks the winner; plan in [bold.md](bold.md) |
+| J | Sandboxed lanes | M550–M555 | A Tonight agent in a throwaway VM, prompts off, the Mac untouched; plan in [bold.md](bold.md) |
+| K | Fork from a turn | M556–M560 | Branch a session and its tree from any earlier turn; plan in [bold.md](bold.md) |
+| L | The night as a film | M561–M564 | A 60-second time-lapse of the night, rendered each morning; plan in [bold.md](bold.md) |
+| N | Browser demo | M565–M569 | The renderer on the web, fed by `world-sim`; plan in [bold.md](bold.md) |
+| O | A harness that learns | M570–M579 | A caught mistake becomes a rule, kept only if a replay proves it; plan in [bold.md](bold.md) |
 
 ## Setting your lane
 

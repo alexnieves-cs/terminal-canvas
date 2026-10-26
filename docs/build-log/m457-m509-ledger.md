@@ -91,3 +91,11 @@ Added after the run opened, at the owner's request. Plan: [docs/streams/polish.m
 | #57 | M533 | G3: ⌘⌥Y and a palette row allow every pending READ at once: Claude's Read, Grep, Glob, LS and NotebookRead with known input keys, every path inside a chat folder deeper than home, once each. Never an ACP kind, a write, a command, a web fetch, a `~` path or a `../` escape. Critic's findings fixed; symlinks are a stated limit (the check is lexical) | `verify:borrow` reads.1–3, `verify:rd-l-e`, `verify:palette` |
 | next PR | M534 | G4: a claude panel learns its state from claude's own hooks instead of guessing from a bell and silence. `--settings` per panel (never the person's settings file) adds Notification (questions only), Stop and UserPromptSubmit hooks running `tc hook`; a per-spawn secret in the panel's env proves which panel speaks, over the socket only. Stop ends a turn at once; a waiting question stays sticky. Under tmux the panel's values ride `new-session -e` (3.2+), since a pane inherits the server's env; the secret survives a reattach; the prompt repaint after Stop does not flicker busy. A fresh-context critic's five findings fixed. Ownership exception Q-005 (D and E finished) | `verify:borrow` hooks.1–8, `verify:control`, `verify:agent-state`, `verify:agent-session` |
 | next PR | M535 | G5: `tc view <file|url>` opens it on the canvas by writing a plan line — `create-browser`, `image-add`, or the new `file-open` (absolute paths, refused to a teammate's plan; doors: a drop, Open file…, an agent line, a workflow node). Refuses `;`, runs of spaces and other schemes. Ownership exception Q-006 | `verify:borrow` view.1–4, `verify:verbs`, `verify:palette` |
+
+## H–O — Bold directions (M540–M579)
+
+Plan: [docs/streams/bold.md](../streams/bold.md). 2026-10-26: Alex picked all seven ideas from the direction review ("do all of them").
+
+| PR | Milestone | What | Checks |
+|---|---|---|---|
+| this PR | M540 | Lanes H, I, J, K, L, N and O in `ownership.json` (each owns its `verify-<name>.cjs`; `bold.md` is shared), their `st:` fences, `streams.own.1` covers A–O, the run book's rows, `docs/streams/bold.md` | `verify:meta` streams.own.1 |

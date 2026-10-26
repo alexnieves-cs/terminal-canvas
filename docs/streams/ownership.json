@@ -8,7 +8,14 @@
     "D": "M487-M494",
     "E": "M495-M509",
     "F": "M510-M519",
-    "G": "M530-M539"
+    "G": "M530-M539",
+    "H": "M540-M545",
+    "I": "M546-M549",
+    "J": "M550-M555",
+    "K": "M556-M560",
+    "L": "M561-M564",
+    "N": "M565-M569",
+    "O": "M570-M579"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -23,7 +30,8 @@
     "src/renderer/canvas/Canvas.tsx",
     "src/renderer/styles.css",
     "scripts/verify-meta.cjs",
-    "scripts/verify-ipc-surface.cjs"
+    "scripts/verify-ipc-surface.cjs",
+    "docs/streams/bold.md"
   ],
   "lanes": {
     "A": [
@@ -97,6 +105,27 @@
     "G": [
       "docs/streams/borrow.md",
       "scripts/verify-borrow.cjs"
+    ],
+    "H": [
+      "scripts/verify-cloud.cjs"
+    ],
+    "I": [
+      "scripts/verify-tournament.cjs"
+    ],
+    "J": [
+      "scripts/verify-vm.cjs"
+    ],
+    "K": [
+      "scripts/verify-fork.cjs"
+    ],
+    "L": [
+      "scripts/verify-film.cjs"
+    ],
+    "N": [
+      "scripts/verify-demo.cjs"
+    ],
+    "O": [
+      "scripts/verify-learn.cjs"
     ]
   }
 }
