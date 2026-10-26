@@ -21,6 +21,8 @@ import {
 } from './composer-model'
 import { readDraft, writeDraft } from './chat-drafts'
 import { Markdown } from './Markdown'
+import { branchFromHere } from '@renderer/replay/replay-store'
+import { promptCount } from '@shared/turn-fork'
 import { TOOL_GLYPH, ToolOther, ChevronRight, ChevronDown, KIND_GLYPH, ArrowUp, Stop } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
@@ -287,6 +289,15 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
   const [sending, setSending] = useState(false)
   const [popup, setPopup] = useState<Popup | null>(null)
   const [decision, setDecision] = useState<{ turnId: string; text: string } | null>(null)
+  // M558 (lane K). "Fork from here" on an answer: the same verb as Replay's
+  // Branch, at the turn this answer closes; its one sentence shows on the row.
+  const [forkSaid, setForkSaid] = useState<{ turnId: string; text: string } | null>(null)
+  const forkFrom = useCallback((turnId: string) => {
+    const at = chat.turns.findIndex((t) => t.id === turnId)
+    const turn = at < 0 ? 0 : promptCount(chat.turns.slice(0, at + 1))
+    setForkSaid({ turnId, text: 'Branching…' })
+    void branchFromHere(id, turn).then((answer) => setForkSaid({ turnId, text: answer.sentence }))
+  }, [chat.turns, id])
   const [decisionResult, setDecisionResult] = useState<string | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const stickRef = useRef(true)
@@ -657,7 +668,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
               </div>
             case 'text':
               /* M167. Unboxed PROSE at the measure, rendered from the markdown tree; `data-chat-assistant-text` stays on the element whose textContent is the answer (chat.2, chat.3). */
-              return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant" data-chat-row-id={row.id}><span className="chat__role">claude</span><div className="chat__text chat__prose" data-chat-assistant-text><Markdown text={row.text} /></div>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}{!row.live && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__remember" data-chat-remember title="Show this answer and its repository-memory scope before saving it as a decision" {...shellControl(() => { setDecision({ turnId: row.turnId, text: row.text }); setDecisionResult(null) })}>remember</button>}</div>
+              return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant" data-chat-row-id={row.id}><span className="chat__role">claude</span><div className="chat__text chat__prose" data-chat-assistant-text><Markdown text={row.text} /></div>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}{!row.live && props.readOnly !== true && <span className="chat__verbs"><button type="button" className="pf__verb pf__verb--word chat__remember" data-chat-remember title="Show this answer and its repository-memory scope before saving it as a decision" {...shellControl(() => { setDecision({ turnId: row.turnId, text: row.text }); setDecisionResult(null) })}>remember</button><button type="button" className="pf__verb pf__verb--word chat__fork" data-chat-fork title="Branch a new worktree and chat from this answer: the files as they were then, and the conversation up to here" {...shellControl(() => forkFrom(row.turnId))}>fork from here</button></span>}{forkSaid !== null && forkSaid.turnId === row.turnId && <span className="chat__fork-said" data-chat-fork-said>{forkSaid.text}</span>}</div>
             case 'thinking':
               return <ThinkingRow key={row.id} row={row} />
             case 'tool':

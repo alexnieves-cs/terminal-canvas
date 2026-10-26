@@ -356,9 +356,11 @@ app.whenReady().then(() => {
   // from lessons by a no-tools agent, and the person's answer to the draft.
   // +1: learn:prove (M573, lane O) — a draft's task replayed in a throwaway
   // worktree with the rule applied, judged by recurrence and the check.
+  // +2: fork:turns / fork:branch (M556–M558, lane K) — a chat's turn
+  // snapshots, and a worktree and conversation forked from one.
   // +2: team:flow / team:flow-write (M582, lane P) — the multiplayer canvas's
   // handoffs and shared review queue, read and written in the person's name.
-  const EXPECTED_CHANNELS = 232
+  const EXPECTED_CHANNELS = 234
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

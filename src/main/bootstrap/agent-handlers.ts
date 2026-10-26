@@ -183,6 +183,10 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     terminate: (id) => state.agents?.terminate(id) ?? false,
     capsChanged: () => { state.agents?.capsChanged() },
     dispose: ({ id, drop }) => {
+      // M560 (lane K). A closed chat's turn snapshots go with it; the cwd is
+      // read BEFORE the dispose, which forgets it.
+      const cwd = state.agents?.get(id)?.cwd
+      if (drop && cwd !== undefined) void stores.turnForks.drop(id, expandTilde(cwd))
       state.agents?.dispose(id)
       // M120. The sandbox folder goes with the chat — on dispose, never on exit.
       if (drop) { agentTranscripts.drop(id); dropBaseline(id); disposeSandbox(app.getPath('userData'), id, realSandboxFs) }
@@ -247,6 +251,13 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     },
     tonightStop: () => state.tonight?.stop() ?? false,
     tonightStatus: () => state.tonight?.status() ?? null,
+    // M556–M558 (lane K). The panel's cwd is main's own record of it, never
+    // one the renderer sends: a fork is built in the repository the agent ran in.
+    forkTurns: async (panelId) => {
+      const cwd = state.agents?.get(panelId)?.cwd
+      return cwd === undefined ? [] : stores.turnForks.list(panelId, expandTilde(cwd))
+    },
+    forkBranch: (req) => stores.turnForks.fork(req),
     importSession: ({ fromPanelId, toPanelId }) => {
       const sessionId = layoutStore.session(fromPanelId)
       if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }

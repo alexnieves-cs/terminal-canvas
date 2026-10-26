@@ -274,6 +274,17 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // M556 (lane K). Off by default: a snapshot writes objects and a hidden
+    // ref into the person's own repository, which is a write outside the app.
+    id: 'agents.turnSnapshots',
+    label: 'Snapshot each agent turn',
+    description: 'when an agent in a git repository finishes a turn, keep its files as a hidden snapshot (never a branch, never your index or stash), so Replay can branch a new worktree and conversation from that turn; the newest 50 per agent are kept, and closing the agent removes them',
+    keywords: ['fork', 'branch', 'turn', 'snapshot', 'replay', 'worktree', 'rewind', 'checkpoint', 'history'],
+    type: 'boolean',
+    default: false,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agent.bell',
     planWritable: true,
     label: 'Detect the terminal bell',

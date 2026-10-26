@@ -277,6 +277,10 @@ const bridge: CanvasBridge = {
     stop: () => ipcRenderer.invoke(IPC.TONIGHT_STOP),
     status: () => ipcRenderer.invoke(IPC.TONIGHT_STATUS)
   },
+  fork: {
+    turns: (panelId: string) => ipcRenderer.invoke(IPC.FORK_TURNS, panelId),
+    branch: (req: unknown) => ipcRenderer.invoke(IPC.FORK_BRANCH, req)
+  },
   tournament: {
     start: (spec: unknown) => ipcRenderer.invoke(IPC.TOURNAMENT_START, spec),
     stop: () => ipcRenderer.invoke(IPC.TOURNAMENT_STOP),

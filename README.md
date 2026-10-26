@@ -568,6 +568,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        update:check
                        image:read / starter:prepare
                        docx:import / flowchart:read / world:status / world:retry
+                       fork:turns / fork:branch
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / session:host / subagent:state
                        file:changed / usage:panel / attention:jump
