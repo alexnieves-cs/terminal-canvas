@@ -18,6 +18,7 @@ its own section, and records each decision it makes there.
 | L | The night as a film | M561–M564 | `verify:film` | M |
 | N | A live demo in the browser | M565–M569 | `verify:demo` | M |
 | O | A harness that learns | M570–M579 | `verify:learn` | L–XL |
+| Q | The app, hosted (opens from any browser) | M590–M599 | `verify:host` | L |
 
 There is no lane M, so a lane id is never read as a milestone.
 
@@ -249,6 +250,52 @@ prompts off without touching the Mac.
   door that would spawn or write says "in the app".
 - **M568** — a Pages workflow publishes it on merge to main.
 - **M569** — the README links it.
+
+## Q — The app, hosted (M590–M599)
+
+Alex's ask (2026-10-26): the whole app in the cloud, opened from any browser,
+no Mac needed. Lane N's demo is the renderer on a fake bridge; this lane is
+the renderer on the REAL one. [docs/hosted.md](../hosted.md) is the long form.
+
+- **M590** — the host: `src/main/index.ts` bundled with `electron` aliased to
+  `src/host/electron-shim.ts`, a hub that is `ipcMain` and `webContents.send`
+  over one WebSocket, and the tagged-JSON wire.
+- **M591** — the tab: the app's own preload, its `electron` import aliased to
+  the socket; dialogs, menu keys, paste and the lost-connection notice.
+- **M592** — the gate: a token, a cookie, an Origin check, back-off.
+- **M593** — dialogs and links asked of the person in the tab.
+- **M594** — the image (`deploy/host/Dockerfile`) and `host.yml`: a browser
+  against a host on Linux and against the image, on every PR.
+
+Decisions (lane Q):
+
+- **Main runs unedited, on a stand-in for Electron, not a port.** 24 files
+  in `src/main` import 17 Electron names; a shim of that surface is ~400
+  lines, and a rewrite of main would be a second main to keep in step. A
+  name the shim lacks is a load error on the host, and `host.shim.1`
+  inventories every import on every run. (2026-10-26, M590.)
+- **The tab runs the preload, not a second bridge.** Aliasing the preload's
+  three desktop imports (`electron`, `os`, Sentry's hook) makes every door
+  the preload's own line, so the hosted bridge cannot drift from the app's
+  (`host.preload.1`). Lane N's fake bridge stays the demo's; nothing is shared
+  but the renderer.
+- **One live tab.** Main has one window. A newer tab takes over and main sees
+  a navigation and a load, a Cmd+R in the app's terms, so tmux keeps every
+  shell (`host.hub.3`). Teammates share through the collab server (lane P),
+  never through one host.
+- **No token, no listening.** Off loopback the host refuses to start, and the
+  gate listens before main loads (`host.gate.1`, `host.boot.1`). The image
+  never carries a token (`host.docker.1`).
+- **Edit keys are the tab's.** Main's Edit menu reads main's clipboard,
+  which on a host is the server's; the tab emits `edit:*` itself and pastes
+  from the browser's paste event. Other menu keys are matched in the tab and
+  run on the host (`host.shim.3`, `host.keys.1`).
+- **Not an outward door.** Nothing leaves the person's machine: the page
+  and the host are theirs, and the gate is in front of both. The app's own
+  outward doors run on the host exactly as on the Mac, through `outward`.
+- **Booting main is host.yml's, not verify's.** The Mac runner's node-pty is
+  built for Electron's ABI; `verify:host` drives the hub, gate and shim in
+  plain node, and `host.yml` boots the real main on Linux with a browser.
 
 ## O — A harness that learns (M570–M579)
 
