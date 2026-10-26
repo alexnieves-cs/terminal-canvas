@@ -110,6 +110,11 @@ export function TeamFlowSection({ onGoToPanel, onRefused }: { onGoToPanel: (pane
                 </button>
                 <p className="inbox__meta"><span data-team-mine-standing="">{row.standing}</span></p>
                 <div className="inbox__group-verbs team-flow__verbs">
+                  {row.decided !== undefined && (
+                    <button type="button" className="approval__verb" data-team-mine-verb="settle"
+                      title="Close it with what the reviewers decided"
+                      {...shellControl(() => send({ kind: 'settle-review', workspaceId: row.workspaceId, reviewId: row.id }))}>Done</button>
+                  )}
                   <button type="button" className="approval__verb approval__verb--deny" data-team-mine-verb="withdraw"
                     title={row.kind === 'handoff' ? 'Call the offer back — you keep the agent' : 'Take it out of the queue'}
                     {...shellControl(() => send(row.kind === 'handoff'

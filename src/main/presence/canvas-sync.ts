@@ -235,21 +235,6 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
   }
 
   /** Authorise and apply, as this person. A refused rect is queued to snap back. */
-  /**
-   * M582. Close this person's reviews the verdicts have decided. Only the
-   * poster closes (the role table), so a decided review waits here for its
-   * poster's machine — and the queue already hides it meanwhile.
-   */
-  const settleReviews = (b: Binding): void => {
-    const me = deps.userId()
-    if (me === null || deps.share(b.workspaceId) === undefined) return
-    for (const q of readSharedReviews(b.doc)) {
-      if (q.review.owner !== me || q.closed !== undefined) continue
-      const d = reviewDecision(q.verdicts)
-      if (d !== 'open') write(b, { kind: 'review-close', reviewId: q.review.id, outcome: d })
-    }
-  }
-
   const write = (b: Binding, op: CanvasOp): Verdict => {
     const userId = deps.userId()
     if (userId === null) return { ok: false, reason: 'sign in to edit a shared canvas' }
@@ -352,14 +337,15 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
         if (tr.origin !== PERSIST_ORIGIN && tr.origin !== RENDERER_ORIGIN) persist(b)
         deps.onAsks?.(workspaceId)
       }
-      // M582. Handoffs and reviews touch no panel either: the asks' rule. A
-      // peer's verdict that decides one of OUR reviews is closed here, by its
-      // poster's machine, so the queue's record says how it ended.
+      // M582. Handoffs and reviews touch no panel either: the asks' rule.
+      // A decided review is NOT closed here on its own: an automatic close one
+      // tick after the first verdict would refuse a second reviewer's verdict
+      // in flight (and the server closes that reviewer's connection). Its
+      // poster closes it by pressing Done; the queue hides it meanwhile.
       const flowMaps = [doc.getMap(CANVAS_HANDOFFS), doc.getMap(CANVAS_REVIEWS)]
       const onFlow = (_events: Array<Y.YEvent<Y.AbstractType<unknown>>>, tr: Y.Transaction): void => {
         if (bindings.get(workspaceId) !== b || tr.origin === LOCAL_ORIGIN) return
         if (tr.origin !== PERSIST_ORIGIN && tr.origin !== RENDERER_ORIGIN) persist(b)
-        queueMicrotask(() => { if (bindings.get(workspaceId) === b) settleReviews(b) })
         deps.onFlow?.(workspaceId)
       }
       doc.on('update', onUpdate)
@@ -494,6 +480,12 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
           return write(b, { kind: 'review-verdict', reviewId: req.reviewId, by: me, verdict: req.kind === 'approve' ? 'approve' : 'changes' })
         case 'withdraw-review':
           return write(b, { kind: 'review-close', reviewId: req.reviewId, outcome: 'withdrawn' })
+        case 'settle-review': {
+          const q = readSharedReviews(b.doc).find((r) => r.review.id === req.reviewId)
+          const d = q === undefined ? 'open' : reviewDecision(q.verdicts)
+          if (d === 'open') return { ok: false, reason: 'nobody has judged that review yet' }
+          return write(b, { kind: 'review-close', reviewId: req.reviewId, outcome: d })
+        }
       }
     },
 

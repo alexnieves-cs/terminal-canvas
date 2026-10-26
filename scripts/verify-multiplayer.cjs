@@ -143,14 +143,17 @@ async function until(pred, ms = 3000) {
       approveAs: A('editor', { kind: 'review-verdict', reviewId: 'ha_r1', by: UC, verdict: 'approve' }, { userId: UB, panelOwner: null, review: { owner: UA, closed: false } }),
       approveClosed: A('editor', { kind: 'review-verdict', reviewId: 'ha_r1', by: UB, verdict: 'approve' }, { userId: UB, panelOwner: null, review: { owner: UA, closed: true } }),
       approveViewer: A('viewer', { kind: 'review-verdict', reviewId: 'ha_r1', by: UV, verdict: 'approve' }, { userId: UV, panelOwner: null, review: { owner: UA, closed: false } }),
-      close: A('owner', { kind: 'review-close', reviewId: 'ha_r1', outcome: 'approved' }, { userId: UA, panelOwner: null, review: { owner: UA, closed: false } }),
+      close: A('owner', { kind: 'review-close', reviewId: 'ha_r1', outcome: 'approved' }, { userId: UA, panelOwner: null, review: { owner: UA, closed: false, decision: 'approved' } }),
+      closeWithdraw: A('owner', { kind: 'review-close', reviewId: 'ha_r1', outcome: 'withdrawn' }, { userId: UA, panelOwner: null, review: { owner: UA, closed: false, decision: 'open' } }),
+      closeSelfApproved: A('owner', { kind: 'review-close', reviewId: 'ha_r1', outcome: 'approved' }, { userId: UA, panelOwner: null, review: { owner: UA, closed: false, decision: 'open' } }),
+      closeOverChanges: A('owner', { kind: 'review-close', reviewId: 'ha_r1', outcome: 'approved' }, { userId: UA, panelOwner: null, review: { owner: UA, closed: false, decision: 'changes' } }),
       closeOthers: A('editor', { kind: 'review-close', reviewId: 'ha_r1', outcome: 'approved' }, { userId: UB, panelOwner: null, review: { owner: UA, closed: false } }),
       closeTwice: A('owner', { kind: 'review-close', reviewId: 'ha_r1', outcome: 'approved' }, { userId: UA, panelOwner: null, review: { owner: UA, closed: true } })
     }
-    const rwant = { post: true, look: true, approve: true, close: true }
+    const rwant = { post: true, look: true, approve: true, close: true, closeWithdraw: true }
     const rwrong = Object.entries(rv).filter(([k, v]) => v.ok !== (rwant[k] === true)).map(([k]) => k)
-    ok('mp.auth.2 the review queue: posted by the agent\'s holder in their own name, bounded; claimed and judged by anyone else, in their own name, while open — never by its poster; closed by its poster once; a viewer does none of it',
-      rwrong.length === 0 && /own result/.test(rv.approveOwn.reason),
+    ok('mp.auth.2 the review queue: posted by the agent\'s holder in their own name, bounded; claimed and judged by anyone else, in their own name, while open — never by its poster; closed by its poster once, only as withdrawn or as the verdicts decided (never "approved" with no approval, or over a request for changes); a viewer does none of it',
+      rwrong.length === 0 && /own result/.test(rv.approveOwn.reason) && /nobody has judged/.test(rv.closeSelfApproved.reason) && /decided changes/.test(rv.closeOverChanges.reason),
       JSON.stringify({ rwrong }))
   }
 
@@ -167,11 +170,14 @@ async function until(pred, ms = 3000) {
     // The chain is ordered by n, never by `at`: h2's clock ran slow.
     const chain = M.flow.stewardOf('ha_c1', UA, [hr('h1', 1, UB, { [UB]: 'accept' }), hr('h2', 2, UC, { [UC]: 'accept' }), hr('h9', 1, UB, { [UB]: 'accept' }, 'ha_other')])
     const none = M.flow.stewardOf('ha_c1', UA, [hr('h1', 1, UB, {})])
+    // Two of one number (the server lets one in; a reader still agrees): the lower id wins, whatever the order.
+    const tieA = M.flow.stewardOf('ha_c1', UA, [hr('hb', 1, UC, { [UC]: 'accept' }), hr('ha', 1, UB, { [UB]: 'accept' })]).steward
+    const tieB = M.flow.stewardOf('ha_c1', UA, [hr('ha', 1, UB, { [UB]: 'accept' }), hr('hb', 1, UC, { [UC]: 'accept' })]).steward
     const D = M.flow.reviewDecision
     ok('mp.state.1 a named handoff is handed by its person\'s accept and ended by their decline (no one else\'s reply counts); an open one by the first accept, ties broken by user id, never its maker\'s; a withdrawal ends it; the holder follows the chain by number, not clock; one "changes" decides a review over any approvals',
       states[0] === 'open' && states[1].state === 'handed' && states[1].steward === UB && states[2] === 'declined' && states[3] === 'open' && states[4] === 'withdrawn' &&
         states[5] === 'open' && states[6].steward === UB && states[7] === 'open' &&
-        chain.steward === UC && chain.handed === 2 && chain.open === null && none.steward === UA && none.open !== null &&
+        chain.steward === UC && chain.handed === 2 && chain.open === null && none.steward === UA && none.open !== null && tieA === UB && tieB === UB &&
         D({}) === 'open' && D({ [UB]: 'approve' }) === 'approved' && D({ [UB]: 'approve', [UC]: 'changes' }) === 'changes',
       JSON.stringify({ states, chain: { s: chain.steward, h: chain.handed } }))
   }
@@ -193,6 +199,7 @@ async function until(pred, ms = 3000) {
     M.doc.applyCanvasOp(doc, { kind: 'handoff-open', handoff: h }, 'seed')
     const reply = kinds((d) => M.doc.applyCanvasOp(d, { kind: 'handoff-reply', handoffId: 'ha_h1', by: UB, reply: 'accept' }, 'x'))
     const withdraw = kinds((d) => M.doc.applyCanvasOp(d, { kind: 'handoff-withdraw', handoffId: 'ha_h1' }, 'x'))
+    const doubled = kinds((d) => { M.doc.applyCanvasOp(d, { kind: 'handoff-open', handoff: { ...h, id: 'ha_hx' } }, 'x'); M.doc.applyCanvasOp(d, { kind: 'handoff-open', handoff: { ...h, id: 'ha_hy', to: UC } }, 'x') })
     const rewrite = kinds((d) => d.getMap(M.ops.CANVAS_HANDOFFS).get('ha_h1').set('to', UC))
     const bornTaken = kinds((d) => { const fm = new Y.Map(); for (const [k, v] of Object.entries({ ...h, id: undefined, n: 1 })) if (v !== undefined) fm.set(k, v); fm.set('reply:' + UB, 'accept'); d.getMap(M.ops.CANVAS_HANDOFFS).set('ha_h2', fm) })
     M.doc.applyCanvasOp(doc, { kind: 'handoff-reply', handoffId: 'ha_h1', by: UB, reply: 'accept' }, 'seed')
@@ -203,12 +210,12 @@ async function until(pred, ms = 3000) {
     const rAll = kinds((d) => { M.doc.applyCanvasOp(d, { kind: 'review-claim', reviewId: 'ha_r1', by: UA }, 'x'); M.doc.applyCanvasOp(d, { kind: 'review-verdict', reviewId: 'ha_r1', by: UA, verdict: 'approve' }, 'x') })
     const rClose = kinds((d) => M.doc.applyCanvasOp(d, { kind: 'review-close', reviewId: 'ha_r1', outcome: 'approved' }, 'x'))
     const rJunk = kinds((d) => d.getMap(M.ops.CANVAS_REVIEWS).get('ha_r1').set('verdict:' + UA, 'lgtm'))
-    ok('mp.inspect.1 the server\'s read-back: handoff open / reply / withdraw and review open / claim / verdict / close come back as themselves, a handoff-open with the holder chain as it stood; a rewritten field, a second reply, a handoff born already taken and a verdict that is not one are unknown',
-      opened.join() === 'handoff-open' && ctxOpen?.panelSteward === UA && ctxOpen?.panelHanded === 0 && ctxOpen?.panelHandoffOpen === false &&
+    ok('mp.inspect.1 the server\'s read-back: handoff open / reply / withdraw and review open / claim / verdict / close come back as themselves, a handoff-open with the holder chain as it stood; a rewritten field, a second reply, a handoff born already taken, a second handoff of one panel in the same update and a verdict that is not one are unknown',
+      opened.join() === 'handoff-open' && doubled.filter((k) => k === 'handoff-open').length === 1 && doubled.some((k) => /second handoff/.test(k)) && ctxOpen?.panelSteward === UA && ctxOpen?.panelHanded === 0 && ctxOpen?.panelHandoffOpen === false &&
         reply.join() === 'handoff-reply' && withdraw.join() === 'handoff-withdraw' && /^unknown:.*rewritten/.test(rewrite.join()) &&
         /^unknown:.*malformed/.test(bornTaken.join()) && /^unknown:.*rewritten/.test(replyAgain.join()) &&
         rOpen.join() === 'review-open' && rAll.slice().sort().join() === 'review-claim,review-verdict' && rClose.join() === 'review-close' && /^unknown:/.test(rJunk.join()),
-      JSON.stringify({ opened, ctxOpen, reply, withdraw, rewrite, bornTaken, replyAgain, rOpen, rAll, rClose, rJunk }))
+      JSON.stringify({ opened, doubled, ctxOpen, reply, withdraw, rewrite, bornTaken, replyAgain, rOpen, rAll, rClose, rJunk }))
   }
 
   // ── M582: three machines — a handoff, scrubbed, taken, handed on ─────────
@@ -271,13 +278,17 @@ async function until(pred, ms = 3000) {
     const lookingA = A.sync.teamFlow(nameOf).reviews[0]
     const viewerSaid = V.sync.writeFlow({ kind: 'approve', workspaceId: 'w1', reviewId: q[0]?.reviewId ?? '' })
     const approved = A.sync.writeFlow({ kind: 'approve', workspaceId: 'w1', reviewId: q[0]?.reviewId ?? '' })
-    await settle(); await settle()
+    await settle()
+    const notYet = M.doc.readSharedReviews(A.doc)[0]?.closed
+    const mineDecided = B.sync.teamFlow(nameOf).mine.find((m) => m.kind === 'review')
+    const done = B.sync.writeFlow({ kind: 'settle-review', workspaceId: 'w1', reviewId: q[0]?.reviewId ?? '' })
+    await settle()
     const closed = M.doc.readSharedReviews(A.doc)[0]
-    ok('mp.review.1 B, who holds the agent now, puts it in the review queue (scrubbed); A sees it with B\'s name; B cannot approve their own; A says they are looking and B sees "Ada looking"; a viewer\'s verdict is refused; A approves, it leaves A\'s queue and B\'s machine closes it as approved',
+    ok('mp.review.1 B, who holds the agent now, puts it in the review queue (scrubbed); A sees it with B\'s name; B cannot approve their own; A says they are looking and B sees "Ada looking"; a viewer\'s verdict is refused; A approves and it leaves A\'s queue; nothing closes it behind a second reviewer\'s back — B sees it decided and Done closes it as approved',
       posted.ok === true && q.length === 1 && q[0].ownerName === 'Bea' && q[0].scrubbed === 1 && !q[0].summary.includes(secret) && q[0].panelId === 'c1' &&
         own.ok === false && /own result/.test(own.reason) && looked.ok === true && lookingB?.standing === 'Ada looking' && lookingA?.mine === true && lookingA?.lookers.join() === 'you' &&
         viewerSaid.ok === false && approved.ok === true && A.sync.teamFlow(nameOf).reviews.length === 0 &&
-        closed?.closed === 'approved' && B.sync.teamFlow(nameOf).mine.every((m) => m.kind !== 'review'),
+        notYet === undefined && mineDecided?.decided === 'approved' && done.ok === true && closed?.closed === 'approved' && B.sync.teamFlow(nameOf).mine.every((m) => m.kind !== 'review'),
       JSON.stringify({ posted, q, own, lookingB, lookingA, viewerSaid, approved, closed }))
   }
 

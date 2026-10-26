@@ -267,7 +267,7 @@ export interface OpContext {
   /** M581. For handoff-reply / handoff-withdraw: the handoff as it stood, or null when there is none. */
   handoff?: { from: string; to: string; settled: boolean } | null
   /** M581. For review-claim / review-verdict / review-close: the review as it stood, or null when there is none. */
-  review?: { owner: string; closed: boolean } | null
+  review?: { owner: string; closed: boolean; decision?: 'open' | 'approved' | 'changes' } | null
 }
 
 export type Verdict = { ok: true } | { ok: false; reason: string }
@@ -434,7 +434,11 @@ export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx:
       const r = ctx.review
       if (r === undefined || r === null) return refuse(`no review is called ${op.reviewId}`)
       if (r.owner !== ctx.userId) return refuse('only the person who asked for a review closes it')
-      return r.closed ? refuse('that review is already closed') : OK
+      if (r.closed) return refuse('that review is already closed')
+      // The poster withdraws, or records what the reviewers decided — never
+      // their own verdict on their own result.
+      if (op.outcome !== 'withdrawn' && op.outcome !== r.decision) return refuse(r.decision === 'open' ? 'nobody has judged that review yet' : `the reviewers decided ${r.decision}`)
+      return OK
     }
   }
 }

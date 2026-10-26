@@ -59,7 +59,7 @@
  */
 import * as Y from 'yjs'
 import { TEAM_DOC_MAP } from './team'
-import { handoffState, stewardOf, type HandoffRead, type ReviewRead } from './team-flow'
+import { handoffState, reviewDecision, stewardOf, type HandoffRead, type ReviewRead } from './team-flow'
 import {
   ASK_OUTCOMES, CANVAS_ASKS, CANVAS_FILES, CANVAS_HANDOFFS, CANVAS_REVIEWS, HANDOFF_NOTE_MAX, REVIEW_OUTCOMES, REVIEW_SUMMARY_MAX, REVIEW_TITLE_MAX, RECT_FIELDS, SHARED_CONNECTORS_MAX, SHARED_SHAPE_MAX, SHARED_TEXT_MAX,
   type AskAnswer, type AskOutcome, type CanvasOp, type HandoffReply, type ReviewOutcome, type ReviewVerdict, type SharedHandoff, type SharedReview, type OpContext, type PanelContentField, type SharedAsk, type SharedGroup, type SharedPanel, type SharedRelay
@@ -185,23 +185,35 @@ export function panelSteward(doc: Y.Doc, panel: string): ReturnType<typeof stewa
 }
 
 /** The context handoff-open / review-open is judged in: the panel's owner and its steward chain. */
-function stewardContext(doc: Y.Doc, panel: string): Pick<OpContext, 'panelOwner' | 'panelSteward' | 'panelHandoffOpen' | 'panelHanded'> {
-  const fm = panelsOf(doc).get(panel)
-  const owner = fm === undefined || isTombstone(fm) ? null : str(fm.get('owner')) ?? null
+type StewardContext = Pick<OpContext, 'panelOwner' | 'panelSteward' | 'panelHandoffOpen' | 'panelHanded'>
+
+/** The context handoff-open / review-open is judged in, from a panel's owner and the handoffs as read (one read per judgement, never one per panel). */
+function stewardFrom(panel: string, owner: string | null, reads: readonly HandoffRead[]): StewardContext {
   if (owner === null) return { panelOwner: null, panelSteward: null }
-  const s = stewardOf(panel, owner, readSharedHandoffs(doc))
+  const s = stewardOf(panel, owner, reads)
   return { panelOwner: owner, panelSteward: s.steward, panelHandoffOpen: s.open !== null, panelHanded: s.handed }
 }
 
-function handoffContext(doc: Y.Doc, id: string): OpContext['handoff'] {
-  const q = readSharedHandoffs(doc).find((r) => r.handoff.id === id)
-  return q === undefined ? null : { from: q.handoff.from, to: q.handoff.to, settled: handoffState(q.handoff, q.replies, q.withdrawn).state !== 'open' }
+function stewardContext(doc: Y.Doc, panel: string): StewardContext {
+  const fm = panelsOf(doc).get(panel)
+  const owner = fm === undefined || isTombstone(fm) ? null : str(fm.get('owner')) ?? null
+  return stewardFrom(panel, owner, owner === null ? [] : readSharedHandoffs(doc).filter((q) => q.handoff.panel === panel))
 }
 
+const handoffContextOf = (q: HandoffRead | undefined): OpContext['handoff'] =>
+  q === undefined ? null : { from: q.handoff.from, to: q.handoff.to, settled: handoffState(q.handoff, q.replies, q.withdrawn).state !== 'open' }
+
+function handoffContext(doc: Y.Doc, id: string): OpContext['handoff'] {
+  return handoffContextOf(readSharedHandoffs(doc).find((r) => r.handoff.id === id))
+}
+
+// The verdicts as they stood ride along: a poster may close only with what
+// the verdicts decided (or withdraw), never call their own result approved.
+const reviewContextOf = (q: ReviewRead | undefined): OpContext['review'] =>
+  q === undefined ? null : { owner: q.review.owner, closed: q.closed !== undefined, decision: reviewDecision(q.verdicts) }
+
 function reviewContext(doc: Y.Doc, id: string): OpContext['review'] {
-  const fm = reviewsOf(doc).get(id)
-  const owner = fm === undefined ? undefined : str(fm.get('owner'))
-  return owner === undefined ? null : { owner, closed: fm?.has('closed') === true }
+  return reviewContextOf(readSharedReviews(doc).find((r) => r.review.id === id))
 }
 
 /** One shared file's text, or undefined when that file is not shared (or the key holds something malformed). */
@@ -568,13 +580,18 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
   asks.forEach((fm, key) => { askBefore.set(key, { owner: str(fm.get('owner')) ?? null, fields: new Set(fm.keys()) }) })
   // M581. The same, for handoffs and reviews — and each panel's steward chain
   // as it stood, so an update cannot hand itself the right to hand.
+  // Each map is READ ONCE here (a judgement touching no handoff costs one
+  // pass, not one pass per panel), and every context is built from these
+  // snapshots, so it describes the doc before the update whenever it is asked.
+  const handoffReads = readSharedHandoffs(copy), reviewReads = readSharedReviews(copy)
   const handoffBefore = new Map<string, { ctx: OpContext['handoff']; fields: Set<string> }>()
-  handoffs.forEach((fm, key) => { handoffBefore.set(key, { ctx: handoffContext(copy, key), fields: new Set(fm.keys()) }) })
+  handoffs.forEach((fm, key) => { handoffBefore.set(key, { ctx: handoffContextOf(handoffReads.find((q) => q.handoff.id === key)), fields: new Set(fm.keys()) }) })
   const reviewBefore = new Map<string, { ctx: OpContext['review']; fields: Set<string> }>()
-  reviews.forEach((fm, key) => { reviewBefore.set(key, { ctx: reviewContext(copy, key), fields: new Set(fm.keys()) }) })
-  const stewardBefore = new Map<string, ReturnType<typeof stewardContext>>()
-  const stewardCtx = (panel: string): ReturnType<typeof stewardContext> => stewardBefore.get(panel) ?? { panelOwner: null, panelSteward: null }
-  for (const key of panels.keys()) stewardBefore.set(key, stewardContext(copy, key))
+  reviews.forEach((fm, key) => { reviewBefore.set(key, { ctx: reviewContextOf(reviewReads.find((q) => q.review.id === key)), fields: new Set(fm.keys()) }) })
+  const stewardCtx = (panel: string): StewardContext => stewardFrom(panel, ctxBefore.get(panel)?.panelOwner ?? null, handoffReads.filter((q) => q.handoff.panel === panel))
+  // One handoff per panel per update: each is judged against the chain as it
+  // stood, so two in one update would both pass "nothing is waiting".
+  const handoffPanels = new Set<string>()
   // Context is read BEFORE the update applies: "whose panel was it" must not
   // be answered by the update that is being judged.
   const ctxBefore = new Map<string, Omit<OpContext, 'userId'>>()
@@ -708,6 +725,8 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
           const fm = handoffs.get(key)
           const h = handoffOf(key, fm)
           if (h === undefined || [...(fm?.keys() ?? [])].some((k) => !HANDOFF_FIELDS.has(k))) { unknown(`handoff ${key} created malformed`); continue }
+          if (handoffPanels.has(h.panel)) { unknown(`a second handoff of ${h.panel} in one update`); continue }
+          handoffPanels.add(h.panel)
           out.push({ op: { kind: 'handoff-open', handoff: h }, ctx: stewardCtx(h.panel) })
         }
       } else if (parent === handoffs && item !== null && typeof item.parentSub === 'string') {

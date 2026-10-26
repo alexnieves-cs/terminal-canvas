@@ -20,8 +20,8 @@ This lane adds those two, in the same doc and through the same one table.
   anything else in those maps comes back `unknown`. The policy (`shared/team-flow.ts`):
   `handoffState`, `stewardOf`, `reviewDecision`, the rows and their words.
 - **M582 — main.** `CanvasSync.teamFlow` (the person's queue) and `writeFlow` (one write in
-  their name; ids, the chain number, the time and the scrub are made here, and a decided
-  review is closed by its poster's machine). `createTeamFlowDoors` adds the room's people.
+  their name; ids, the chain number, the time and the scrub are made here; a decided
+  review is closed by its poster's Done, as the verdicts decided). `createTeamFlowDoors` adds the room's people.
   Channels `team:flow`, `team:flow-write` (body shape-checked by `parseFlowRequest`, no name
   in it) and `team:flow-changed`; `INERT_PRESENCE` answers none.
 - **M583 — the screens.** Needs you gains *Handed to you* (Take it, Decline), *Review queue*
@@ -48,6 +48,14 @@ canvas-syncs over a relay (`mp.flow.1–2`, `mp.review.1`), the request parser
 Hocuspocus server with real providers (`srv.mp.1`). `verify:canvas-sync` 98/98,
 `verify:palette`, `verify:verbs`, `verify:styles`, `verify:presence`, `verify:team` stay green.
 
+## Critic
+
+A fresh-context critic found three gate defects, all fixed with checks: one update could
+open two handoffs of one panel (now refused, and ties break by id); a poster could close
+their own review as approved (now only withdrawn or what the verdicts decided); and the
+gate re-read every handoff per panel on every update (now one read per update). It also
+found that auto-closing a decided review raced a second reviewer, so Done replaces it.
+
 ## Owed
 
 - **The audit trail** (request Q-008): the server judges the seven ops but does not yet
@@ -58,5 +66,7 @@ Hocuspocus server with real providers (`srv.mp.1`). `verify:canvas-sync` 98/98,
   note field exists end to end and wants a small sheet.
 - **Electron DOM checks and a golden** for the new rows, and a live two-Mac run.
 - **An honest race** (shared with the asks): two people accepting an open offer within the
-  same replication window, or a verdict racing its close, has the server refuse the later
-  write and close that connection.
+  same replication window, or a verdict racing Done, has the server refuse the later write
+  and close that connection; the client has no reset after a 4403 yet.
+- **Server-side scrub.** Words are scrubbed on the writer's machine, as the asks' are; a
+  modified client could send raw text.

@@ -300,8 +300,14 @@ server).
   one at a time. The steward is the taker of the highest `n`.
 - **Nobody reviews their own result.** The poster cannot claim or judge their
   own review: the point is a second pair of eyes. One "changes" decides it over
-  any approvals (the asks' rule); otherwise one approval. The poster's machine
-  closes a decided review; the queue hides it as soon as it is decided.
+  any approvals (the asks' rule); otherwise one approval. The queue hides a
+  review as soon as it is decided, and its poster closes it with Done — only as
+  withdrawn or as the verdicts decided, never "approved" on their own word. It
+  is not closed automatically: a close one tick after the first verdict would
+  refuse a second reviewer's verdict in flight.
+- **One handoff per panel per update.** Each is judged against the chain as it
+  stood, so the server refuses a second in the same update, and `stewardOf`
+  breaks a tie by id so every reader agrees.
 - **Names are main's.** `team:flow-write` names a workspace, an object and a
   choice, never a person; main writes the signed-in person, and the server
   checks that against the connection. Words leave scrubbed and counted

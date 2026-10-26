@@ -42,7 +42,7 @@ export function handoffState(h: Pick<SharedHandoff, 'to' | 'from'>, replies: Rea
  * the server as each one opens, so a skewed clock cannot reorder it.
  */
 export function stewardOf(panel: string, owner: string, reads: readonly HandoffRead[]): { steward: string; handed: number; open: HandoffRead | null } {
-  let steward = owner, top = 0, handed = 0
+  let steward = owner, top = 0, handed = 0, topId = ''
   let open: HandoffRead | null = null
   for (const q of reads) {
     if (q.handoff.panel !== panel) continue
@@ -50,7 +50,9 @@ export function stewardOf(panel: string, owner: string, reads: readonly HandoffR
     if (s.state === 'open') open = q
     if (s.state !== 'handed') continue
     handed += 1
-    if (q.handoff.n > top) { top = q.handoff.n; steward = s.steward }
+    // Ties by id: the server lets only one handoff per number in, but a reader
+    // must still answer the same on every peer whatever the map's order.
+    if (q.handoff.n > top || (q.handoff.n === top && q.handoff.id < topId)) { top = q.handoff.n; topId = q.handoff.id; steward = s.steward }
   }
   return { steward, handed, open }
 }
@@ -212,7 +214,7 @@ export type FlowRequest =
   | { kind: 'hand-off'; workspaceId: string; panelId: string; to: string; note: string }
   | { kind: 'take' | 'decline' | 'withdraw'; workspaceId: string; handoffId: string }
   | { kind: 'ask-review'; workspaceId: string; panelId: string; title: string; summary: string }
-  | { kind: 'look' | 'approve' | 'request-changes' | 'withdraw-review'; workspaceId: string; reviewId: string }
+  | { kind: 'look' | 'approve' | 'request-changes' | 'withdraw-review' | 'settle-review'; workspaceId: string; reviewId: string }
 
 const FLOW_ID = /^[A-Za-z0-9_-]{1,160}$/
 const FLOW_WS = /^[A-Za-z0-9_-]{1,64}$/
@@ -242,7 +244,7 @@ export function parseFlowRequest(raw: unknown): FlowRequest | undefined {
       if (panelId === undefined || title === undefined || summary === undefined || title.trim() === '') return undefined
       return { kind, workspaceId: ws, panelId, title, summary }
     }
-    case 'look': case 'approve': case 'request-changes': case 'withdraw-review': {
+    case 'look': case 'approve': case 'request-changes': case 'withdraw-review': case 'settle-review': {
       const reviewId = id('reviewId')
       return reviewId === undefined ? undefined : { kind, workspaceId: ws, reviewId }
     }
@@ -259,6 +261,8 @@ export interface FlowMineRow {
   panelTitle: string
   /** One line: "waiting for Bea", "Cal is looking", "approved by Dee". */
   standing: string
+  /** A review the verdicts have decided, for its poster to close (Done). */
+  decided?: 'approved' | 'changes'
 }
 
 /** `team:flow`: everything the person's Needs you shows from the team's handoffs and review queue. */
@@ -298,7 +302,8 @@ export function mineRows(
   }
   for (const q of reviews) {
     if (q.review.owner !== me || q.closed !== undefined) continue
-    out.push({ workspaceId, kind: 'review', id: q.review.id, panelId: q.review.panel, panelTitle: titles.get(q.review.panel) ?? q.review.title, standing: reviewStandingWords(q, nameOf) })
+    const d = reviewDecision(q.verdicts)
+    out.push({ workspaceId, kind: 'review', id: q.review.id, panelId: q.review.panel, panelTitle: titles.get(q.review.panel) ?? q.review.title, standing: reviewStandingWords(q, nameOf), ...(d === 'open' ? {} : { decided: d }) })
   }
   return out
 }
