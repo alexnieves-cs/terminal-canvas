@@ -29,6 +29,10 @@ This lane adds those two, in the same doc and through the same one table.
   asks' shape; the notifications label counts them. Palette rows: *Hand off X to Bea*,
   *Offer X to anyone on the team*, *Ask the team to review X* (at rest for the captured
   panel, by search for the rest), and *Take*, *Approve*, *Ask for changes* for what waits.
+  A handoff to this person also joins the attention cycle: ⌘J and the pill's Jump walk
+  it after the agents waiting on them, and the bell counts it once per panel (asked for by
+  the UI/UX audit, PR #72). It stays off the frozen queue's kinds; a panel already queued
+  keeps its place, so nothing is visited or counted twice.
 
 ## Decisions, and why
 
@@ -41,10 +45,10 @@ See bold.md § P decisions. The ones most likely to be undone:
 
 ## Checks
 
-`verify:multiplayer` (new, plain node, 11 checks): the role tables (`mp.auth.1–2`), the
+`verify:multiplayer` (new, plain node): the role tables (`mp.auth.1–2`), the
 state rules (`mp.state.1`), the server's read-back (`mp.inspect.1`), three real
 canvas-syncs over a relay (`mp.flow.1–2`, `mp.review.1`), the request parser
-(`mp.parse.1`), the doors (`mp.doors.1`), the screens' wiring (`mp.ui.1`), and a real
+(`mp.parse.1`), the doors (`mp.doors.1`), the screens' wiring (`mp.ui.1`), the attention cycle's wiring (`mp.attn.1`), and a real
 Hocuspocus server with real providers (`srv.mp.1`). `verify:canvas-sync` 98/98,
 `verify:palette`, `verify:verbs`, `verify:styles`, `verify:presence`, `verify:team` stay green.
 

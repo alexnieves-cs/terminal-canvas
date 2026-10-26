@@ -261,7 +261,11 @@ function DockImpl({
   // queue itself is empty — otherwise the button would say nothing is
   // waiting while the popover still lists them.
   const attentionQueue = useAttentionQueue(useAttentionCensus())
-  const badgeCount = attentionQueue.length
+  // M583. A handoff to this person counts on the bell like a stopped agent,
+  // once per panel: a panel already in the queue is not counted twice.
+  const queuedPanels = new Set(attentionQueue.map((item) => item.panelId))
+  const handedOnly = new Set(flow.handoffs.map((r) => r.panelId).filter((id) => !queuedPanels.has(id))).size
+  const badgeCount = attentionQueue.length + handedOnly
   const notificationsLabel = badgeCount > 0
     ? `Notifications: ${needsYouCount(badgeCount)}`
     : snoozed.length > 0

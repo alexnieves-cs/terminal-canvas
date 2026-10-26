@@ -412,6 +412,15 @@ async function until(pred, ms = 3000) {
         /teamFlow: 'a handoff and a review are between people/.test(verbs))
   }
 
+  {
+    const read = (p) => readFileSync(join(root, p), 'utf8')
+    const dock = read('src/renderer/shell/Dock.tsx'), gestures = read('src/renderer/canvas/usePanelGestures.ts'), store = read('src/renderer/team-flow/useTeamFlow.ts')
+    ok('mp.attn.1 a handoff to this person joins the attention cycle: ⌘J and the pill\'s Jump walk withHandoffs(attentionIds()), which appends handed panels not already queued; the bell counts each handed panel the queue does not already hold',
+      (gestures.match(/reachableQueue\(withHandoffs\(attentionIds\(\)\), known\)/g) || []).length === 2 &&
+        /export function withHandoffs[\s\S]*?!seen\.has\(id\)/.test(store) &&
+        /const badgeCount = attentionQueue\.length \+ handedOnly/.test(dock) && /!queuedPanels\.has\(id\)/.test(dock))
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)

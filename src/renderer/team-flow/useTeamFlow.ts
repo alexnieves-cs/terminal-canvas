@@ -77,3 +77,24 @@ export async function writeTeamFlow(req: FlowRequest): Promise<string | null> {
     return 'that did not reach the app — try again'
   }
 }
+
+/**
+ * The panels handed to this person and not yet answered, in the order main
+ * listed them. Read at keypress time by ⌘J and the pill's Jump, which are
+ * not React and cannot subscribe.
+ */
+export function handedPanelIds(): string[] {
+  install()
+  return [...new Set(snapshot.handoffs.map((r) => r.panelId))]
+}
+
+/**
+ * ⌘J's queue with the handed panels joined after the agents that wait on
+ * this person: a handoff is a person waiting, and found only by opening the
+ * panel it would not be. A panel already in the queue keeps its place, so
+ * one panel is never visited twice in a cycle.
+ */
+export function withHandoffs(queue: readonly string[]): string[] {
+  const seen = new Set(queue)
+  return [...queue, ...handedPanelIds().filter((id) => !seen.has(id))]
+}
