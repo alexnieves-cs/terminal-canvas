@@ -1,3 +1,5 @@
+import type { MorningItem, MorningKind } from './return-briefing'
+
 /**
  * M541. A CLOUD LANE — a lane whose agent runs on someone else's computer and
  * comes back as a pull request, as data.
@@ -50,6 +52,13 @@ export interface CloudProvider {
   needs: string
   /** What a lane with no PR after NO_PR_AFTER_MS most likely means for this provider. */
   stall: string
+  /**
+   * M544. The branch prefix this provider's PRs come from. A PR is adopted by
+   * its body ("Fixes #12"), which anyone can write; one whose branch is not
+   * the agent's is not trusted to be the agent's work, so its checks never
+   * make the lane ready.
+   */
+  headPrefix: string
 }
 
 /**
@@ -69,7 +78,8 @@ export const PROVIDERS: readonly CloudProvider[] = [
     assignee: 'copilot-swe-agent[bot]',
     assigneeMatch: 'copilot',
     needs: 'Copilot coding agent enabled for this repository',
-    stall: 'no pull request after two hours — Copilot may not have started; check the issue for its reaction'
+    stall: 'no pull request after two hours — Copilot may not have started; check the issue for its reaction',
+    headPrefix: 'copilot/'
   },
   {
     id: 'claude-action',
@@ -77,7 +87,8 @@ export const PROVIDERS: readonly CloudProvider[] = [
     dispatch: 'comment',
     mention: '@claude',
     needs: 'the Claude GitHub app and its workflow installed in this repository',
-    stall: 'no pull request after two hours — Claude may have pushed a branch and left a "Create PR" link in the issue; open the issue'
+    stall: 'no pull request after two hours — Claude may have pushed a branch and left a "Create PR" link in the issue; open the issue',
+    headPrefix: 'claude/'
   }
 ]
 
@@ -134,6 +145,12 @@ export interface PrFact {
   additions?: number
   deletions?: number
   changedFiles?: number
+  /** M544. `owner/name` of the head branch's repository; a fork's differs from the lane's. */
+  headRepo?: string
+  /** M544. Who opened it, shown in the merge ask. */
+  author?: string
+  /** M544. GitHub's `mergeable_state` (clean, dirty, blocked, behind, unstable…), on the single-PR read. */
+  mergeableState?: string
 }
 
 export interface CheckFact {
@@ -178,7 +195,7 @@ const PASSING = new Set(['success', 'neutral', 'skipped'])
 
 export interface DerivedState { state: CloudLaneState; reason: string }
 
-export function cloudLaneState(lane: Pick<CloudLane, 'dispatchedAt' | 'provider'> & { handoff?: 'failed' }, facts: CloudFacts, now: number): DerivedState {
+export function cloudLaneState(lane: Pick<CloudLane, 'dispatchedAt' | 'provider'> & { handoff?: 'failed'; repo?: string }, facts: CloudFacts, now: number): DerivedState {
   const { pr, issue } = facts
   if (pr !== null && pr.merged) return { state: 'merged', reason: `#${pr.number} merged` }
   if (pr !== null && pr.state === 'closed') return { state: 'closed', reason: `#${pr.number} closed without merging` }
@@ -187,6 +204,16 @@ export function cloudLaneState(lane: Pick<CloudLane, 'dispatchedAt' | 'provider'
     if (lane.handoff === 'failed') return { state: 'needs-you', reason: `the agent was never handed issue #${issue.number} — hand it over on GitHub` }
     if (now - lane.dispatchedAt > NO_PR_AFTER_MS) return { state: 'needs-you', reason: providerById(lane.provider)?.stall ?? 'no pull request after two hours' }
     return { state: 'dispatched', reason: `waiting for a pull request on issue #${issue.number}` }
+  }
+  // M544. A PR's checks run code the PR chose, so they only vouch for it when
+  // the PR is the agent's: from the lane's own repository (a fork can write
+  // "Fixes #12" too) and on the provider's branch.
+  if (pr.headRepo !== undefined && lane.repo !== undefined && pr.headRepo !== lane.repo) {
+    return { state: 'needs-you', reason: `#${pr.number} comes from ${pr.headRepo}, not ${lane.repo} — it is not the agent's; check who opened it` }
+  }
+  const row = providerById(lane.provider)
+  if (row !== undefined && !pr.head.startsWith(row.headPrefix)) {
+    return { state: 'needs-you', reason: `#${pr.number} is on ${pr.head === '' ? 'an unnamed branch' : `branch ${pr.head}`}, not a ${row.headPrefix} branch ${row.label} opens — check who opened it before trusting its checks` }
   }
   if (pr.draft) {
     if (now - pr.createdAt > DRAFT_QUIET_MS) return { state: 'needs-you', reason: `#${pr.number} is still a draft after two hours — mark it ready if the agent is done` }
@@ -255,7 +282,8 @@ export function findLanePr(issue: number, prs: readonly PrFact[], repo: string |
   const ref = repo === undefined ? `#${n}` : `(?:${escape(repo)})?#${n}`
   const closes = new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s*:?\\s+${ref}(?!\\d)`, 'i')
   const branch = new RegExp(`(?:^|[/_-])${n}(?:$|[/_-])`)
-  const fresh = prs.filter((p) => p.createdAt >= dispatchedAt - CLOCK_SKEW_MS)
+  // A fork's PR is never adopted: anyone can open one that says "Fixes #12".
+  const fresh = prs.filter((p) => p.createdAt >= dispatchedAt - CLOCK_SKEW_MS && (repo === undefined || p.headRepo === undefined || p.headRepo === repo))
   const byBody = fresh.filter((p) => closes.test(p.body))
   const pool = byBody.length > 0 ? byBody : fresh.filter((p) => branch.test(p.head))
   if (pool.length === 0) return null
@@ -424,4 +452,55 @@ export function cloudDispatchFor(
   }
   if (laneCwd === undefined) return { refused: 'this task has no repository yet — start it in a repository first, or add it from a GitHub issue' }
   return { ...base, cwd: laneCwd }
+}
+
+// ── The morning queue ──────────────────────────────────────────────────────
+
+/**
+ * M545. A cloud lane in the morning queue, beside the local lanes, as the
+ * queue's own kinds: red checks are `failed`, a lane stopped on the person is
+ * a `decision`, and a ready one is `checked` — its PR's checks passed, which
+ * is the same evidence a local lane's passing check is. Its cost is the PR's
+ * file count, so the cheapest review still comes first. Settled lanes and
+ * lanes still working have nothing to ask of the morning.
+ *
+ * The evidence opens the task's CARD, where the PR link and Merge live; a
+ * local review would show an empty lane.
+ */
+export function cloudMorningItems(
+  lanes: readonly (Pick<CloudLane, 'workItemId' | 'state' | 'pr' | 'provider' | 'issue'> & { reason: string; stat?: { files: number } })[],
+  taskOf: (itemId: string) => { title: string; cardPanelId?: string } | undefined
+): MorningItem[] {
+  const out: MorningItem[] = []
+  for (const l of lanes) {
+    if (l.workItemId === undefined) continue
+    const task = taskOf(l.workItemId)
+    if (task === undefined) continue
+    const kind: MorningKind | null = l.state === 'failed' ? 'failed' : l.state === 'needs-you' ? 'decision' : l.state === 'ready' ? 'checked' : null
+    if (kind === null) continue
+    const who = providerById(l.provider)?.label ?? l.provider
+    const subject = l.pr === undefined ? `issue #${l.issue}` : `#${l.pr}`
+    const files = l.stat?.files
+    const text = kind === 'checked'
+      ? `${who}'s ${subject} is ready${files === undefined ? '' : ` — ${files} changed file${files === 1 ? '' : 's'} to review`} · every check passed`
+      : `${who}'s ${subject}: ${l.reason}`
+    out.push({ kind, itemId: l.workItemId, title: task.title, text, ...(task.cardPanelId === undefined ? {} : { evidence: { kind: 'panel', panelId: task.cardPanelId } }), ...(files === undefined ? {} : { files }) })
+  }
+  return out
+}
+
+/**
+ * The morning queue's order, the one `morningQueue` sorts by (rank, then the
+ * fewest files, then arrival) — repeated here because the queue's module is
+ * another stream's, and pinned against it by `verify:cloud morning.1` so the
+ * two cannot drift apart. Each cloud item lands after the local items it
+ * ties with.
+ */
+export const MORNING_ORDER: readonly MorningKind[] = ['failed', 'decision', 'checked', 'review', 'claimed']
+export function withCloudMorning(queue: readonly MorningItem[], cloud: readonly MorningItem[]): MorningItem[] {
+  const rank = (k: MorningKind): number => MORNING_ORDER.indexOf(k)
+  return [...queue, ...cloud]
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => rank(a.item.kind) - rank(b.item.kind) || (a.item.files ?? Infinity) - (b.item.files ?? Infinity) || a.i - b.i)
+    .map(({ item }) => item)
 }

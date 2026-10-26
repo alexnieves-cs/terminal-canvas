@@ -160,7 +160,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       if (lane === undefined) return { kind: 'refused', reason: 'this task has no cloud lane — send it to a cloud agent first' }
       if (lane.state !== 'ready') return { kind: 'refused', reason: `the cloud lane is ${cloudLaneWord(lane.state).word}${lane.reason === '' ? '' : ` — ${lane.reason}`}` }
       const r = await door.merge(lane.id)
-      if (r.kind === 'merged') return { kind: 'ran', note: `#${lane.pr} merged into ${lane.repo} as ${r.sha.slice(0, 7)}` }
+      if (r.kind === 'merged') return { kind: 'ran', note: `#${r.pr} merged into ${lane.repo} as ${r.sha.slice(0, 7)}` }
       return { kind: 'refused', reason: r.kind === 'cancelled' ? 'not merged' : r.reason }
     },
     // M324. The focus view is Canvas's page; the same delegation.

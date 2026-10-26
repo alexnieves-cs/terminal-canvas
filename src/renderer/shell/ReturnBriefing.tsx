@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
+import { cloudMorningItems, withCloudMorning } from '@shared/cloud-lane'
+import { useCloudLanes } from '@renderer/work/cloud-lanes-store'
 import { outward } from '@shared/outward'
 import type { TimelineEntry } from '@shared/run-ledger'
 import {
@@ -37,11 +39,14 @@ export interface BriefingDeps {
   handoffOf: (itemId: string) => { actionLabel: string; detail: string; state: string; changes?: { files: number } } | undefined
   inbox: Inbox
   labelOf: (panelId: string) => string
+  /** M545. The task's work card, where a cloud lane's queue item leads. */
+  cardOf?: (itemId: string) => string | undefined
 }
 
 /** Reads each task's durable record ONCE per return, then builds the briefing from it and the live inbox. */
 export function useReturnBriefing(deps: BriefingDeps): ReturnBriefing | null {
-  const { since, workItems, membersOf, handoffOf, inbox, labelOf } = deps
+  const { since, workItems, membersOf, handoffOf, inbox, labelOf, cardOf } = deps
+  const cloud = useCloudLanes()
   const tasks = useMemo(() => workItems.filter((w) => w.state !== 'done').slice(0, TASKS_MAX), [workItems])
   const taskKey = tasks.map((t) => t.id).join(' ')
   const [timelines, setTimelines] = useState<{ since: number; rows: Map<string, TimelineEntry[]> } | null>(null)
@@ -61,7 +66,7 @@ export function useReturnBriefing(deps: BriefingDeps): ReturnBriefing | null {
     const decisions: BriefingDecision[] = [...inbox.items, ...inbox.snoozed].flatMap((item) => item.members.map((m) => ({
       panelId: m.panelId, label: m.label, blocker: item.blocker, ...(m.requestId === undefined ? {} : { requestId: m.requestId })
     })))
-    return buildReturnBriefing(since, tasks.map((t) => {
+    const brief = buildReturnBriefing(since, tasks.map((t) => {
       const handoff = handoffOf(t.id)
       const chat = t.panelId === undefined ? undefined : getChat(t.panelId)
       const reply = chat?.turns.filter((turn) => turn.role === 'assistant').pop()
@@ -78,7 +83,15 @@ export function useReturnBriefing(deps: BriefingDeps): ReturnBriefing | null {
         labelOf
       }
     }), decisions)
-  }, [since, timelines, tasks, inbox, handoffOf, membersOf, labelOf])
+    // M545. Cloud lanes rank beside the local ones, by the queue's own order.
+    const cloudItems = cloudMorningItems(cloud, (id) => {
+      const t = tasks.find((w) => w.id === id)
+      if (t === undefined) return undefined
+      const card = cardOf?.(id)
+      return { title: t.title, ...(card === undefined ? {} : { cardPanelId: card }) }
+    })
+    return cloudItems.length === 0 ? brief : { ...brief, queue: withCloudMorning(brief.queue, cloudItems) }
+  }, [since, timelines, tasks, inbox, handoffOf, membersOf, labelOf, cloud, cardOf])
 }
 
 /**

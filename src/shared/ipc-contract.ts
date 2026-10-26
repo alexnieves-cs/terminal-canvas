@@ -1380,7 +1380,7 @@ export interface CloudLaneView extends CloudLane {
 }
 
 export type CloudMergeResult =
-  | { kind: 'merged'; sha: string }
+  | { kind: 'merged'; sha: string; pr: number }
   | { kind: 'cancelled' }
   | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
 

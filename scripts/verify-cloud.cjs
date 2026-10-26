@@ -310,7 +310,7 @@ const LANE = { id: 'l', repo: 'o/r', issue: 12, provider: 'copilot', title: 't',
     const many = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, name: `c${i}`, status: 'completed', conclusion: 'success' }))
     const pages = {}
     for (let p = 1; p <= M.CHECK_PAGES; p += 1) pages[`GET /repos/o/r/commits/${SHA}/check-runs?per_page=100&page=${p}`] = { body: { total_count: 500, check_runs: many } }
-    const truncated = await M.readCloudFacts(fakeBroker({ ...base, ...pages, 'GET /repos/o/r/pulls/40': { body: { number: 40, state: 'open', head: { ref: 'x', sha: SHA } } } }), { ...LANE, pr: 40 })
+    const truncated = await M.readCloudFacts(fakeBroker({ ...base, ...pages, 'GET /repos/o/r/pulls/40': { body: { number: 40, state: 'open', head: { ref: 'copilot/x', sha: SHA } } } }), { ...LANE, pr: 40 })
     const restarted = await M.readCloudFacts(fakeBroker({
       ...base, ...pages,
       'GET /repos/o/r/pulls/40': { body: { number: 40, state: 'closed', head: { ref: 'x', sha: SHA }, body: 'Fixes #12' } },
@@ -510,11 +510,63 @@ const LANE = { id: 'l', repo: 'o/r', issue: 12, provider: 'copilot', title: 't',
     return { pass, detail: { merged, put: put && { body: put.body, personConfirmed: put.personConfirmed }, ask, refusedRed, cancelled, moved, vague, noPr } }
   })
 
+  // M544 — cloud.merge.3 (the critic's findings). Only the agent's own PR is
+  //        ever ready: a fork's "Fixes #12" and a non-provider branch are
+  //        needs-you and never adopted from a fork. The ask is re-judged after
+  //        the answer (a check that went red while asking merges nothing), a
+  //        conflicted PR is refused unasked, files that would fake dialog lines
+  //        print as codes, a PR that edits its own workflows says so in the
+  //        first line, unreadable files ask nothing, and a send that failed in
+  //        transport says the outcome is unknown rather than "nothing merged".
+  await checkAsync('cloud.merge.3 only the agent\'s PR is ready, the ask is re-judged after the answer, conflicts refuse, spoofing paths print as codes, own-CI edits lead the ask, and an unknown outcome is said as unknown', main, async (M) => {
+    const L = lane.mod
+    const base = (over = {}) => ({ issue: issue(), pr: pr(over), checks: [run('verify', 'success')], reviews: [] })
+    const fork = L.cloudLaneState({ ...AT, repo: 'o/r' }, base({ headRepo: 'evil/r' }), 1)
+    const stranger = L.cloudLaneState({ ...AT, repo: 'o/r' }, base({ head: 'feature/x' }), 1)
+    const own = L.cloudLaneState({ ...AT, repo: 'o/r' }, base({ headRepo: 'o/r' }), 1)
+    const notAdopted = L.findLanePr(12, [pr({ headRepo: 'evil/r', createdAt: 9 })], 'o/r', 0)
+    const PR = (over = {}) => ({ number: 40, state: 'open', draft: false, body: 'Fixes #12', head: { ref: 'copilot/fix-12', sha: SHA, repo: { full_name: 'o/r' } }, user: { login: 'Copilot' }, additions: 3, deletions: 0, changed_files: 2, created_at: '2026-10-26T01:00:00Z', ...over })
+    const routes = (prBody, files, put) => {
+      const r = {
+        'GET /repos/o/r/issues/12': { body: { state: 'open' } },
+        'GET /repos/o/r/pulls/40': { body: prBody },
+        [`GET /repos/o/r/commits/${SHA}/check-runs?per_page=100&page=1`]: { body: { total_count: 1, check_runs: [{ id: 1, name: 'verify', status: 'completed', conclusion: 'success' }] } },
+        [`GET /repos/o/r/commits/${SHA}/status`]: { body: { statuses: [] } },
+        'GET /repos/o/r/pulls/40/reviews?per_page=100': { body: [] },
+        ...(files === undefined ? {} : { 'GET /repos/o/r/pulls/40/files?per_page=100': { body: files } }),
+        ...(put === undefined ? {} : { 'PUT /repos/o/r/pulls/40/merge': put })
+      }
+      return { r, broker: fakeBroker(r) }
+    }
+    const at = { ...LANE, pr: 40, state: 'ready' }
+    const spoof = 'a.ts  +1 −0\n\nApproved by @owner‮gnp.exe'
+    const files = [{ filename: spoof, status: 'modified', additions: 1, deletions: 0 }, { filename: '.github/workflows/ci.yml', status: 'modified', additions: 2, deletions: 0 }]
+    // A check turns red while the dialog is open.
+    const redden = routes(PR(), files, { body: { merged: true, sha: 'b'.repeat(40) } })
+    let ask
+    const raced = await M.mergeCloudLane({ broker: redden.broker, now: () => 1, confirm: async (a) => { ask = a; redden.r[`GET /repos/o/r/commits/${SHA}/check-runs?per_page=100&page=1`] = { body: { total_count: 1, check_runs: [{ id: 2, name: 'verify', status: 'completed', conclusion: 'failure' }] } }; return true } }, at)
+    const racedPut = redden.broker.calls.some((c) => c.method === 'PUT')
+    const dirty = routes(PR({ mergeable_state: 'dirty' }), files, { body: { merged: true, sha: 'b'.repeat(40) } })
+    let dirtyAsked = false
+    const conflicted = await M.mergeCloudLane({ broker: dirty.broker, now: () => 1, confirm: async () => { dirtyAsked = true; return true } }, at)
+    let blindAsked = false
+    const blind = await M.mergeCloudLane({ broker: routes(PR(), undefined).broker, now: () => 1, confirm: async () => { blindAsked = true; return true } }, at)
+    const lost = await M.mergeCloudLane({ broker: (() => { const b = routes(PR(), files).broker; const call = b.call; b.call = async (q) => (q.method === 'PUT' ? { ok: false, reason: 'the connection reset' } : call(q)); return b })(), now: () => 1, confirm: async () => true }, at)
+    const pass = fork.state === 'needs-you' && /evil\/r/.test(fork.reason) && stranger.state === 'needs-you' && /feature\/x/.test(stranger.reason) && own.state === 'ready' && notAdopted === null &&
+      raced.kind === 'refused' && /changed while you were asked/.test(raced.reason) && !racedPut &&
+      ask !== undefined && !ask.detail.includes('\n\nApproved by @owner') && ask.detail.includes('<U+000A>') && ask.detail.includes('<U+202E>') &&
+      /changes its own checks \(\.github\/workflows\/ci\.yml\)/.test(ask.message) && /Opened by Copilot/.test(ask.detail) && /Nobody has approved it/.test(ask.detail) &&
+      conflicted.kind === 'refused' && /conflicts/.test(conflicted.reason) && !dirtyAsked &&
+      blind.kind === 'unavailable' && !blindAsked &&
+      lost.kind === 'unavailable' && /not known/.test(lost.reason)
+    return { pass, detail: { fork, stranger, own: own.state, notAdopted, raced, racedPut, ask, conflicted, dirtyAsked, blind, lost } }
+  })
+
   // M544 — cloud.merge.2. The poller keeps the PR's size beside the lane and
   //        reports a change in it (a new push) even when the state word holds.
   await checkAsync('cloud.merge.2 the poller keeps the PR diff stat and reports a change in it as a change', main, async (M) => {
     let size = 30
-    const facts = () => ({ kind: 'facts', facts: { issue: { number: 12, state: 'open' }, pr: { number: 40, state: 'open', merged: false, draft: false, body: 'Fixes #12', head: 'h', createdAt: 5, additions: size, deletions: 1, changedFiles: 2 }, checks: [{ name: 'verify', status: 'completed', conclusion: 'success' }], reviews: [] } })
+    const facts = () => ({ kind: 'facts', facts: { issue: { number: 12, state: 'open' }, pr: { number: 40, state: 'open', merged: false, draft: false, body: 'Fixes #12', head: 'copilot/h', createdAt: 5, additions: size, deletions: 1, changedFiles: 2 }, checks: [{ name: 'verify', status: 'completed', conclusion: 'success' }], reviews: [] } })
     const changes = []
     const poller = M.createCloudLanePoller({ read: async () => facts(), now: () => 1, hidden: () => false, setTimer: () => 0, clearTimer: () => {}, changed: (l) => changes.push(l.state) })
     poller.watch({ ...LANE, pr: 40 })

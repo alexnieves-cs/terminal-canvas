@@ -76,21 +76,30 @@ export function installCloudLanes(state: MainState, deps: CloudWiringDeps): Clou
     save(poller.lanes())
     return true
   })
+  // One merge per lane at a time: a second press while the first is asking
+  // would PUT again after a merge and report GitHub's 405 as a refusal.
+  const merging = new Set<string>()
   ipcMain.handle(IPC.CLOUD_MERGE, async (_event, id: unknown): Promise<CloudMergeResult> => {
     const lane = typeof id === 'string' ? poller.lanes().find((l) => l.id === id) : undefined
     if (lane === undefined) return { kind: 'refused', reason: 'no such cloud lane' }
-    const result = await mergeCloudLane({
-      broker: deps.broker,
-      now: () => Date.now(),
-      confirm: async (ask) => {
-        const win = liveWindow(state)
-        if (win === null) return false
-        return confirm(win, { message: ask.message, detail: ask.detail, verb: 'Merge' })
-      }
-    }, lane)
-    // Read it back at once, so the card says merged without waiting a poll.
-    if (result.kind === 'merged') await poller.pollNow(lane.id)
-    return result
+    if (merging.has(lane.id)) return { kind: 'refused', reason: 'a merge of this lane is already being asked' }
+    merging.add(lane.id)
+    try {
+      const result = await mergeCloudLane({
+        broker: deps.broker,
+        now: () => Date.now(),
+        confirm: async (ask) => {
+          const win = liveWindow(state)
+          if (win === null) return false
+          return confirm(win, { message: ask.message, detail: ask.detail, verb: 'Merge' })
+        }
+      }, lane)
+      // Read it back at once — merged, refused or unknown — so the card says what GitHub now says.
+      if (result.kind !== 'cancelled') await poller.pollNow(lane.id)
+      return result
+    } finally {
+      merging.delete(lane.id)
+    }
   })
   ipcMain.handle(IPC.CLOUD_DISPATCH, async (_event, raw: unknown): Promise<CloudDispatchResult> => {
     const r = (raw ?? {}) as Record<string, unknown>

@@ -220,6 +220,11 @@ export function toPrFact(raw: unknown): (PrFact & { headSha: string | null }) | 
   if (typeof r.additions === 'number') fact.additions = r.additions
   if (typeof r.deletions === 'number') fact.deletions = r.deletions
   if (typeof r.changed_files === 'number') fact.changedFiles = r.changed_files
+  const headRepo = (head.repo ?? null) as Record<string, unknown> | null
+  if (typeof headRepo?.full_name === 'string') fact.headRepo = headRepo.full_name
+  const user = (r.user ?? null) as Record<string, unknown> | null
+  if (typeof user?.login === 'string') fact.author = user.login
+  if (typeof r.mergeable_state === 'string') fact.mergeableState = r.mergeable_state
   return fact
 }
 
@@ -490,60 +495,126 @@ export function createCloudLanePoller(deps: PollerDeps): CloudLanePoller {
 
 export interface MergeAsk { message: string; detail: string }
 export type MergeResult =
-  | { kind: 'merged'; sha: string }
+  | { kind: 'merged'; sha: string; pr: number }
   | { kind: 'cancelled' }
   | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
 export interface MergeDeps { broker: CloudBroker; confirm: (ask: MergeAsk) => Promise<boolean>; now: () => number }
 
 /** The changed files shown in the merge ask; more than this is counted, not listed. */
 export const MERGE_FILES_SHOWN = 12
+/** A path printed in the ask is cut here: a dialog line is not a place for a novel. */
+const PATH_SHOWN = 160
+/** Files that decide what the checks are. A PR that changes them graded its own work. */
+const CI_FILES = /^(?:\.github\/(?:workflows|actions)\/|\.github\/CODEOWNERS$|CODEOWNERS$|\.gitlab-ci\.yml$|\.circleci\/|azure-pipelines\.yml$|\.buildkite\/)/
+
+/**
+ * A PATH FROM A PR, MADE SAFE TO PRINT. Git allows newlines, tabs, control
+ * characters, bidi overrides and zero-width characters in a path, and GitHub
+ * returns them raw — so a file named to look like extra dialog lines ("…\n\n
+ * Approved by the owner") or an extension reversed by U+202E would put words
+ * in the ask that are not facts. Each such character is shown as its code.
+ */
+export function printablePath(path: string): string {
+  const shown = path.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤⁦-⁩﻿]/g, (c) => `<U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}>`)
+  return shown.length > PATH_SHOWN ? `${shown.slice(0, PATH_SHOWN - 1)}…` : shown
+}
+
+const MERGE_BLOCKED: Record<string, string> = {
+  dirty: 'it has merge conflicts with its base branch',
+  blocked: 'the repository\'s branch rules block it — a required review or check is missing'
+}
 
 /**
  * M544. MERGE A READY LANE, judged on facts read NOW rather than on the card's
- * copy: the lane is re-read, re-derived, and merged only when that says
- * `ready`. The merge pins the head the checks were read on (`sha`), so a push
- * that lands between the ask and the press is refused by GitHub (409) instead
- * of merging code nobody saw pass. The ask lists the files that will land.
+ * copy, twice: once to build the ask and again after the person answers it,
+ * because a dialog can sit open while a check re-runs red, a reviewer asks for
+ * changes or the PR goes back to draft. The merge pins the head both reads
+ * saw (`sha`), so a push after the second read is refused by GitHub (409).
+ *
+ * Ready means the PR is the agent's (lane repository, provider branch — see
+ * `cloudLaneState`), so a stranger's "Fixes #12" never reaches this ask. The
+ * ask names who opened it, whether anyone approved it, and — in its first
+ * line — when the PR changes the files that decide what its checks are.
  * A squash, because that is how this repository merges its own PRs.
  */
 export async function mergeCloudLane(deps: MergeDeps, lane: CloudLane): Promise<MergeResult> {
   if (lane.pr === undefined) return { kind: 'refused', reason: 'this lane has no pull request yet' }
-  const read = await readCloudFacts(deps.broker, lane)
-  if (read.kind === 'gone') return { kind: 'refused', reason: read.reason }
-  if (read.kind !== 'facts') return { kind: read.kind === 'no-credential' ? 'no-credential' : 'unavailable', reason: read.reason }
-  const pr = read.facts.pr
-  if (pr === null) return { kind: 'refused', reason: 'the lane\'s pull request could not be found' }
-  const derived = cloudLaneState(lane, read.facts, deps.now())
-  if (derived.state !== 'ready') return { kind: 'refused', reason: `#${pr.number} is not ready to merge — ${derived.reason}` }
-  if (read.headSha === undefined) return { kind: 'refused', reason: `#${pr.number}'s head commit could not be read, so a merge cannot be pinned to what passed` }
+  const judge = async (): Promise<{ pr: PrFact; facts: CloudFacts; sha: string } | MergeResult> => {
+    const read = await readCloudFacts(deps.broker, lane)
+    if (read.kind === 'gone') return { kind: 'refused', reason: read.reason }
+    if (read.kind !== 'facts') return { kind: read.kind === 'no-credential' ? 'no-credential' : 'unavailable', reason: read.reason }
+    const pr = read.facts.pr
+    if (pr === null) return { kind: 'refused', reason: 'the lane\'s pull request could not be found' }
+    const derived = cloudLaneState(lane, read.facts, deps.now())
+    if (derived.state !== 'ready') return { kind: 'refused', reason: `#${pr.number} is not ready to merge — ${derived.reason}` }
+    if (read.headSha === undefined) return { kind: 'refused', reason: `#${pr.number}'s head commit could not be read, so a merge cannot be pinned to what passed` }
+    const blocked = pr.mergeableState === undefined ? undefined : MERGE_BLOCKED[pr.mergeableState]
+    if (blocked !== undefined) return { kind: 'refused', reason: `GitHub will not merge #${pr.number}: ${blocked}` }
+    return { pr, facts: read.facts, sha: read.headSha }
+  }
+  const first = await judge()
+  if ('kind' in first) return first
+  const { pr, facts, sha } = first
 
   const files = await deps.broker.call({ service: 'github', method: 'GET', path: `/repos/${lane.repo}/pulls/${pr.number}/files?per_page=100` })
   const listed = files.ok && files.status === 200 ? toDiffFiles(files.body) : null
+  // Nobody is asked to merge what they cannot be shown.
+  if (listed === null) return { kind: 'unavailable', reason: `#${pr.number}'s changed files could not be read — open it on GitHub` }
   const stat = statOfPr(pr)
+  const total = stat?.files ?? listed.length
   const size = stat === undefined ? '' : ` (+${stat.additions} −${stat.deletions} in ${stat.files} file${stat.files === 1 ? '' : 's'})`
-  const lines = listed === null
-    ? ['The file list could not be read — open the pull request to see it.']
-    : [...listed.slice(0, MERGE_FILES_SHOWN).map((f) => `${f.status === 'removed' ? '−' : f.status === 'added' ? '+' : '~'} ${f.path}  +${f.additions} −${f.deletions}`),
-        ...(listed.length > MERGE_FILES_SHOWN ? [`… and ${(stat?.files ?? listed.length) - MERGE_FILES_SHOWN} more`] : [])]
+  const ci = listed.filter((f) => CI_FILES.test(f.path))
+  const lines = [
+    ...listed.slice(0, MERGE_FILES_SHOWN).map((f) => `${f.status === 'removed' ? '−' : f.status === 'added' ? '+' : '~'} ${printablePath(f.path)}  +${f.additions} −${f.deletions}`),
+    ...(total > MERGE_FILES_SHOWN ? [`… and ${stat === undefined && listed.length === 100 ? 'more than 88' : total - MERGE_FILES_SHOWN} more`] : [])
+  ]
+  const approved = approvers(facts.reviews)
+  const who = [
+    `Opened by ${pr.author === undefined ? 'an unknown account' : printablePath(pr.author)} on ${printablePath(pr.head)}.`,
+    approved.length === 0 ? 'Nobody has approved it — the checks are the only evidence.' : `Approved by ${approved.map(printablePath).join(', ')}.`
+  ]
   const ask: MergeAsk = {
-    message: `Merge #${pr.number} into ${lane.repo}?`,
-    detail: `${derived.reason.charAt(0).toUpperCase()}${derived.reason.slice(1)}. This squash-merges commit ${read.headSha.slice(0, 7)}${size} — if anything is pushed before you press Merge, GitHub refuses it.\n\n${lines.join('\n')}`
+    message: ci.length === 0
+      ? `Merge #${pr.number} into ${lane.repo}?`
+      : `Merge #${pr.number} into ${lane.repo}? It changes its own checks (${ci.slice(0, 3).map((f) => printablePath(f.path)).join(', ')}${ci.length > 3 ? ', …' : ''}), so passing them proves less.`,
+    detail: `Every check passed. This squash-merges commit ${sha.slice(0, 7)}${size}; if anything is pushed first, GitHub refuses it.\n${who.join(' ')}\n\n${lines.join('\n')}`
   }
   if (!(await deps.confirm(ask))) return { kind: 'cancelled' }
-  const body = JSON.stringify({ sha: read.headSha, merge_method: 'squash' })
+
+  const again = await judge()
+  if ('kind' in again) return again.kind === 'refused' ? { kind: 'refused', reason: `${again.reason} — it changed while you were asked; nothing was merged` } : again
+  if (again.sha !== sha) return { kind: 'refused', reason: `#${pr.number} moved while you were asked — nothing was merged; look at the new commits first` }
+
+  const body = JSON.stringify({ sha, merge_method: 'squash' })
   const done = await deps.broker.call({ service: 'github', method: 'PUT', path: `/repos/${lane.repo}/pulls/${pr.number}/merge`, body, personConfirmed: true })
-  if (!done.ok) return refusalOf(done)
+  const maybe = `whether #${pr.number} merged is not known — open it on GitHub before trying again`
+  if (!done.ok) {
+    const r = refusalOf(done)
+    // Refused before sending (no credential, not asked) is known; a transport failure after sending is not.
+    return r.kind === 'unavailable' ? { kind: 'unavailable', reason: `${done.reason} — ${maybe}` } : r
+  }
   if (done.status === 200) {
     try {
       const v = JSON.parse(done.body) as { merged?: unknown; sha?: unknown }
-      if (v.merged === true && typeof v.sha === 'string') return { kind: 'merged', sha: v.sha }
+      if (v.merged === true && typeof v.sha === 'string') return { kind: 'merged', sha: v.sha, pr: pr.number }
     } catch { /* fall through to the plain answer */ }
-    return { kind: 'unavailable', reason: `GitHub answered 200 but did not say #${pr.number} merged — open it to check` }
+    return { kind: 'unavailable', reason: `GitHub answered 200 but did not say #${pr.number} merged — ${maybe}` }
   }
   if (done.status === 409) return { kind: 'refused', reason: `#${pr.number} moved after it was checked — nothing was merged; look at the new commits first` }
-  if (done.status === 405) return { kind: 'refused', reason: `GitHub will not merge #${pr.number}${suffix(done.body)}` }
-  if (done.status === 401 || done.status === 403) return { kind: 'refused', reason: `GitHub refused the merge (${done.status})${suffix(done.body)} — the credential may not be allowed to write to ${lane.repo}` }
-  return { kind: 'unavailable', reason: `GitHub answered ${done.status}${suffix(done.body)} — nothing was merged` }
+  if (done.status === 405) return { kind: 'refused', reason: `GitHub will not merge #${pr.number}${suffix(done.body)} — nothing was merged` }
+  if (done.status === 401 || done.status === 403) return { kind: 'refused', reason: `GitHub refused the merge (${done.status})${suffix(done.body)} — nothing was merged; the credential may not be allowed to write to ${lane.repo}` }
+  if (done.status === 422) return { kind: 'refused', reason: `GitHub refused the merge${suffix(done.body)} — nothing was merged` }
+  return { kind: 'unavailable', reason: `GitHub answered ${done.status}${suffix(done.body)} — ${maybe}` }
+}
+
+/** Reviewers whose latest decisive review approves; the ask says when there are none. */
+function approvers(reviews: readonly ReviewFact[]): string[] {
+  const last = new Map<string, ReviewFact>()
+  for (const r of [...reviews].sort((a, b) => a.submittedAt - b.submittedAt)) {
+    if (r.state === 'COMMENTED' || r.state === 'PENDING' || r.user === undefined) continue
+    last.set(r.user, r)
+  }
+  return [...last.entries()].filter(([, r]) => r.state === 'APPROVED').map(([who]) => who)
 }
 
 export interface DiffFile { path: string; status: string; additions: number; deletions: number }

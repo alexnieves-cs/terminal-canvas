@@ -5,7 +5,7 @@ import type { AgentOptions } from '@shared/cost'
 import { type CredentialMeta, SERVICES } from '@shared/credential-schema'
 import type { Inbox } from '@renderer/shell/decision-inbox'
 import type { PaletteActions } from '@renderer/palette/commands'
-import { type Panel, isReviewPanel, isChatPanel } from '@renderer/panels/panels'
+import { type Panel, isReviewPanel, isChatPanel, isWorkPanel } from '@renderer/panels/panels'
 import type { PersistedRun } from '@shared/layout-schema'
 import type { PersistedWorkItem } from '@shared/work-items'
 import { type ReadyReview, arrivedReviews, readyReviews, reviewNotice } from '@renderer/shell/ready-review'
@@ -209,7 +209,8 @@ export function useAttentionModels(deps: UseAttentionModelsDeps) {
     membersOf: taskMembersOf,
     handoffOf: taskHandoffOf,
     inbox,
-    labelOf: panelLabelOf
+    labelOf: panelLabelOf,
+    cardOf: (itemId) => displayPanels.find((p) => isWorkPanel(p) && p.work.itemId === itemId)?.rect.id
   })
   // M318. The same decisions grouped by TASK — why each is stopped, its next
   // step, what waits on it — with failed checks, unreviewed changes and

@@ -60,6 +60,11 @@ export function laneForItem(all: readonly CloudLaneView[], itemId: string): Clou
   return best
 }
 
+/** Every lane, for a surface that ranks them (the morning queue). */
+export function useCloudLanes(): readonly CloudLaneView[] {
+  return useSyncExternalStore(subscribe, cloudLanesNow, cloudLanesNow)
+}
+
 export function useCloudLane(itemId: string | undefined): CloudLaneView | undefined {
   const all = useSyncExternalStore(subscribe, cloudLanesNow, cloudLanesNow)
   return itemId === undefined ? undefined : laneForItem(all, itemId)
