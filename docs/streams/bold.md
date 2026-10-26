@@ -55,6 +55,10 @@ on" and a provider is a row in a table, not a code path.
   a pure reducer from GitHub facts (issue, PR, check runs, reviews) to one lane
   state: `dispatched → working → pr-open → checks-running → ready | failed |
   needs-you | merged | closed`.
+  *Built:* there is no separate `pr-open` word, since an open PR is either a
+  draft (`working`), running checks or settled by them. The Copilot assignee
+  login and the `@claude` mention are data, and they are manual-only facts,
+  because the suite never calls GitHub.
 - **M542** — dispatch and poll in main (`src/main/cloud-lanes.ts`): the GitHub
   calls go through the broker (the client never reads the token), each write on
   `outward`'s list with a critic, polling backed off and paused while the app
