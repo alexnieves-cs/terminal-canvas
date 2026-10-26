@@ -72,6 +72,8 @@ export interface TournamentSpec {
   limit?: number
   /** M548. The board task the tournament is for, echoed on its status so Pick can make the winner that task's lane. */
   itemId?: string
+  /** M549. The task's own lane (a worktree record id): not counted as another lane when overlap is scored. */
+  homeLaneId?: string
 }
 
 /** What one entrant's run came to: the auto run's verdict, widened by the tournament's own two stops. */
@@ -227,6 +229,7 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
   if (r.timeLimitMs !== undefined && (typeof r.timeLimitMs !== 'number' || !Number.isFinite(r.timeLimitMs) || r.timeLimitMs <= 0)) return { kind: 'refused', reason: 'the time limit is not a positive number of milliseconds' }
   if (r.limit !== undefined && (typeof r.limit !== 'number' || !Number.isInteger(r.limit) || r.limit <= 0)) return { kind: 'refused', reason: 'the turn limit is not a positive whole number' }
   if (r.itemId !== undefined && (typeof r.itemId !== 'string' || r.itemId === '')) return { kind: 'refused', reason: 'the task is not named' }
+  if (r.homeLaneId !== undefined && (typeof r.homeLaneId !== 'string' || r.homeLaneId === '')) return { kind: 'refused', reason: 'the task\'s lane is not named' }
   const entrants: TournamentEntrant[] = []
   const ids = new Set<string>()
   for (const [i, e] of r.entrants.entries()) {
@@ -257,7 +260,8 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
       ...(r.budgetUsd === undefined ? {} : { budgetUsd: r.budgetUsd as number }),
       ...(r.timeLimitMs === undefined ? {} : { timeLimitMs: r.timeLimitMs as number }),
       ...(r.limit === undefined ? {} : { limit: r.limit as number }),
-      ...(r.itemId === undefined ? {} : { itemId: r.itemId as string })
+      ...(r.itemId === undefined ? {} : { itemId: r.itemId as string }),
+      ...(r.homeLaneId === undefined ? {} : { homeLaneId: r.homeLaneId as string })
     }
   }
 }
@@ -280,7 +284,7 @@ export const ENTRANT_STATE_WORDS: Readonly<Record<EntrantState, string>> = {
  * where the backend takes one, else leading the task text (M319's rule, so a
  * codex entrant is not silently told less).
  */
-export const TOURNAMENT_PROMPT = 'You are one of several agents given the same task, each in its own git worktree on its own branch. A check decides: only work that passes it can be kept, and of the passing work the smallest, cleanest change is preferred. Commit your work on this branch as you go. Never push, never open a pull request, and never change files outside this folder.'
+export const TOURNAMENT_PROMPT = 'You are one of several agents given the same task, each in its own git worktree on its own branch. A check decides: only work that passes it can be kept, and of the passing work the smallest, cleanest change is preferred. Commit your work on this branch as you go. Never weaken, skip or rewrite the check or the tests it runs to make it pass: the check is run again on your work at the end, and a change to what it runs is shown to the person who picks. Never push, never open a pull request, and never change files outside this folder.'
 
 /** M547. One entrant as the runner reports it: the spec's row, its lane and what its run has come to. */
 export interface EntrantStatus {
@@ -306,6 +310,8 @@ export interface EntrantStatus {
   endedAt?: number
   /** Read when the field finishes; null when it could not be read. */
   diff?: EntrantDiff | null
+  /** M549. Changed files that look like what the check runs (tests, the manifest, a path the command names): shown before a Pick, never a refusal. */
+  checkTouched?: string[]
 }
 
 export type TournamentState = 'starting' | 'running' | 'scoring' | 'done' | 'stopped'
@@ -455,7 +461,7 @@ export function judgePrompt(st: TournamentStatus): string {
   const rows = ranked.map((r) => {
     const e = st.entrants.find((x) => x.id === r.id) as EntrantStatus
     const d = e.diff
-    return `- ${r.rank}. ${e.label} — branch ${e.branch ?? '(unknown)'}, worktree ${e.path ?? '(unknown)'}; ${d == null ? 'changes unread' : `+${d.added} −${d.removed} in ${d.files.length} file${d.files.length === 1 ? '' : 's'}`}; the scorer's note: ${r.why}`
+    return `- ${r.rank}. ${e.label} — branch ${e.branch ?? '(unknown)'}, worktree ${e.path ?? '(unknown)'}; ${d == null ? 'changes unread' : `+${d.added} −${d.removed} in ${d.files.length} file${d.files.length === 1 ? '' : 's'}`}; the scorer's note: ${r.why}${e.checkTouched === undefined ? '' : `; it changed what the check may run: ${e.checkTouched.join(', ')}`}`
   })
   return [
     `You are judging a tournament: ${ranked.length} agents each worked the same task in their own git worktree, and each of the entrants below passed the check \`${st.check}\`.`,

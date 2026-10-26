@@ -38,19 +38,24 @@ import {
 
 export interface TournamentDeps {
   /** A worktree for the panel in the repository (the worktree manager's `ensureForPanel`, plus its record's id). */
-  lane(panelId: string, root: string): Promise<{ kind: 'lane'; path: string; branch: string; worktreeId?: string } | { kind: 'refused'; reason: string }>
+  lane(panelId: string, root: string): Promise<{ kind: 'lane'; path: string; branch: string; worktreeId?: string; head?: string } | { kind: 'refused'; reason: string }>
   /** The chat create door the renderer's `agent:create` uses. */
   create(spec: AgentSessionSpec): AgentCreateResult
   startAuto(panelId: string, opts: { mode: AutoModeId; task: string; limit?: number; check?: AutoCheck }): AutoStartResult
   stopAuto(panelId: string): boolean
-  /** The manager's events; only `auto` events are read. */
+  /** The manager's events: `auto` events, and a `disposed` status (the entrant's chat was closed). */
   subscribe(cb: (event: AgentSessionEvent) => void): () => void
   /** A chat's spend so far, USD (its meter across processes). */
   spentOf(panelId: string): number
-  /** Files, lines added and removed in a lane since it forked; null when it cannot be read. */
-  diffOf(path: string): Promise<EntrantDiff | null>
+  /** Files, lines added and removed in a lane since `base` (its fork point, when recorded); null when it cannot be read. */
+  diffOf(path: string, base?: string): Promise<EntrantDiff | null>
+  /**
+   * The tournament's check, run once more in a lane at scoring: true only on
+   * a pass. Absent, a pass stands as the run reported it.
+   */
+  recheck?(path: string, check: AutoCheck): Promise<boolean>
   /** Every file lanes OUTSIDE the tournament have changed in the same repository. */
-  otherLaneFiles(root: string, exclude: readonly string[]): Promise<string[]>
+  otherLaneFiles(root: string, exclude: readonly string[], homeLaneId?: string): Promise<string[]>
   mintSessionId(): string
   mintId(): string
   now(): number
@@ -78,6 +83,8 @@ interface Row {
   timer: unknown
   /** True inside `startAuto`: a refused start resolves stuck synchronously, and the refusal path decides. */
   starting: boolean
+  /** The lane's HEAD when it was cut: the diff is measured from here, not from wherever the main tree has moved since. */
+  head?: string
 }
 
 interface Live {
@@ -117,16 +124,34 @@ export function createTournamentRunner(deps: TournamentDeps): TournamentRunner {
     t.status.state = 'scoring'
     publish(t)
     const rows = [...t.rows.values()]
+    // A pass is re-run on the tree as it stands NOW, one lane at a time (two
+    // test runs at once fight over ports and caches): the chat stays live
+    // after its run ends, so the tree that gets ranked and Picked may not be
+    // the tree the check passed on.
+    const recheck = deps.recheck
+    if (recheck !== undefined) {
+      for (const row of rows) {
+        if (row.status.state !== 'checked' || row.status.path === undefined) continue
+        let passed = false
+        try { passed = await recheck(row.status.path, t.spec.check) } catch { passed = false }
+        if (live !== t) return
+        if (!passed) { row.status.state = 'claimed'; row.status.reason = 'its check failed when it was run again at scoring' }
+      }
+    }
     const read = async (row: Row): Promise<EntrantDiff | null> => {
       if (row.status.path === undefined) return null
-      try { return await deps.diffOf(row.status.path) } catch { return null }
+      try { return await deps.diffOf(row.status.path, row.head) } catch { return null }
     }
     const diffs = await Promise.all(rows.map(read))
     const paths = rows.map((r) => r.status.path).filter((p): p is string => p !== undefined)
     let others: string[] = []
-    try { others = await deps.otherLaneFiles(t.spec.root, paths) } catch { others = [] }
+    try { others = await deps.otherLaneFiles(t.spec.root, paths, t.spec.homeLaneId) } catch { others = [] }
     if (live !== t) return
-    rows.forEach((row, i) => { row.status.diff = diffs[i] })
+    rows.forEach((row, i) => {
+      row.status.diff = diffs[i]
+      const touched = checkTouched(diffs[i], t.spec.check.command)
+      if (touched.length > 0) row.status.checkTouched = touched
+    })
     t.status.score = scoreTournament(t.status.entrants.map(outcomeOf), others)
     t.status.state = final
     t.status.endedAt = deps.now()
@@ -136,8 +161,30 @@ export function createTournamentRunner(deps: TournamentDeps): TournamentRunner {
 
   const allFinished = (t: Live): boolean => t.status.entrants.every((e) => isEntrantFinished(e.state))
 
+  /** The runner's stop did not land (the chat is already gone): no event will follow, so the limit settles here. */
+  const stopFor = (t: Live, row: Row, why: 'over-budget' | 'over-time'): void => {
+    row.stoppedFor = why
+    let stopped = false
+    try { stopped = deps.stopAuto(row.status.panelId) } catch { stopped = false }
+    if (stopped || live !== t || isEntrantFinished(row.status.state)) return
+    settle(row, why, why === 'over-budget' ? `it spent its $${(t.spec.budgetUsd ?? 0).toFixed(2)} budget` : 'it ran past its time limit')
+    publish(t)
+    if (allFinished(t)) void score(t, 'done')
+  }
+
   const onAuto = (t: Live, e: AgentSessionEvent): void => {
-    if (live !== t || e.type !== 'auto') return
+    if (live !== t) return
+    // The entrant's chat was closed (by hand, or an undo of the placement):
+    // its run ends with no auto event, so it settles here or the field never finishes.
+    if (e.type === 'status' && e.status === 'disposed') {
+      const row = t.rows.get(e.id)
+      if (row === undefined || isEntrantFinished(row.status.state) || row.status.startedAt === undefined) return
+      settle(row, 'stopped', 'its chat was closed')
+      publish(t)
+      if (allFinished(t)) void score(t, 'done')
+      return
+    }
+    if (e.type !== 'auto') return
     const row = t.rows.get(e.id)
     if (row === undefined || isEntrantFinished(row.status.state)) return
     if (row.starting && e.state !== 'running') return
@@ -146,9 +193,10 @@ export function createTournamentRunner(deps: TournamentDeps): TournamentRunner {
     if (e.state === 'running') {
       row.status.state = e.checking === true ? 'checking' : 'running'
       const budget = t.spec.budgetUsd
-      if (budget !== undefined && row.stoppedFor === undefined && row.status.costUsd !== null && row.status.costUsd >= budget) {
-        row.stoppedFor = 'over-budget'
-        deps.stopAuto(row.status.panelId)
+      // Never while its check runs: the money is already spent, and stopping
+      // would only abort the check that decides whether it was worth it.
+      if (budget !== undefined && e.checking !== true && row.stoppedFor === undefined && row.status.costUsd !== null && row.status.costUsd >= budget) {
+        stopFor(t, row, 'over-budget')
         return
       }
       publish(t)
@@ -167,12 +215,16 @@ export function createTournamentRunner(deps: TournamentDeps): TournamentRunner {
   const enter = async (t: Live, row: Row): Promise<void> => {
     const s = row.status
     const lane = await deps.lane(s.panelId, t.spec.root)
+    // A lane made after a stop is still named, so the bracket says where it is.
+    if (lane.kind === 'lane') {
+      s.path = lane.path
+      s.branch = lane.branch
+      if (lane.worktreeId !== undefined) s.worktreeId = lane.worktreeId
+      if (lane.head !== undefined) row.head = lane.head
+    }
     // Stopped while the lane was being made: nothing more is started for it.
     if (live !== t || isEntrantFinished(s.state)) return
     if (lane.kind === 'refused') { settle(row, 'stuck', `no worktree: ${lane.reason}`); return }
-    s.path = lane.path
-    s.branch = lane.branch
-    if (lane.worktreeId !== undefined) s.worktreeId = lane.worktreeId
     const appends = BACKENDS[s.backend].appendsPrompt
     const sessionId = deps.mintSessionId()
     const created = deps.create({
@@ -181,6 +233,9 @@ export function createTournamentRunner(deps: TournamentDeps): TournamentRunner {
       ...(appends ? { appendSystemPrompt: TOURNAMENT_PROMPT } : {})
     })
     if (created.kind === 'refused') { settle(row, 'stuck', `no chat: ${created.reason}`); return }
+    // `create` is idempotent by id: a live session under this panel id keeps
+    // its own folder, and the run would then happen outside the entrant's lane.
+    if (created.snapshot.cwd !== lane.path) { settle(row, 'stuck', 'its panel already runs a chat in another folder'); return }
     s.sessionId = sessionId
     row.baseline = deps.spentOf(s.panelId)
     s.state = 'running'
@@ -205,8 +260,7 @@ export function createTournamentRunner(deps: TournamentDeps): TournamentRunner {
       row.timer = deps.setTimer(() => {
         row.timer = null
         if (live !== t || isEntrantFinished(s.state) || row.stoppedFor !== undefined) return
-        row.stoppedFor = 'over-time'
-        deps.stopAuto(s.panelId)
+        stopFor(t, row, 'over-time')
       }, limit)
     }
   }
@@ -291,15 +345,12 @@ const nulList = (s: string): string[] => s.split('\0').filter((p) => p !== '')
  * `add -N`, which would change the index of a lane an agent is in.
  * Binary files count as one changed file with no lines.
  */
-export async function readEntrantDiff(git: GitRunner, lane: string, readText: (path: string) => string | null): Promise<EntrantDiff | null> {
-  const common = await git(['-C', lane, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
-  if (!common.ok) return null
-  const mainDir = common.stdout.trim().replace(/\/\.git\/?$/, '')
-  const mainBranch = await git(['-C', mainDir, 'rev-parse', 'HEAD'])
-  if (!mainBranch.ok) return null
-  const base = await git(buildMergeBaseArgs(lane, mainBranch.stdout.trim()))
-  if (!base.ok) return null
-  const num = await git(['-C', lane, 'diff', '--numstat', '-z', '--no-renames', base.stdout.trim()])
+export async function readEntrantDiff(git: GitRunner, lane: string, readText: (path: string) => string | null, fork?: string): Promise<EntrantDiff | null> {
+  const base = fork ?? await mergeBaseOf(git, lane)
+  if (base === null) return null
+  // `--no-optional-locks`: a plain `git diff` refreshes the index and takes
+  // its lock, in a lane an agent may be committing in.
+  const num = await git(['--no-optional-locks', '-C', lane, 'diff', '--numstat', '-z', '--no-renames', base])
   if (!num.ok) return null
   const files = new Set<string>()
   let added = 0
@@ -317,7 +368,33 @@ export async function readEntrantDiff(git: GitRunner, lane: string, readText: (p
   for (const p of nulList(others.stdout)) {
     files.add(p)
     const text = readText(`${lane}/${p}`)
-    if (text !== null && text !== '') added += text.split('\n').length - (text.endsWith('\n') ? 1 : 0)
+    // A NUL in the text is a binary file: one changed file, no lines.
+    if (text !== null && text !== '' && !text.includes('\0')) added += text.split('\n').length - (text.endsWith('\n') ? 1 : 0)
   }
   return { files: [...files].sort(), added, removed }
+}
+
+/** With no fork point recorded: the merge-base with the main tree's HEAD, which holds while the main tree stays on its branch. */
+async function mergeBaseOf(git: GitRunner, lane: string): Promise<string | null> {
+  const common = await git(['-C', lane, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+  if (!common.ok) return null
+  const mainDir = common.stdout.trim().replace(/\/\.git\/?$/, '')
+  const mainBranch = await git(['-C', mainDir, 'rev-parse', 'HEAD'])
+  if (!mainBranch.ok) return null
+  const base = await git(buildMergeBaseArgs(lane, mainBranch.stdout.trim()))
+  return base.ok ? base.stdout.trim() : null
+}
+
+/**
+ * M549. Files an entrant changed that look like what its check runs: the
+ * package manifest, build files, test files, and any path the check command
+ * names. An entrant can pass a check by weakening it, and a weakened check
+ * often makes the smallest diff; this is SHOWN beside the entrant, never a
+ * refusal, because adding a test is often the task.
+ */
+export function checkTouched(diff: EntrantDiff | null, command: string): string[] {
+  if (diff == null) return []
+  const words = new Set(command.split(/[\s"'=]+/).filter((w) => w.includes('/') || w.includes('.')).map((w) => w.replace(/^\.\//, '')))
+  const shape = /(^|\/)(package\.json|Makefile|justfile|Cargo\.toml|pyproject\.toml|tsconfig[^/]*\.json|[^/]*\.(test|spec)\.[a-z]+|__tests__\/.*|tests?\/.*)$/
+  return diff.files.filter((f) => shape.test(f) || words.has(f) || [...words].some((w) => w.endsWith('/') && f.startsWith(w)))
 }

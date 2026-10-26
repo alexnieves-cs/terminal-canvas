@@ -137,19 +137,22 @@ function world(opts = {}) {
   const spend = new Map()
   const w = {
     created: [], started: [], stopped: [], statuses: [],
+    diffBases: [], rechecked: [],
+    dispose: (id) => { for (const cb of [...subs]) cb({ type: 'status', id, status: 'disposed' }) },
     emit: (id, state, extra = {}) => { for (const cb of [...subs]) cb({ type: 'auto', id, mode: 'custom', turn: 1, limit: 8, state, ...extra }) },
     setSpend: (id, v) => spend.set(id, v),
     tick: (ms) => { clock += ms },
     fire: () => { for (const t of timers.splice(0)) if (!t.cleared) t.fn() },
     subs, timers,
     deps: {
-      lane: async (panelId, root) => (opts.refuseLane === panelId ? { kind: 'refused', reason: 'git said no' } : { kind: 'lane', path: `${root}-wt/${panelId}`, branch: `tc/${panelId}`, worktreeId: `wt-${panelId}` }),
-      create: (spec) => { w.created.push(spec); return opts.refuseCreate === spec.id ? { kind: 'refused', reason: 'codex was not found' } : { kind: 'created', snapshot: {} } },
+      lane: async (panelId, root) => (opts.refuseLane === panelId ? { kind: 'refused', reason: 'git said no' } : { kind: 'lane', path: `${root}-wt/${panelId}`, branch: `tc/${panelId}`, worktreeId: `wt-${panelId}`, head: `fork-${panelId}` }),
+      create: (spec) => { w.created.push(spec); return opts.refuseCreate === spec.id ? { kind: 'refused', reason: 'codex was not found' } : { kind: 'created', snapshot: { cwd: opts.elsewhere === spec.id ? '/somewhere/else' : spec.cwd } } },
       startAuto: (id, o) => { w.started.push({ id, ...o }); return { kind: 'started', limit: 8 } },
-      stopAuto: (id) => { w.stopped.push(id); return true },
+      stopAuto: (id) => { w.stopped.push(id); return opts.gone !== id },
       subscribe: (cb) => { subs.add(cb); return () => subs.delete(cb) },
       spentOf: (id) => spend.get(id) ?? 0,
-      diffOf: async (path) => (opts.diffs ?? {})[path.split('/').pop()] ?? { files: ['src/date.ts'], added: 10, removed: 0 },
+      diffOf: async (path, base) => (w.diffBases.push(base), (opts.diffs ?? {})[path.split('/').pop()] ?? { files: ['src/date.ts'], added: 10, removed: 0 }),
+      ...(opts.recheck === undefined ? {} : { recheck: async (path) => { w.rechecked.push(path); return opts.recheck(path) } }),
       otherLaneFiles: async () => opts.others ?? [],
       mintSessionId: () => `s-${w.created.length}`,
       mintId: () => 'tn-1',
@@ -270,6 +273,60 @@ const runnerChecks = (async () => {
     const st = run.status()
     const pass = st.state === 'stopped' && st.score === undefined && st.entrants.every((e) => e.reason === 'the app quit') && w.stopped.length === 3 && after.kind === 'refused' && w.subs.size === 0
     ok('tournament.runner.7 quitting stops every entrant, scores nothing, and no tournament starts after', pass, JSON.stringify({ st, after }).slice(0, 400))
+  }
+  // tournament.runner.8. A run that ends with no auto event still ends: a
+  //      closed chat settles stopped, and a limit whose stop finds no run
+  //      settles at once — or the field would never be scored.
+  {
+    const w = world({ gone: 'c3' })
+    const run = R.createTournamentRunner(w.deps)
+    await run.start(spec({ timeLimitMs: 1000 }))
+    w.emit('c2', 'done', { verdict: 'checked' })
+    w.dispose('c1')
+    w.dispose('c9')
+    const afterClose = run.status().entrants[0]
+    w.fire()
+    await flush(); await flush()
+    const st = run.status()
+    const pass = afterClose.state === 'stopped' && afterClose.reason === 'its chat was closed' && st.entrants[2].state === 'over-time' && st.state === 'done' && st.score.winner === 'b'
+    ok('tournament.runner.8 a closed entrant chat ends that entrant, and a limit whose stop finds no run settles it, so the field is still scored', pass, JSON.stringify(st).slice(0, 400))
+  }
+  // tournament.runner.9. The budget never aborts a check: the spend is
+  //      already made, and the check decides whether it was worth it.
+  {
+    const w = world()
+    const run = R.createTournamentRunner(w.deps)
+    await run.start(spec({ budgetUsd: 2, timeLimitMs: 60_000 }))
+    w.setSpend('c1', 2.5)
+    w.emit('c1', 'running', { checking: true })
+    const during = [...w.stopped]
+    w.emit('c1', 'running')
+    const pass = during.length === 0 && w.stopped.join() === 'c1'
+    ok('tournament.runner.9 an entrant over budget while its check runs is not stopped until the check is over', pass, JSON.stringify({ during, after: w.stopped }))
+  }
+  // tournament.runner.10. At scoring every pass is re-run on the tree as it
+  //      stands, one that now fails cannot win; the diff is read from each
+  //      lane's own fork point; a change to what the check runs is named.
+  {
+    const w = world({ recheck: (path) => !path.endsWith('/c2'), diffs: { c1: { files: ['package.json', 'src/date.ts'], added: 1, removed: 1 } } })
+    const run = R.createTournamentRunner(w.deps)
+    await run.start(spec())
+    w.emit('c1', 'done', { verdict: 'checked' })
+    w.emit('c2', 'done', { verdict: 'checked' })
+    w.emit('c3', 'done', { verdict: 'claimed' })
+    await flush(); await flush(); await flush()
+    const st = run.status()
+    const pass = st.state === 'done' && w.rechecked.join() === '/repo-wt/c1,/repo-wt/c2' && st.entrants[1].state === 'claimed' && /run again at scoring/.test(st.entrants[1].reason) &&
+      st.score.winner === 'a' && w.diffBases.join() === 'fork-c1,fork-c2,fork-c3' && (st.entrants[0].checkTouched ?? []).join() === 'package.json' && st.entrants[1].checkTouched === undefined
+    ok('tournament.runner.10 every pass is checked again at scoring, the diff is read from the lane\'s fork point, and a change to what the check runs is named', pass, JSON.stringify({ st, rechecked: w.rechecked, bases: w.diffBases }).slice(0, 500))
+  }
+  // tournament.runner.11. A panel id that already runs a chat in another
+  //      folder is not the entrant's lane: create is idempotent by id.
+  {
+    const w = world({ elsewhere: 'c2' })
+    const r = await R.createTournamentRunner(w.deps).start(spec())
+    const pass = r.status.entrants[1].state === 'stuck' && /another folder/.test(r.status.entrants[1].reason) && w.started.every((s) => s.id !== 'c2')
+    ok('tournament.runner.11 an entrant whose panel already runs a chat elsewhere is out, never run outside its lane', pass, JSON.stringify(r).slice(0, 400))
   }
 })()
 

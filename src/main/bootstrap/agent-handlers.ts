@@ -11,7 +11,8 @@ import { writeClipboardImage } from '../clipboard-file'
 import { importClaudeTranscript } from '../claude-transcript-import'
 import { resolveTranscript } from '../transcript-reader'
 import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
-import { parseAutoCheck } from '../../shared/auto'
+import { AUTO_CHECK_TIMEOUT_MS, autoCheckPassed, parseAutoCheck } from '../../shared/auto'
+import { runAutoCheck } from '../auto-check-runner'
 import { parseTonightBatch } from '../../shared/tonight'
 import { parseTournament } from '../../shared/tournament'
 import { createTournamentRunner, readEntrantDiff } from '../tournament-runner'
@@ -270,21 +271,32 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
   const { worktreeManager, gitRunner } = stores
   state.tournament = createTournamentRunner({
     lane: async (panelId, root) => {
+      // A fresh lane or none: ensureForPanel hands a known panel id its OLD
+      // worktree back, and an entrant must not start on earlier work.
+      if (layoutStore.worktreeForPanel(panelId, root) !== undefined) return { kind: 'refused', reason: `${panelId} already has a lane from earlier work` }
       const outcome = await worktreeManager.ensureForPanel(panelId, root)
       if (outcome.kind !== 'active') return { kind: 'refused', reason: outcome.reason }
       const record = layoutStore.worktreeForPanel(panelId, outcome.root)
-      return { kind: 'lane', path: outcome.path, branch: outcome.branch, ...(record === undefined ? {} : { worktreeId: record.id }) }
+      // The fork point, so the diff is measured from where this lane began.
+      const head = await gitRunner(['-C', outcome.path, 'rev-parse', 'HEAD'])
+      return { kind: 'lane', path: outcome.path, branch: outcome.branch, ...(record === undefined ? {} : { worktreeId: record.id }), ...(head.ok ? { head: head.stdout.trim() } : {}) }
     },
     create: (spec) => handlers.create(spec),
     startAuto: (id, opts) => state.agents?.startAuto(id, opts) ?? { kind: 'refused', reason: 'the agent runtime is not available' },
     stopAuto: (id) => state.agents?.stopAuto(id) ?? false,
     subscribe: (cb) => state.agents?.subscribe(cb) ?? (() => {}),
     spentOf: (id) => { const snap = state.agents?.get(id); return snap?.meter?.spentUsd ?? snap?.costUsd ?? 0 },
-    diffOf: (path) => readEntrantDiff(gitRunner, path, readTextOrNull),
+    diffOf: (path, base) => readEntrantDiff(gitRunner, path, readTextOrNull, base),
+    // The same runner a gated auto run uses (M475), in the lane, with the app's environment.
+    recheck: async (path, check) => autoCheckPassed(await runAutoCheck({
+      command: check.command, cwd: path, env: state.loginEnv, timeoutMs: check.timeoutMs ?? AUTO_CHECK_TIMEOUT_MS, signal: new AbortController().signal
+    })),
     // Every recorded lane of the same repository that is not an entrant: the
     // collision radar's population, read the same read-only way.
-    otherLaneFiles: async (root, exclude) => {
-      const lanes = layoutStore.worktrees().filter((w) => w.root === root && !exclude.includes(w.path))
+    otherLaneFiles: async (root, exclude, homeLane) => {
+      // The task's own lane is excluded too: an entrant touching the files
+      // the task's earlier attempt touched is doing the task, not colliding.
+      const lanes = layoutStore.worktrees().filter((w) => w.root === root && !exclude.includes(w.path) && w.id !== homeLane)
       const reads = await Promise.all(lanes.map((w) => readEntrantDiff(gitRunner, w.path, () => null).catch(() => null)))
       return [...new Set(reads.flatMap((r) => r?.files ?? []))]
     },

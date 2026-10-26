@@ -47,7 +47,8 @@ export function TournamentBracket(props: { run: (op: string, value?: string) => 
   }, [])
   if (status === null || hidden === status.id) return null
   const scored = status.score !== undefined
-  const running = !scored && status.state !== 'stopped'
+  // Scoring is neither: Stop would be refused, and nothing is picked yet.
+  const running = status.state === 'starting' || status.state === 'running'
   const rankOf = new Map((status.score?.ranking ?? []).map((r) => [r.id, r]))
   const act = (op: string, value?: string): void => {
     if (busy) return
@@ -83,6 +84,7 @@ export function TournamentBracket(props: { run: (op: string, value?: string) => 
               <span className="tn-bracket__state" data-entrant-state={e.state}>{ENTRANT_STATE_WORDS[e.state]}{winner ? ' · winner' : ''}</span>
               <span className="tn-bracket__facts">{entrantFacts(e, now)}</span>
               {(ranked?.why ?? e.reason) !== undefined && <span className="tn-bracket__why">{ranked?.why ?? e.reason}</span>}
+              {e.checkTouched !== undefined && <span className="tn-bracket__why" data-entrant-check-touched title={e.checkTouched.join('\n')}>changed what its check runs: {e.checkTouched.slice(0, 3).join(', ')}{e.checkTouched.length > 3 ? ` +${e.checkTouched.length - 3}` : ''}</span>}
               {scored && <button type="button" className="pf__verb pf__verb--word" data-tournament-pick={e.id} disabled={busy || why !== null} title={why ?? `keep ${e.label} as the task's lane and close the other chats`} onClick={() => act('pick', e.id)}>Pick</button>}
             </li>
           )

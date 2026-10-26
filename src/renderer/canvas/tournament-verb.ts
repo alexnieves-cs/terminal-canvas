@@ -9,6 +9,7 @@ import { carryWorkItem, type PersistedWorkItem } from '@shared/work-items'
 import { defaultField, judgePrompt, judgeRefusal, parseField, pickRefusal, tournamentFromItem, TOURNAMENT_ENTRANTS_MIN } from '@shared/tournament'
 import { sendRefusalSentence } from '@shared/agent-session'
 import { carryBackend } from '@shared/agent-backends'
+import { seedAfter } from '@renderer/panels/recover'
 
 /**
  * M548. THE TOURNAMENT VERB, the renderer's half: every door (the work
@@ -96,8 +97,15 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
     if (field.length < TOURNAMENT_ENTRANTS_MIN) return { kind: 'refused', reason: 'a tournament needs two agents, and claude was not found — install it, or name a field such as codex copilot' }
     const built = tournamentFromItem(item, lane.chat.cwd, field)
     if (built.kind === 'refused') return built
+    // Past every id a lane record still names, not only the ids on the
+    // canvas: a closed loser keeps its worktree under its panel id, and a
+    // recycled id would be handed that worktree, earlier commits and all.
+    try {
+      const rows = await window.canvas?.worktree?.list()
+      if (rows !== undefined) d.nextIdRef.current = seedAfter(rows.map((w) => w.panelId), d.nextIdRef.current)
+    } catch { /* main refuses a reused lane anyway */ }
     const entrants = (built.spec.entrants as Record<string, unknown>[]).map((e) => ({ ...e, panelId: `c${d.nextIdRef.current++}` }))
-    const r = await door.start({ ...built.spec, itemId: item.id, entrants })
+    const r = await door.start({ ...built.spec, itemId: item.id, ...(item.worktreeId === undefined ? {} : { homeLaneId: item.worktreeId }), entrants })
     if (r.kind === 'refused') return r
     // Placed beside the card, one after another, each by the one placement
     // rule (anchored, so a crowded canvas pushes them along rather than under).
@@ -138,7 +146,9 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
     if (item !== undefined) {
       patchItem(item.id, {
         panelId: winner.panelId,
-        ...(winner.worktreeId === undefined ? {} : { worktreeId: winner.worktreeId }),
+        // Never the item's OLD lane beside the winner's chat: Review, Open PR
+        // and Combine read worktreeId, so an unknown one is cleared, not kept.
+        worktreeId: winner.worktreeId,
         note: `picked ${winner.label} from a tournament of ${st.entrants.length} — its check passed`
       })
     }
