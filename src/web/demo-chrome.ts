@@ -22,6 +22,7 @@ const DOOR_WORDS: Record<string, string> = {
   'agentSession.send': 'Sending to an agent',
   'agentSession.answer': 'Answering an agent',
   'file.open': 'Opening a file',
+  'file.pathForFile': 'Opening a dropped file',
   'file.write': 'Saving a file',
   'file.create': 'Creating a file',
   'review.commit': 'Committing',

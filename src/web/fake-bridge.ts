@@ -6,7 +6,7 @@ import { SETTINGS, resolveSetting, type SettingValue } from '@shared/settings-sc
 import { startWorldSimulation, type WorldSim } from '../main/world-sim'
 import { demoCanvas, type Cast, type CastPanel } from './demo-layout'
 import { demoAgents, panelStateOf, recordingOpener, terminalLine } from './demo-script'
-import { stubNamespace, type Notice } from './stub-door'
+import { stubNamespace, DEMO_REFUSAL, type DoorShapes, type Notice } from './stub-door'
 
 /**
  * Lane N (M565–M567). `window.canvas` for a page with no main process.
@@ -15,7 +15,7 @@ import { stubNamespace, type Notice } from './stub-door'
  * `CanvasBridge` (a `Partial` of each namespace), so a contract change that
  * renames or reshapes one of them is a type error here, not a blank demo.
  * Every door the demo does NOT answer comes from `stubNamespace`, which
- * answers by the method's name (stub-door.ts says how).
+ * answers in the shape the contract declares (stub-door.ts says how).
  *
  * The world is `world-sim` itself, the module `SIMULATE_AGENTS=true` runs in
  * main, given scripts keyed by the cast's panel ids: the same events reach
@@ -44,6 +44,8 @@ export interface DemoBridgeOptions {
   cast: Cast
   /** Says "in the app" for a door that would spawn or write. */
   notice: Notice
+  /** Each door's declared return shape (scripts/lib/bridge-shapes.cjs), for the doors answered by stub. */
+  shapes: DoorShapes
   home?: string
   appVersion?: string
   /** Injected so verify:demo runs the world in fake time. */
@@ -246,11 +248,67 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
     files: {
       list: async () => ({ kind: 'unreadable', detail: 'The browser demo has no disk.' })
     },
+    // The record-shaped reads (demo.shapes.1): each has no "nothing here"
+    // value a stub could stand in with, so each is the empty record, written out.
+    scrollback: {
+      async search() { return { hits: [], capped: false, cap: 0, redacted: 0, searched: { terminals: 0, chats: 0 } } }
+    },
+    memory: {
+      async list(root) { return { root, entries: [], skipped: 0, unresolved: 'The browser demo has no memory files.' } }
+    },
+    lane: {
+      async radar() { return { at: 0, collisions: [], unread: [] } }
+    },
+    setup: {
+      async preflight(req) { return { tools: Object.fromEntries(req.tools.map((t) => [t, false])), ports: null } }
+    },
+    agentSession: {
+      async transcript() { return { turns: [], snapshot: null } }
+    },
+    vault: {
+      async read(root) { return { root, notes: [], skipped: 0, reason: 'The browser demo has no disk.' } }
+    },
+    spawn: {
+      async recentUsed() { return {} }
+    },
+    tasks: {
+      async evidence() { return { events: [], commands: [], checks: {}, files: {}, receipts: [], captures: [], reachedStart: true } }
+    },
+    diagnostics: {
+      async sample() { return { ipcMessagesPerSecond: 0 } }
+    },
+    broker: {
+      async audit() { return { rows: [], skipped: 0 } }
+    },
+    preview: {
+      async discover() { return { kind: 'not-asked', candidates: [], scripts: [], note: 'The browser demo runs no processes.' } }
+    },
+    links: {
+      // A web link opens in a new tab, which is what a visitor expects. A
+      // file or folder target names a Mac that is not here.
+      async open(req) {
+        if (/^https?:\/\//.test(req.target)) {
+          window.open(req.target, '_blank', 'noopener')
+          return { kind: 'opened' }
+        }
+        options.notice('links.open')
+        return { kind: 'refused', reason: DEMO_REFUSAL.reason }
+      }
+    },
     shelf: {
       async list() { return { columns: [] } }
     },
     toolbox: {
-      async read() { return { kind: 'unavailable', reason: 'The browser demo has no tools.' } }
+      async read() { return { kind: 'unavailable', reason: 'The browser demo has no tools.' } },
+      async permissions() { return { rules: [], total: 0, status: 'The browser demo has no settings files.' } }
+    },
+    file: {
+      // Synchronous in the contract (webUtils.getPathForFile in preload). A
+      // dropped file has no path in a browser; '' is the "not a file on disk" answer.
+      pathForFile: () => {
+        options.notice('file.pathForFile')
+        return ''
+      }
     },
     review: {
       async panel() { return { kind: 'never-started' } }
@@ -280,7 +338,7 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
       if (key === 'then') return undefined
       let door = namespaces.get(key)
       if (door === undefined) {
-        door = stubNamespace(key, (real as Record<string, object | undefined>)[key] ?? {}, options.notice)
+        door = stubNamespace(key, (real as Record<string, object | undefined>)[key] ?? {}, options.shapes, options.notice)
         namespaces.set(key, door)
       }
       return door

@@ -1,4 +1,5 @@
 import cast from '../../scripts/fixtures/rd-steward/workspace.json'
+import shapes from 'virtual:tc-door-shapes'
 import { createDemoBridge } from './fake-bridge'
 import { installDemoChrome } from './demo-chrome'
 import type { Cast } from './demo-layout'
@@ -9,7 +10,7 @@ import type { Cast } from './demo-layout'
  * directory so the sample names stay there (its README).
  */
 const chrome = installDemoChrome()
-const demo = createDemoBridge({ cast: cast as Cast, notice: chrome.notice, appVersion: __TC_VERSION__ })
+const demo = createDemoBridge({ cast: cast as Cast, shapes, notice: chrome.notice, appVersion: __TC_VERSION__ })
 window.canvas = demo.bridge
 // Read-only, for scripts/demo-smoke.cjs: what each terminal was sent.
 ;(window as unknown as { tcDemo: { transcript(panelId: string): string } }).tcDemo = { transcript: demo.transcript }

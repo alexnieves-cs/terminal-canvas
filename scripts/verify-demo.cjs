@@ -36,6 +36,10 @@ const script = load('src/web/demo-script.ts', 'script')
 const stewardWorld = load('scripts/fixtures/rd-steward/world-sim.ts', 'steward-world')
 const cast = JSON.parse(read('scripts/fixtures/rd-steward/workspace.json') || '{"tasks":[]}')
 const loader = require('./fixtures/rd-steward/load.cjs')
+const { bridgeShapes } = require('./lib/bridge-shapes.cjs')
+let shapes = {}
+let shapesError = null
+try { shapes = bridgeShapes(ROOT) } catch (error) { shapesError = error.message }
 
 /* Fake time: a heap of timers the check advances by hand. */
 function fakeClock() {
@@ -67,7 +71,7 @@ function fakeClock() {
 function demo(extra = {}) {
   const notices = []
   const clock = fakeClock()
-  const made = bridgeMod.mod.createDemoBridge({ cast, notice: (d) => notices.push(d), appVersion: '9.9.9', timers: clock.timers, ...extra })
+  const made = bridgeMod.mod.createDemoBridge({ cast, shapes, notice: (d) => notices.push(d), appVersion: '9.9.9', timers: clock.timers, ...extra })
   return { ...made, notices, clock }
 }
 
@@ -192,7 +196,7 @@ check('demo.layout.2 the canvas layout.load answers keeps every cast panel and t
     const root = await bridge.git.root('/x')
     const off = bridge.routine.onFire(() => {})
     const confirmed = await bridge.dialog.confirm({})
-    const pass = spawn === undefined && Array.isArray(usage) && usage.length === 0 && root === null && typeof off === 'function' && confirmed === false &&
+    const pass = spawn === null && Array.isArray(usage) && usage.length === 0 && root === null && typeof off === 'function' && confirmed === false &&
       JSON.stringify(notices) === JSON.stringify(['preset.spawnById', 'agentSession.create', 'review.commit', 'github.publish', 'pty.write', 'dialog.confirm'])
     ok('demo.doors.1 spawn and write doors say "in the app", background writes and reads stay silent, a confirm declines', pass, JSON.stringify({ notices, usage, root, confirmed }))
   } else ok('demo.doors.1 spawn and write doors say "in the app", background writes and reads stay silent, a confirm declines', false, bridgeMod.error)
@@ -226,6 +230,51 @@ check('demo.layout.2 the canvas layout.load answers keeps every cast panel and t
     const silent = Object.entries(spawning).flatMap(([ns, names]) => names.filter((n) => !D.WRITE_VERB.test(n) && n !== 'sheet').map((n) => `${ns}.${n}`))
     return { pass: missing.length === 0 && silent.length === 0, detail: { missing, silent } }
   })
+
+  // demo.shapes.1. Every door of CanvasBridge has a shape the parser
+  //        recognised, and the parser reads the doors it must: a known door
+  //        of each shape, so a parse that quietly classed everything as one
+  //        shape is red. The critic's two blank-page doors are named here.
+  {
+    const want = {
+      'scrollback.tail': 'list', 'scrollback.search': 'record', 'relay.list': 'refusal', 'preset.spawnById': 'nullable',
+      'pty.onData': 'subscribe', 'file.pathForFile': 'sync', 'layout.save': 'void', 'git.status': 'refusal', 'agentSession.grants': 'list'
+    }
+    const known = new Set(['subscribe', 'sync', 'list', 'nullable', 'void', 'boolean', 'number', 'string', 'refusal', 'record'])
+    const wrong = Object.entries(want).filter(([k, v]) => shapes[k] !== v).map(([k, v]) => `${k}: ${shapes[k]} not ${v}`)
+    const unknown = Object.entries(shapes).filter(([, v]) => !known.has(v)).map(([k]) => k)
+    ok('demo.shapes.1 the contract parser reads every door and classes the known ones correctly', !shapesError && Object.keys(shapes).length > 200 && wrong.length === 0 && unknown.length === 0,
+      JSON.stringify({ error: shapesError, doors: Object.keys(shapes).length, wrong, unknown }))
+  }
+
+  // demo.shapes.2. A read whose shape is a plain record (or a synchronous
+  //        member) has no stand-in a stub could give, so fake-bridge.ts
+  //        answers each one by hand. A new record-shaped read in the
+  //        contract is red here until the demo answers it, rather than a
+  //        rejection inside some render the smoke test never reaches.
+  if (bridgeMod.mod !== undefined && doors.mod !== undefined) {
+    const { bridge } = demo()
+    const unanswered = Object.entries(shapes)
+      .filter(([path, shape]) => (shape === 'record' || shape === 'sync') && !doors.mod.WRITE_VERB.test(path.split('.')[1]))
+      .filter(([path]) => { const [ns, m] = path.split('.'); return !(m in bridge[ns]) })
+      .map(([path]) => path)
+    ok('demo.shapes.2 every record-shaped or synchronous read is answered by fake-bridge.ts, not a stub', unanswered.length === 0, JSON.stringify({ unanswered }))
+  } else ok('demo.shapes.2 every record-shaped or synchronous read is answered by fake-bridge.ts, not a stub', false, bridgeMod.error ?? doors.error)
+
+  // demo.shapes.3. A stub answers in its door's shape: a list read is [],
+  //        a union read is its "not here" member with a reason, a nullable
+  //        write is null (after the notice), and a record write rejects.
+  if (bridgeMod.mod !== undefined) {
+    const { bridge, notices } = demo()
+    const tail = await bridge.scrollback.tail({ panelId: 'x', lines: 10 })
+    const relay = await bridge.relay.list()
+    const github = await bridge.github.list()
+    const search = await bridge.scrollback.search('x')
+    const saved = await bridge.teammate.save({}).then(() => 'resolved', () => 'rejected')
+    const pass = Array.isArray(tail) && tail.length === 0 && relay.kind !== 'ok' && typeof relay.reason === 'string' && github.kind !== 'items' &&
+      Array.isArray(search.hits) && saved === 'rejected' && notices.includes('teammate.save')
+    ok('demo.shapes.3 stubs answer in the declared shape: [] for a list, a reasoned refusal for a union, a rejection for a record write', pass, JSON.stringify({ tail, relay: relay.kind, github: github.kind, hits: search.hits, saved, notices }))
+  } else ok('demo.shapes.3 stubs answer in the declared shape: [] for a list, a reasoned refusal for a union, a rejection for a record write', false, bridgeMod.error)
 
   // demo.entry.1. ORDER IS THE CONTRACT (src/web/main.ts): the bridge is
   //        installed before the renderer's main.tsx, which reads it at module scope.

@@ -20,9 +20,11 @@ on:
 permissions:
   contents: read
 
+# A deploy halfway done on main is left to finish (GitHub's advice for
+# Pages); a superseded PR build is cancelled.
 concurrency:
   group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:

@@ -78,6 +78,23 @@ const ok = (id, pass, detail) => {
     ok('smoke.world.1 the scripted agents reach a terminal past the opening frame', /[●⎿]/.test(joined))
     ok('smoke.strip.1 the demo strip names what this page is', (await page.locator('.tc-demo-strip').textContent() ?? '').includes('Live demo'))
 
+    // Nothing the visitor did yet, so no door may have said "in the app":
+    // a notice here means a door the canvas calls on its own is classed a write.
+    const early = await page.locator('.tc-demo-notice.is-shown').count()
+    ok('smoke.doors.0 no "in the app" notice before the visitor does anything', early === 0, early === 0 ? '' : await page.locator('.tc-demo-notice').textContent())
+
+    // The surfaces a visitor reaches first, so smoke.errors.1 covers their
+    // reads too: the find box (scrollback.search) and the Sessions tab
+    // (scrollback.tail).
+    await page.getByText('Find or run anything').first().click()
+    await page.keyboard.type('ledger')
+    await page.waitForTimeout(800)
+    await page.keyboard.press('Escape')
+    await page.getByText('Sessions', { exact: true }).first().click()
+    await page.waitForTimeout(800)
+    await page.getByText('Canvas', { exact: true }).first().click()
+    await page.waitForTimeout(500)
+
     await page.locator('.xterm-screen').first().click()
     await page.keyboard.type('ls')
     await page.waitForTimeout(400)

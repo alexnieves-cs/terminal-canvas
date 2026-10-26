@@ -1,7 +1,25 @@
 import { resolve } from 'path'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { version } from './package.json'
+// Plain CJS shared with verify:demo, so the build and the suite read one parser.
+import bridgeShapesModule from './scripts/lib/bridge-shapes.cjs'
+
+const { bridgeShapes } = bridgeShapesModule
+
+/**
+ * `virtual:tc-door-shapes`: each CanvasBridge door's declared return shape,
+ * read off ipc-contract.ts at build time, so a contract change reshapes the
+ * demo's stubs on the next build with nothing to regenerate by hand.
+ */
+function doorShapes(): Plugin {
+  const id = 'virtual:tc-door-shapes'
+  return {
+    name: 'tc-door-shapes',
+    resolveId: (source) => (source === id ? `\0${id}` : null),
+    load: (resolved) => (resolved === `\0${id}` ? `export default ${JSON.stringify(bridgeShapes(__dirname))}` : null)
+  }
+}
 
 /**
  * Lane N (M565). The renderer as a web page: the same `src/renderer` tree,
@@ -18,7 +36,7 @@ export default defineConfig({
   base: './',
   // The renderer's public folder (fonts, models) is the app's; the demo serves the same one.
   publicDir: resolve(__dirname, 'src/renderer/public'),
-  plugins: [react()],
+  plugins: [react(), doorShapes()],
   define: {
     __TC_VERSION__: JSON.stringify(version),
     // electron-vite compiles the renderer's `process.env` to `{}`; plain vite leaves it, and a browser has no `process`.
