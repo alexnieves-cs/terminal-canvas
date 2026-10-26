@@ -50,6 +50,8 @@ export interface TournamentEntrant {
   backend: AgentBackend
   /** The backend's model flag, when one is chosen. Absent is the CLI's default. */
   model?: string
+  /** M547. The chat panel the entrant runs in — minted by the renderer, which owns panel ids. Required by the runner. */
+  panelId?: string
 }
 
 export interface TournamentSpec {
@@ -231,6 +233,7 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
     if (ids.has(o.id)) return { kind: 'refused', reason: `${n} repeats the id ${o.id}` }
     if (!BACKEND_IDS.includes(o.backend as AgentBackend)) return { kind: 'refused', reason: `${n} names an unknown agent` }
     if (o.model !== undefined && (typeof o.model !== 'string' || o.model.trim() === '' || /\s/.test(o.model.trim()))) return { kind: 'refused', reason: `${n}'s model is not one word` }
+    if (o.panelId !== undefined && (typeof o.panelId !== 'string' || o.panelId === '')) return { kind: 'refused', reason: `${n}'s panel is not named` }
     const backend = o.backend as AgentBackend
     // A dollar budget is read from the spend meter; a backend with no meter would run past it silently.
     if (r.budgetUsd !== undefined && r.timeLimitMs === undefined && !BACKENDS[backend].reportsCost) {
@@ -239,7 +242,7 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
     ids.add(o.id)
     const model = typeof o.model === 'string' ? o.model.trim() : undefined
     const label = typeof o.label === 'string' && o.label.trim() !== '' ? o.label.trim() : model === undefined ? BACKENDS[backend].label : `${BACKENDS[backend].label} · ${model}`
-    entrants.push({ id: o.id, label, backend, ...(model === undefined ? {} : { model }) })
+    entrants.push({ id: o.id, label, backend, ...(model === undefined ? {} : { model }), ...(o.panelId === undefined ? {} : { panelId: o.panelId as string }) })
   }
   const task = r.task.trim()
   return {
@@ -265,4 +268,63 @@ export const ENTRANT_STATE_WORDS: Readonly<Record<EntrantState, string>> = {
   'over-budget': 'over budget',
   'over-time': 'out of time',
   stopped: 'stopped'
+}
+
+/**
+ * M547. The lane rules every entrant is given: appended to the system prompt
+ * where the backend takes one, else leading the task text (M319's rule, so a
+ * codex entrant is not silently told less).
+ */
+export const TOURNAMENT_PROMPT = 'You are one of several agents given the same task, each in its own git worktree on its own branch. A check decides: only work that passes it can be kept, and of the passing work the smallest, cleanest change is preferred. Commit your work on this branch as you go. Never push, never open a pull request, and never change files outside this folder.'
+
+/** M547. One entrant as the runner reports it: the spec's row, its lane and what its run has come to. */
+export interface EntrantStatus {
+  id: string
+  label: string
+  backend: AgentBackend
+  model?: string
+  panelId: string
+  /** The CLI session the chat pins; the renderer places the chat panel with it. */
+  sessionId?: string
+  /** The entrant's worktree, once made. */
+  path?: string
+  branch?: string
+  worktreeId?: string
+  state: EntrantState
+  /** Why an entrant is stuck, stopped or out of the running, in the product's words. */
+  reason?: string
+  /** USD so far; null when the backend reports no cost. */
+  costUsd: number | null
+  checkFailures: number
+  /** Epoch ms the auto run started and ended. */
+  startedAt?: number
+  endedAt?: number
+  /** Read when the field finishes; null when it could not be read. */
+  diff?: EntrantDiff | null
+}
+
+export type TournamentState = 'starting' | 'running' | 'scoring' | 'done' | 'stopped'
+
+export interface TournamentStatus {
+  id: string
+  title: string
+  task: string
+  root: string
+  /** The check's command line. */
+  check: string
+  state: TournamentState
+  entrants: EntrantStatus[]
+  /** Present once the field is scored. */
+  score?: TournamentScore
+  startedAt: number
+  endedAt?: number
+}
+
+/** The scorer's facts for one entrant, read from its status. */
+export function outcomeOf(e: EntrantStatus): EntrantOutcome {
+  return {
+    id: e.id, state: e.state, costUsd: e.costUsd, checkFailures: e.checkFailures,
+    durationMs: e.startedAt !== undefined && e.endedAt !== undefined ? Math.max(0, e.endedAt - e.startedAt) : null,
+    diff: e.diff ?? null
+  }
 }

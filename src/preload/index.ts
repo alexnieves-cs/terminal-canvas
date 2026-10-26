@@ -259,6 +259,11 @@ const bridge: CanvasBridge = {
     stop: () => ipcRenderer.invoke(IPC.TONIGHT_STOP),
     status: () => ipcRenderer.invoke(IPC.TONIGHT_STATUS)
   },
+  tournament: {
+    start: (spec: unknown) => ipcRenderer.invoke(IPC.TOURNAMENT_START, spec),
+    stop: () => ipcRenderer.invoke(IPC.TOURNAMENT_STOP),
+    status: () => ipcRenderer.invoke(IPC.TOURNAMENT_STATUS)
+  },
   setup: {
     read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
     save: (setup: unknown) => ipcRenderer.invoke(IPC.SETUP_SAVE, setup),

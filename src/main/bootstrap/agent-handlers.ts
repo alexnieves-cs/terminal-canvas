@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { statSync, readFileSync } from 'node:fs'
 import { app, clipboard } from 'electron'
 import { expandTilde, resolveCwd } from '../pty-manager'
@@ -12,6 +13,8 @@ import { resolveTranscript } from '../transcript-reader'
 import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
 import { parseAutoCheck } from '../../shared/auto'
 import { parseTonightBatch } from '../../shared/tonight'
+import { parseTournament } from '../../shared/tournament'
+import { createTournamentRunner, readEntrantDiff } from '../tournament-runner'
 import { BACKENDS, backendOf, type AgentBackend } from '../../shared/agent-backends'
 import { capSentence, type AgentCreateResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
 import type { AgentHandlers } from '../ipc'
@@ -71,7 +74,7 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     return answer
   }
 
-  return {
+  const handlers: AgentHandlers = {
     create: (spec: AgentSessionSpec): AgentCreateResult => {
       const manager = state.agents
       if (manager === null) return { kind: 'refused', reason: 'the agent runtime has not started yet' }
@@ -257,5 +260,58 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
       agentTranscripts.appendMeta(toPanelId, imported.meta)
       return { kind: 'imported', sessionId, turns: imported.meta.turns }
     }
+  }
+
+  // M547. The tournament runner, built HERE because its entrants are created
+  // through the `create` arm above — the same door the renderer's
+  // `agent:create` takes, so the Places gate, the CLI probe, the brief and the
+  // baseline capture hold for an entrant exactly as for a chat a person made.
+  // Every manager call reads `state.agents` at use (this file's rule).
+  const { worktreeManager, gitRunner } = stores
+  state.tournament = createTournamentRunner({
+    lane: async (panelId, root) => {
+      const outcome = await worktreeManager.ensureForPanel(panelId, root)
+      if (outcome.kind !== 'active') return { kind: 'refused', reason: outcome.reason }
+      const record = layoutStore.worktreeForPanel(panelId, outcome.root)
+      return { kind: 'lane', path: outcome.path, branch: outcome.branch, ...(record === undefined ? {} : { worktreeId: record.id }) }
+    },
+    create: (spec) => handlers.create(spec),
+    startAuto: (id, opts) => state.agents?.startAuto(id, opts) ?? { kind: 'refused', reason: 'the agent runtime is not available' },
+    stopAuto: (id) => state.agents?.stopAuto(id) ?? false,
+    subscribe: (cb) => state.agents?.subscribe(cb) ?? (() => {}),
+    spentOf: (id) => { const snap = state.agents?.get(id); return snap?.meter?.spentUsd ?? snap?.costUsd ?? 0 },
+    diffOf: (path) => readEntrantDiff(gitRunner, path, readTextOrNull),
+    // Every recorded lane of the same repository that is not an entrant: the
+    // collision radar's population, read the same read-only way.
+    otherLaneFiles: async (root, exclude) => {
+      const lanes = layoutStore.worktrees().filter((w) => w.root === root && !exclude.includes(w.path))
+      const reads = await Promise.all(lanes.map((w) => readEntrantDiff(gitRunner, w.path, () => null).catch(() => null)))
+      return [...new Set(reads.flatMap((r) => r?.files ?? []))]
+    },
+    mintSessionId: () => randomUUID(),
+    mintId: () => `tn-${randomUUID().slice(0, 8)}`,
+    now: Date.now,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
+  })
+  // M547. Parsed by name here, like Tonight's batch; the runner refuses a second tournament while one is live.
+  handlers.tournamentStart = async (raw) => {
+    const runner = state.tournament
+    if (runner === null) return { kind: 'refused', reason: 'tournaments are not available in this process' }
+    const parsed = parseTournament(raw)
+    if (parsed.kind === 'refused') return parsed
+    return runner.start(parsed.spec)
+  }
+  handlers.tournamentStop = () => state.tournament?.stop() ?? false
+  handlers.tournamentStatus = () => state.tournament?.status() ?? null
+  return handlers
+}
+
+/** An untracked file's text for a line count; a file too big or unreadable counts no lines. */
+function readTextOrNull(path: string): string | null {
+  try {
+    return statSync(path).size > 2 * 1024 * 1024 ? null : readFileSync(path, 'utf8')
+  } catch {
+    return null
   }
 }
