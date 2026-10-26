@@ -1,5 +1,6 @@
 import { updateSentence, type UpdateState } from '@renderer/session/update-store'
 import { isRequiredCli, type EnvReport } from '@shared/env-report'
+import { VM_RUNTIME_NAME } from '@shared/vm-lane'
 import type { Command } from '../palette-model'
 import { withReason } from './with-reason'
 
@@ -71,6 +72,17 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
       cli.path === null ? `${cli.name}: not found` : `${cli.name}: found`,
       cli.path ?? INSTALL[cli.name] ?? 'not on PATH',
       `${cli.name} cli found missing install path`))
+  }
+  // M550 (lane J). One row for the VM runtimes, optional like the agents:
+  // "none" is a plain fact, never a fault, and it says what would give one.
+  if (report.vm !== undefined) {
+    const chosen = report.vm.chosen
+    rows.push(info('env.vm',
+      chosen === null ? 'Sandboxed lanes: no VM runtime' : `Sandboxed lanes: ${VM_RUNTIME_NAME[chosen]}`,
+      report.vm.runtimes.length === 0
+        ? 'not probed'
+        : report.vm.runtimes.map((r) => `${VM_RUNTIME_NAME[r.id]}: ${r.why}`).join(' · '),
+      'vm sandbox sandboxed container docker orbstack apple runtime lane'))
   }
   rows.push(info('env.tmux',
     report.tmux.kind === 'tmux' ? 'tmux: in use' : 'tmux: not in use — sessions end with the window',
