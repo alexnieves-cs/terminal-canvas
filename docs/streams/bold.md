@@ -308,3 +308,95 @@ Decisions (lane Q):
   passes.
 - **M576–M579** — the library: accepted rules, where each came from, and a way
   to retire one.
+
+### O — decisions
+
+- **Two signals, both a person's act.** A discard (per file: the app has no
+  per-hunk discard, so "hunk" is the file's changed lines) and a review comment
+  once SENT to the agent. A drafted comment is not a verdict yet, and an
+  agent's proposed comment (M360) is never a lesson, kept or not.
+- **A discard is captured in main, around the one discarder** (`withLessonCapture`
+  in `bootstrap/stores.ts`), not at the renderer's five discard doors. The diff
+  is read before the discard and the lesson recorded only for paths reported
+  gone. Capture failures are swallowed: a lesson never costs the discard.
+- **A comment is harvested from the work items** (`sentAt` is the one fact
+  every sender writes), offered to main once per launch; main keeps one per id.
+  The renderer can record comments only; discard lessons are main's alone.
+- **Lessons are keyed by the main tree** (`commonRootOf`), so a lane's lessons
+  outlive its worktree. One JSONL per repository under `userData/lessons/`,
+  every text field scrubbed, the signature rebuilt from the scrubbed excerpt.
+- **The signature** is the excerpt's distinctive identifiers (keywords and
+  the scrubber's placeholder dropped), never the person's words. Recurrence
+  (M573) is containment: the share of the lesson's signature the replay repeats.
+- **The page reads what is there.** Show Lessons lists the lessons for the
+  folders the canvas's panels sit in. Reading spends nothing, so the page is
+  always on; the agent steps (propose, prove) get the off-by-default switch.
+- **The proposer is M252's run** (`claude -p --tools "" --json-schema`), plus
+  `--strict-mcp-config` so no MCP server loads: the input is agent-written,
+  and an allowed MCP tool would be a door out. That the flag pair leaves the
+  run with no tools at all is a manual-only check against the real CLI.
+- **`learn.agents`** (Agent state, off, not plan-writable) gates every agent
+  step, read at the press; one draft at a time, held until a killed run exits.
+- **Scrub, then cut.** Lessons are read whole (64 KB of lines) and scrubbed
+  before the 40-line excerpt is cut, and a private key with no END line is
+  dropped from its BEGIN. The critic found the first cut kept parts of keys.
+- **A rule is a plain sentence.** Invisible characters (controls, format,
+  tag block, bidi), HTML comments and Markdown structure are refused, so what
+  the page shows is what an agent reads.
+- **The proof replays, it does not argue.** A detached `proof-*` worktree
+  at the newest lesson's baseline (no branch; removed with `--force` on every
+  way out, a crash's leftovers swept at the next replay, never at boot: main
+  builds the runner before the single-instance lock). The rule is written,
+  the saved setup run, and that tree recorded with `write-tree`; the judge
+  diffs the agent's work against IT, so a lockfile `npm install` rewrote, or
+  the rule itself, is never mistaken for the replay's work. The diff is
+  `diff-index` with CONTENT_DIFF_CONFIG's pins and `--no-renames`; file names
+  come from `--name-status -z`. The critic found the first version counted
+  both, and read `i/` prefixes under a person's `diff.mnemonicPrefix`.
+- **Verdicts, in order:** no-change, recurred (a deletion lesson recurs as a
+  deletion), the rule's own file edited (void), no-check, check-failed,
+  holds. A replay that touched none of the lessons' files still holds (the
+  rule may be "leave that file alone"), and its line says so.
+- **The replay agent can edit and nothing else.** `--tools Read,Edit,Write,Glob,Grep`
+  (so no shell exists for anyone's allow rule to open — `acceptEdits` alone
+  was not enough), `disableAllHooks`, `--strict-mcp-config`, 40 turns, 20
+  minutes, killed on quit (and the check aborted). The rule is never written
+  through a symlink: a linked CLAUDE.md or `.claude/skills` would land it in
+  the person's real file. The worktree's `.git` link is read before the agent
+  and the run is void if it changed (Write could point it at the person's
+  repository, and `add -A` would stage there). The rule's file is staged with
+  `-f`, because `.claude/` is often gitignored.
+- **The check runs what the tree holds.** An agent that rewrote `package.json`
+  or the test config can make its own check pass; a "holds" that changed one
+  of the check's usual files says so by name, for the person to read before
+  Accept. Restoring them would also undo a task that legitimately adds a
+  dependency, so it is a sentence, not a refusal.
+- **Accept is the one write into the repository, and it is fenced.** Only a
+  draft whose proof holds for its exact text, checked again as the agent's
+  answer was. A CLAUDE.md line lives in one `<!-- tc:learned -->` block the
+  app rewrites from its own record and never edits outside; a skill is a new
+  `.claude/skills/<name>/SKILL.md`, created exclusively (`wx`), never over a
+  file. Never through a symlink; a write the library cannot record is undone;
+  temp file and rename. A proof stands for the rule's text AND its kind, name
+  and description (the description decides when a skill loads).
+- **The markers are whole lines outside fenced code, exactly one pair.** A
+  CLAUDE.md that documents the block in inline code or an example is not the
+  block (the critic's first finding: everything between two mentions was
+  replaced). Two blocks are refused, so a retired rule cannot live on in the
+  copy not rewritten. The block takes the file's line endings, and retire
+  takes back exactly the separator accept added.
+- **An unreadable rule record blocks the block.** The block is rebuilt from
+  the records, so while any stored rule cannot be parsed, Accept and Retire
+  refuse and name the file; the unread record is carried through every write.
+  A read that fails for any reason but ENOENT is an error, never "no file".
+- **Accept and Retire are a person's press, on the Lessons page only** — a
+  deliberate exception to the four doors: a palette row would be a fifth way
+  to the same button, but an agent line or a workflow node would let an agent
+  write a standing rule for agents, which is the one thing this lane forbids.
+- **Not defended:** a hostile process swapping a symlink into the main tree
+  between the `lstat` and the write. Accept runs in the person's own checkout
+  at their press; the replay, where an agent IS the threat, is guarded.
+- **Retire keeps the row.** The line leaves the block (the last one takes the
+  block, and a file that held nothing else); a skill is removed only while
+  its hash matches what was written; a block someone removed by hand is not
+  put back. The retired rule stays in the library, struck through, with why.

@@ -530,6 +530,9 @@ app.on('before-quit', () => {
   // so a guest's control is handed back now rather than after the 60s grace.
   relay.dispose()
   worldSim?.stop()
+  // M573 (lane O). A lesson replay's agent is killed, never left running on
+  // after the app, billing, in a scratch tree nobody will read.
+  kit.learn?.stop()
   // Offline in the org's rows too; not awaited — quit does not wait on a network.
   void teamReporter.stop()
 

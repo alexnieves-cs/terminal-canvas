@@ -12,7 +12,7 @@ export type ContextTab = 'detail' | 'work' | 'tools' | 'activity'
  * a place they did not ask to be. Every "is the canvas covered" test reads
  * `!== 'canvas'`, so a third page is covered the way Orchestrate is.
  */
-export type CenterView = 'canvas' | 'orchestration' | 'focus' | 'team' | 'sessions' | 'review'
+export type CenterView = 'canvas' | 'orchestration' | 'focus' | 'team' | 'sessions' | 'review' | 'learn'
 
 export interface ShellChrome {
   /** The breakpoint the shell measured for itself; stamped as `data-bp`. */
@@ -243,8 +243,9 @@ export function useShellChrome(deps: {
     setCenterViewState(view)
     // Neither a task's focus view nor the Team view is persisted: both are
     // places a person goes to look, and a relaunch into observer mode would
-    // attach to someone's workspace without being asked.
-    if (view !== 'focus' && view !== 'team') write('shell.centerView', view)
+    // attach to someone's workspace without being asked. M570's Lessons page
+    // is the same kind of place: looked at, never relaunched into.
+    if (view !== 'focus' && view !== 'team' && view !== 'learn') write('shell.centerView', view)
     if (view !== 'canvas') {
       setNavDrawer(false)
       setCtxDrawer(false)

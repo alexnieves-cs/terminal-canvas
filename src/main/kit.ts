@@ -6,6 +6,7 @@ import type { PrepareResult } from '../shared/repo-setup'
 import type { Recipe } from '../shared/recipes'
 import { planEditorOpen, isEditorPref, type EditorId, type EditorOpenResult, type EditorPref, type EditorTarget } from '../shared/editor-open'
 import type { SetupPreflight, SetupRead } from './repo-setup-store'
+import type { LearnDoors } from './learn'
 
 /**
  * M311–M314. THE WORKFLOW KIT'S DOORS — combine, repository setup, the
@@ -39,6 +40,8 @@ export interface KitHandlers {
   recipeHistory?: (id: string) => Promise<Recipe[]>
   /** M479. Sibling lanes that touch the same files, and git's trial merge of each pair (main/collision-radar.ts). Optional, like the M321 doors. */
   laneRadar?: (lanes: RadarLane[]) => Promise<RadarReport>
+  /** M570 (lane O). The lessons the review taught (main/learn.ts). Optional, like the M321 doors. */
+  learn?: LearnDoors
 }
 
 const off = 'not wired in this process'
@@ -58,7 +61,16 @@ export const INERT_KIT: KitHandlers = {
   combineReceipts: async () => [],
   setupPreflight: async () => ({ tools: {}, ports: null }),
   recipeHistory: async () => [],
-  laneRadar: async (lanes) => ({ at: 0, collisions: [], unread: lanes.map((l) => ({ id: l.id, reason: `the radar is ${off}` })) })
+  laneRadar: async (lanes) => ({ at: 0, collisions: [], unread: lanes.map((l) => ({ id: l.id, reason: `the radar is ${off}` })) }),
+  learn: {
+    read: async () => ({ repos: [], agents: false }),
+    record: async () => ({ ok: false, reason: `lessons are ${off}` }),
+    propose: async () => ({ ok: false, reason: `drafting a rule is ${off}` }),
+    decide: async () => ({ ok: false, reason: `lessons are ${off}` }),
+    prove: async () => ({ ok: false, reason: `proving a rule is ${off}` }),
+    idle: async () => undefined,
+    stop: () => undefined
+  }
 }
 
 /** What the editor opener needs from the OS — injected, so the harness never launches an editor. */

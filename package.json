@@ -132,6 +132,7 @@
     "verify:auto": "node scripts/verify-auto.cjs",
     "verify:film": "node scripts/verify-film.cjs",
     "verify:vm": "node scripts/verify-vm.cjs",
+    "verify:learn": "node scripts/verify-learn.cjs",
     "verify:host": "node scripts/verify-host.cjs"
   },
   "dependencies": {
