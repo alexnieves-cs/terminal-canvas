@@ -8,6 +8,12 @@ export interface SegmentedOption<T extends string> {
   title?: string
   /** Extra class on the option's button — callers keep their own hooks (`.shell__center-btn`). */
   className?: string
+  /**
+   * M600. Kept in the DOM for the harnesses that press it by `data-seg`, but
+   * out of the keyboard order and the accessibility tree: an option the
+   * stylesheet clips must not be a tab a screen reader or Tab can land on.
+   */
+  hidden?: boolean
 }
 
 export interface SegmentedControlProps<T extends string> {
@@ -46,6 +52,7 @@ export function SegmentedControl<T extends string>({ value, options, onChange, l
             // PLACE by name, never by position — an option can come and go (C3).
             data-seg={o.id}
             title={o.title}
+            {...(o.hidden === true ? { tabIndex: -1, 'aria-hidden': true } : {})}
             {...shellControl(() => onChange(o.id))}
           >{o.label}</button>
         )

@@ -151,7 +151,7 @@ export function TopBar({
           // the panels harness can still press [data-seg="orchestration"];
           // the F3 stylesheet clips it. The doors a person uses are the View
           // menu row, the palette, and the Sessions header link.
-          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Show Orchestrate', className: 'shell__center-btn' },
+          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Show Orchestrate', className: 'shell__center-btn', hidden: true },
           // M404 (C1). "People", not a second name for teammates. The code id
           // stays `team`. Conditional: only when there are people to see.
           ...(showPeople ? [{ id: 'team' as const, label: <><span className="shell__center-name">People</span><span className="shell__center-purpose">See who is working</span></>, title: 'People — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }] : [])
@@ -199,7 +199,7 @@ export function TopBar({
 
       {sessionsLabel !== '' && <span className="shell__sessions" data-session-count>{sessionsLabel}</span>}
 
-      <button type="button" className="shell__search" title="Search panels, files, tasks, commands…"
+      <button type="button" className="shell__search" title="Search panels, files, tasks, commands… (⌘K)" aria-label="Find or run anything (⌘K)"
         {...shellControl(onSearch)}><Search /><span>Find or run anything</span><kbd>⌘K</kbd></button>
 
       {/* M279. What the agents are doing, at the bar's right after the field

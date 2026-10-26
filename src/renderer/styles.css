@@ -201,11 +201,14 @@
      fill in the frame before xterm paints. */
   --well: #ffffff;
 
-  /* Text ramp. --fg-4 is DISABLED ONLY. */
+  /* Text ramp. --fg-4 was meant for disabled text only, but it carries
+     captions, hints and inspector lines in well over a hundred rules, so
+     M600 holds it to the 4.5:1 that small text needs on every ground
+     (verify:styles 11). It now sits one small step under --fg-3. */
   --fg:   #1b1e26;
   --fg-2: #3f4552;
   --fg-3: #5b6271;
-  --fg-4: #737b8b;
+  --fg-4: #5f6676;
 
   /* Hairlines. Every surface has one. */
   --line:        #d3d7de;
@@ -421,11 +424,14 @@
      still measures at 4.5. The concept's faint #5B6375 is 2.66:1 on --s-4,
      under the 3:1 floor for disabled text, so --fg-4 is #677084 — the same
      cool bias, the first value that clears 3:1 on every measured ground.
-     --fg-3 is the concept's muted, and it is also --state-idle. */
+     --fg-3 is the concept's muted, and it is also --state-idle.
+     M600: --fg-4 carries captions and hints, not only disabled text, so it
+     is held to 4.5:1 on every ground; #808a9c is the first value of the
+     same cool bias that clears it on --s-4. */
   --fg:   #e7eaf0;
   --fg-2: #a8b0be;
   --fg-3: #8c94a5;
-  --fg-4: #677084;
+  --fg-4: #808a9c;
 
   /* Hairlines. White at the concept's two alphas, so a line is light on the
      ink rather than a second grey. */
@@ -13544,3 +13550,55 @@ tr[data-session-row]:focus-within .sessions-world,
 .learn-rule[data-learn-rule="retired"] { color: var(--fg-3); }
 .learn-rule[data-learn-rule="retired"] .learn-draft__text { text-decoration: line-through; color: var(--fg-3); }
 /* ── /st:O ── */
+
+/* ── st:U ── */
+/* M600–M609 (lane U, the UI gaps audit). */
+/* M600. Settings' way out, first in its nav. */
+.rd-settings__nav .rd-settings__back { margin: 0 0 var(--sp-2); padding: var(--sp-2) var(--sp-3); color: var(--fg-2); font-size: var(--t-sm); }
+.rd-settings__nav .rd-settings__back:hover { color: var(--fg); background: var(--s-4); }
+/* M600. A reason the Prove button is off, beside it. */
+.learn-draft__verbs { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+/* M601. The top bar in one flow. The page switch was centred ABSOLUTELY over
+   a flex row that never left room for it, and three rounds of max-width math
+   (rd:F3, M511) still let the session count and the search slide under it —
+   the search-empty and approval goldens show the field reduced to its ⌘K at
+   1024, rd-empty to its icon at 1600. Now the switch is a flex item between
+   the location and the right cluster, centred by its own auto margins in the
+   free space, so it can never overlap either side. Order, not DOM: the
+   switch is authored second (the harnesses address it where it is). */
+.shell__top > * { order: 2; }
+.shell__top > .shell__mark, .shell__top > .shell__workspace { order: 0; }
+.shell__top .shell__center-toggle {
+  position: static;
+  transform: none;
+  order: 1;
+  flex: none;
+  margin-inline: auto;
+}
+.shell__top .shell__workspace { min-width: 0; flex: 0 1 auto; }
+.shell__top .shell__sessions { margin-left: 0; }
+.shell__top .shell__search { flex: 0 1 260px; min-width: 36px; max-width: 320px; margin-inline: 0; }
+/* Under 1280px the right cluster gives way first: the count goes (the bell and
+   Sessions' badge still say what needs you) and the field folds to its icon,
+   which still opens search and says ⌘K in its title. */
+@media (max-width: 1280px) {
+  .shell__top .shell__sessions { display: none; }
+  .shell__top .shell__search { flex: none; width: 36px; padding: 0; justify-content: center; }
+  .shell__top .shell__search > span, .shell__top .shell__search kbd { display: none; }
+}
+/* M602. The flowchart gesture as one more hint, not a dashed drop zone. */
+.rd-empty__hints .rd-empty__ghost { margin: 0; padding: 0; border: 0; border-radius: 0; text-align: left; color: inherit; }
+.rd-empty__more {
+  align-self: flex-start; background: transparent; border: 0; padding: 0;
+  color: var(--fg-2); font: inherit; font-size: var(--t-sm); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong);
+}
+.rd-empty__more:hover { color: var(--fg); }
+/* M603. An empty canvas has nothing to zoom to: the zoom readout, its fits
+   and the tiers wait until something is placed, and so does the "Nothing
+   placed yet" note that stood beside them. The Create door and any notice
+   in the HUD stay. */
+.shell:has(.rd-empty, [data-launcher]) .canvas-hud__zoom,
+.shell:has(.rd-empty, [data-launcher]) .canvas-hud__tiers,
+.rd-empty__minimap { display: none; }
+/* ── /st:U ── */

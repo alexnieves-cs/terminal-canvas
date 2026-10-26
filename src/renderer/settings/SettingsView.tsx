@@ -3,12 +3,13 @@
  * the registry; every other page renders the schema rows for its categories.
  */
 
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { SettingRow } from '@shared/ipc-contract'
 import { type SettingDef } from '@shared/settings-schema'
 import { encodeOverrideList, parseOverrideList, type ShortcutOverride } from '@shared/shortcut-overrides'
 import { KeyboardPane } from './KeyboardPane'
 import { PaneHost } from './PaneHost'
+import { useModalFocus } from '@renderer/primitives'
 import { rowsForPane, SETTINGS_PANES, settingsPane, type SettingsPaneId } from './panes'
 
 export function SettingsView({
@@ -21,6 +22,9 @@ export function SettingsView({
   onClose: () => void
 }): JSX.Element {
   const [rows, setRows] = useState<SettingRow[]>([])
+  // M600. Settings owns the window: Tab stays on the page and focus returns on close.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useModalFocus(rootRef)
   useEffect(() => {
     let stop = false
     const read = (): void => {
@@ -67,13 +71,18 @@ export function SettingsView({
 
   return (
     <div
+      ref={rootRef}
       className="rd-settings"
       data-settings-root
       role="dialog"
+      aria-modal="true"
       aria-label="Settings"
       onMouseDown={(event) => event.stopPropagation()}
     >
       <nav className="rd-settings__nav" aria-label="Settings pages">
+        {/* M600. The way out sits where the eye starts, not at the foot of the
+            nav where a short window scrolls it away. Escape works too. */}
+        <button type="button" className="rd-settings__back" data-settings-back title="Back to the canvas (Esc)" onClick={onClose}>← Back to canvas</button>
         <p className="rd-settings__brand">Settings</p>
         {SETTINGS_PANES.map((item) => (
           <button
@@ -84,7 +93,6 @@ export function SettingsView({
             onClick={() => onPane(item.id)}
           >{item.label}</button>
         ))}
-        <button type="button" className="rd-settings__close" onClick={onClose}>Close</button>
       </nav>
       <div className="rd-settings__main">
         <div className="rd-settings__sheet">
