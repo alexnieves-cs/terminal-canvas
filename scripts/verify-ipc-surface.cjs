@@ -335,7 +335,9 @@ app.whenReady().then(() => {
   // and git's trial merge of each pair; read-only.
   // +3: tonight:start / tonight:stop / tonight:status (M480, stream C) — the
   // night's batch named by the renderer, run and stopped by main.
-  const EXPECTED_CHANNELS = 214
+  // +3: tournament:start / tournament:stop / tournament:status (M547, lane I)
+  // — N entrants on one task, each in its own lane, run and scored by main.
+  const EXPECTED_CHANNELS = 217
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
