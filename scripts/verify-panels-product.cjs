@@ -4621,8 +4621,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // arrangements. The aliases are NAMED here as well as counted, so the
             // next arrival reads as "a verb was added" rather than as "a number
             // moved" — a bare count says nothing about which one went missing.
+            // EIGHTH (M543, lane H): `cloud`, the card's door onto the cloud
+            // agents — a menu, so it is enabled even with no lane yet.
             card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) &&
-            card.verbs.map((v) => v[0]).join(',') === 'assign,resume,open-pr,review,show,focus,swarm,done' && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            card.verbs.map((v) => v[0]).join(',') === 'assign,resume,open-pr,review,show,focus,swarm,cloud,done' && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
             moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
           JSON.stringify({ pane, card, before, after, moved }))
       } catch (bdErr) {

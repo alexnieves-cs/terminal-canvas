@@ -143,6 +143,8 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'fit-task': return self.fitTask()
       case 'tonight': return self.runTonight(a.op)
       case 'tournament': return self.runTournament(a.op ?? '', a.value)
+      case 'cloud-merge': return self.mergeCloud(step.args.panel as string)
+      case 'cloud-send': return self.sendToCloud(step.args.panel as string, String(a.provider ?? ''))
       case 'preview-width': return self.setPreviewWidth(a.device!)
       case 'preview-capture': return self.capturePreview()
       case 'preview-dev': return self.startDevServer(a.script)

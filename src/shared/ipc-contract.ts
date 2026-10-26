@@ -9,6 +9,7 @@ import type { LaneMergeRequest, LaneMergeResult } from './lane-merge'
 import type { RadarLane, RadarReport } from './collision-radar'
 import type { TonightBatchSpec, TonightStatus } from './tonight'
 import type { TournamentStatus } from './tournament'
+import type { CloudLane, CloudProviderId } from './cloud-lane'
 import type { PrepareResult, RepoSetup } from './repo-setup'
 import type { EditorOpenResult, EditorTarget } from './editor-open'
 import type { Recipe } from './recipes'
@@ -907,6 +908,29 @@ export const IPC = {
   TOURNAMENT_STOP: 'tournament:stop',
   TOURNAMENT_STATUS: 'tournament:status',
   /**
+   * M543. CLOUD LANES (lane H): a task handed to a cloud agent and read back
+   * as a pull request (main/cloud-lanes.ts). `dispatch` asks the person in
+   * main's own dialog before anything leaves, so the renderer only names the
+   * task; `list` is every lane main watches, `refresh` polls one now, and
+   * `forget` stops watching one (nothing on GitHub changes).
+   */
+  CLOUD_LIST: 'cloud:list',
+  CLOUD_DISPATCH: 'cloud:dispatch',
+  CLOUD_REFRESH: 'cloud:refresh',
+  CLOUD_FORGET: 'cloud:forget',
+  /**
+   * M544. Merge a ready lane's PR through the broker. Main re-reads the PR,
+   * merges only when it is ready NOW, pins the head the checks passed on, and
+   * asks first with the files that will land.
+   */
+  CLOUD_MERGE: 'cloud:merge',
+  /**
+   * M545. The collision radar for cloud lanes: each live lane's PR head
+   * (fetched into a hidden ref) against the local lanes the renderer names,
+   * as M479's report keyed by the lane's TASK id so a flag lands on its card.
+   */
+  CLOUD_RADAR: 'cloud:radar',
+  /**
    * M98. Session grants — `Allow for session`. The grant itself rides
    * `agent:answer`'s `scope`; these two read the granted tools for a panel
    * and drop them. Main holds them in memory only (never a file), so a
@@ -1373,8 +1397,44 @@ export const IPC_EVENTS = {
    * for a fact that had not changed. A failed step carries its sentence;
    * the splash stops, and the 09 surface is the reader of that sentence.
    */
-  BOOT_PROGRESS: 'boot:progress'
+  BOOT_PROGRESS: 'boot:progress',
+  /** M543. One cloud lane as it now stands, after a poll that moved it. */
+  CLOUD_CHANGED: 'cloud:changed'
 } as const
+
+/** M543. A cloud lane as the renderer shows it: the record and the sentence its state was derived with. */
+export interface CloudLaneView extends CloudLane {
+  reason: string
+  /** M544. The PR's size as last read; absent until a PR is read. */
+  stat?: { additions: number; deletions: number; files: number }
+}
+
+export type CloudMergeResult =
+  | { kind: 'merged'; sha: string; pr: number }
+  | { kind: 'cancelled' }
+  | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
+
+/**
+ * M543. What the renderer names when it sends a task to the cloud. The
+ * repository is `repo` when the task knows it (a GitHub issue's key), else
+ * main reads it from `cwd`'s origin remote. `issue` hands an existing issue
+ * over instead of opening one.
+ */
+export interface CloudDispatchRequest {
+  provider: CloudProviderId
+  title: string
+  task: string
+  repo?: string
+  cwd?: string
+  issue?: number
+  workItemId?: string
+}
+
+export type CloudDispatchResult =
+  | { kind: 'dispatched'; lane: CloudLaneView; redacted: number }
+  | { kind: 'handoff-failed'; lane: CloudLaneView; reason: string }
+  | { kind: 'cancelled' }
+  | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
 
 export interface FileReadRequest {
   panelId: PanelId
@@ -2066,6 +2126,19 @@ export interface CanvasBridge {
     merge(req: LaneMergeRequest): Promise<LaneMergeResult>
     /** M479. See LANE_RADAR. */
     radar(lanes: RadarLane[]): Promise<RadarReport>
+  }
+  /** M543. See CLOUD_LIST. */
+  cloud: {
+    list(): Promise<CloudLaneView[]>
+    /** The task as the person wrote it; main resolves the repository, scrubs, and asks before sending. */
+    dispatch(req: CloudDispatchRequest): Promise<CloudDispatchResult>
+    refresh(id: string): Promise<CloudLaneView | null>
+    forget(id: string): Promise<boolean>
+    /** M544. See CLOUD_MERGE. */
+    merge(id: string): Promise<CloudMergeResult>
+    /** M545. See CLOUD_RADAR. */
+    radar(lanes: RadarLane[]): Promise<RadarReport>
+    onChanged(listener: (lane: CloudLaneView) => void): () => void
   }
   /** M480. See TONIGHT_START. */
   tonight: {

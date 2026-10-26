@@ -55,6 +55,10 @@ on" and a provider is a row in a table, not a code path.
   a pure reducer from GitHub facts (issue, PR, check runs, reviews) to one lane
   state: `dispatched → working → pr-open → checks-running → ready | failed |
   needs-you | merged | closed`.
+  *Built:* there is no separate `pr-open` word, since an open PR is either a
+  draft (`working`), running checks or settled by them. The Copilot assignee
+  login and the `@claude` mention are data, and they are manual-only facts,
+  because the suite never calls GitHub.
 - **M542** — dispatch and poll in main (`src/main/cloud-lanes.ts`): the GitHub
   calls go through the broker (the client never reads the token), each write on
   `outward`'s list with a critic, polling backed off and paused while the app
@@ -62,10 +66,31 @@ on" and a provider is a row in a table, not a code path.
 - **M543** — the panel: a `cloud` lane card on the canvas showing the state word,
   the PR, its checks and the diff stat; opened from a task ("Send to cloud"), the
   palette, an agent line and a workflow node (the four doors).
+  *Built:* no new panel kind. The lane shows on the task's own work card (a
+  `cloud` row with the state word, its reason and the PR), because a second
+  card for the same task would split its facts. `cloudDispatchFor` builds the
+  one request every door sends; a teammate's plan cannot `cloud-send`.
 - **M544** — review and merge from the canvas: the review layer reads the PR's
   diff, and Accept merges through the broker.
+  *Built:* the card's PR link opens the PR's files on GitHub, and the card
+  shows its size. Merge appears only on a ready lane; main re-reads the lane
+  and merges only if it is ready now, pinned to the head its checks passed on
+  (a later push makes GitHub refuse with 409), after an ask that lists the
+  files. Reading a cloud PR inside the in-app review layer is not built: that
+  layer reads a local worktree, and fetching the PR into one is M545's radar
+  work, so it lands there or later.
 - **M545** — the morning queue ranks a ready cloud lane beside local lanes, and
   the collision radar trial-merges its head against local worktrees.
+  *Built:* the queue's module is stream C's, so cloud items are built in
+  `cloud-lane.ts` and merged in by the queue's own order, which
+  `verify:cloud morning.1` reads from its source. The radar fetches the PR head
+  into a hidden ref, `refs/tc/cloud/<lane>`, in the repository's main tree.
+  That is the one write: a fetch sends nothing but the ref name, it never
+  prompts, and git's own error text is not repeated, because a remote URL with
+  a token in it is what a fetch error prints.
+
+Lane H is complete at M545. The real-GitHub facts (Copilot's assignee login
+and branch prefix, the Claude Action's `claude/` branches) stay manual-only.
 
 ## I — Tournament mode (M546–M549)
 
