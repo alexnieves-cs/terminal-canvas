@@ -99,3 +99,4 @@ Plan: [docs/streams/bold.md](../streams/bold.md). 2026-10-26: Alex picked all se
 | PR | Milestone | What | Checks |
 |---|---|---|---|
 | this PR | M540 | Lanes H, I, J, K, L, N and O in `ownership.json` (each owns its `verify-<name>.cjs`; `bold.md` is shared), their `st:` fences, `streams.own.1` covers A–O, the run book's rows, `docs/streams/bold.md` | `verify:meta` streams.own.1 |
+| #65 | M565–M569 | Lane N: the renderer as a web page (`vite.web.config.ts`, `src/web/`), a typed fake bridge, `world-sim` scripts on the rd-steward cast, recorded terminals, "in the app" for spawn/write doors, `pages.yml` (build + Chrome smoke test on PRs, deploy from main), README link | `verify:demo` demo.*; `scripts/demo-smoke.cjs` in pages.yml |
