@@ -20,5 +20,5 @@
       "@renderer/*": ["src/renderer/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*", "src/preload/index.ts"]
+  "include": ["src/renderer/**/*", "src/shared/**/*", "src/preload/index.ts", "src/host-web/**/*", "src/host/wire.ts"]
 }
