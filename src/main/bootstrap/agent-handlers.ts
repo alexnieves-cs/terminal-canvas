@@ -300,7 +300,11 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     if (runner === null) return { kind: 'refused', reason: 'tournaments are not available in this process' }
     const parsed = parseTournament(raw)
     if (parsed.kind === 'refused') return parsed
-    return runner.start(parsed.spec)
+    // The MAIN tree, whatever folder inside the repository was named: a
+    // lane's folder would fork every entrant from that lane's branch, and its
+    // diff would then count the lane's own commits as the entrant's.
+    const root = await stores.reviewEngine.commonRootOf(parsed.spec.root)
+    return runner.start({ ...parsed.spec, root })
   }
   handlers.tournamentStop = () => state.tournament?.stop() ?? false
   handlers.tournamentStatus = () => state.tournament?.status() ?? null
