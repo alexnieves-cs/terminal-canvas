@@ -13,6 +13,8 @@ import {
   type ShortcutOverride
 } from '@shared/shortcut-overrides'
 import { emptyState } from '@shared/empty-states'
+import { browserKeeps, tabChord } from '@shared/hosted-keys'
+import { isHosted, keyboardIsMac } from '@renderer/hosted'
 import { RECORDING_HINT, stepFromKey } from './recorder'
 
 export function KeyboardPane({
@@ -30,6 +32,11 @@ export function KeyboardPane({
   const [clashId, setClashId] = useState<string | null>(null)
   const banner = conflictBanner()
   const sections = filterSections(keyboardSections(overrides), query)
+  // M610. In a browser tab the page prints the chord a person presses HERE:
+  // ⌥ for the ones the browser keeps, words for a PC keyboard.
+  const tab = isHosted()
+  const mac = keyboardIsMac()
+  const shown = (chord: string): string => (tab ? tabChord(chord, mac) : chord)
 
   useEffect(() => {
     if (recordingId === null) return
@@ -72,6 +79,13 @@ export function KeyboardPane({
   return (
     <div className="rd-settings__keys-page">
       <p className="rd-settings__lead" data-settings-purpose>{purpose}</p>
+      {tab && (
+        <p className="rd-settings__group-note" data-settings-tab-keys>
+          {mac
+            ? 'In a browser tab, ⌘N, ⌘T and ⌘W belong to the browser, so those chords use ⌥ here.'
+            : 'In a browser tab Ctrl stands for ⌘. In a terminal or a text field, where Ctrl is the shell\'s or the field\'s, use Ctrl+Shift. Ctrl+N, Ctrl+T and Ctrl+W belong to the browser, so those chords use Alt.'}
+        </p>
+      )}
       <div className="rd-settings__tools">
         <input
           className="rd-settings__search"
@@ -122,14 +136,14 @@ export function KeyboardPane({
                   {row.label}
                   {row.alias !== undefined && (
                     <span className="rd-settings__alias" data-alias-id={row.alias.id}>
-                      {row.alias.kept ? `was ${row.alias.chord} · kept for one release` : `also ${row.alias.chord}`}
+                      {row.alias.kept ? `was ${shown(row.alias.chord)} · kept for one release` : `also ${shown(row.alias.chord)}`}
                     </span>
                   )}
                 </span>
                 {recordingId === row.id ? (
                   <span className="rd-settings__recording">{RECORDING_HINT}</span>
                 ) : (
-                  <kbd className="rd-settings__kbd">{row.chord}</kbd>
+                  <kbd className="rd-settings__kbd" {...(tab && browserKeeps(row.chord) ? { title: `${row.chord} belongs to the browser` } : {})}>{shown(row.chord)}</kbd>
                 )}
                 {row.recordable && (
                   <button type="button" data-shortcut-change onClick={() => start(row.id)}>Change…</button>

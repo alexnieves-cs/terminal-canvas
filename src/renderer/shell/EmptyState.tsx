@@ -44,7 +44,7 @@ export function EmptyState({ id, glyph, onVerb, fill, attrs, children }: {
  * places a flowchart process step (owner, Oct 6 2026); the ghost line names
  * that step.
  */
-export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt }: {
+export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt, onMoreWays }: {
   workspace: string
   repo?: string | null
   onStart?: (sentence: string) => void
@@ -56,6 +56,12 @@ export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt
    * session; nothing starts and nothing in their tmux changes.
    */
   adopt?: { sentence: string; onPlace: () => void; onLeave: () => void } | null
+  /**
+   * M602. Back to the launcher. The two empty states take turns (the
+   * launcher until it is put away, then this card), and this one was a dead
+   * end: the starter canvas, recents and the folder door lived only there.
+   */
+  onMoreWays?: () => void
 }): JSX.Element {
   const [text, setText] = useState('')
   const verb = blankTaskVerb(text)
@@ -94,9 +100,13 @@ export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt
             </li>
           ))}
         </ul>
-        <p className="rd-empty__ghost">{GHOST_TARGET}</p>
+        {onMoreWays !== undefined && <button type="button" className="rd-empty__more" data-rd-empty-more="" onClick={onMoreWays}>More ways to start…</button>}
+        {/* M602. The flowchart gesture is a hint among the gestures, not a
+            drop zone the size of a button row: as a dashed box it read as the
+            card's main action and competed with Start task. */}
         <ul className="rd-empty__hints">
           {EMPTY_CANVAS_GESTURES.map((hint) => <li key={hint.id}>{hint.text}</li>)}
+          <li className="rd-empty__ghost">{GHOST_TARGET}</li>
         </ul>
       </div>
       <p className="rd-empty__minimap" data-empty-state="minimap">{minimap.sentence}</p>

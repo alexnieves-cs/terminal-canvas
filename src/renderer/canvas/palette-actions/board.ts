@@ -56,6 +56,7 @@ export type BoardActions = Pick<PaletteActions,
   | 'fitTask'
   | 'runTonight'
   | 'runTournament'
+  | 'beginTournamentField'
   | 'sendToCloud'
   | 'mergeCloud'
   | 'focusTask'
@@ -128,6 +129,23 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     },
     // M548. The tournament reads the board, the panels and the worktree lanes — Canvas's, the same delegation.
     runTournament: async (op, value) => boardVerbsRef.current?.tournament?.(op, value) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    // M606. The field, typed, prefilled with the default field's first two
+    // so Enter alone races claude's two models. The verb refuses an unknown
+    // agent or a missing CLI by name, and the refusal is said, never swallowed.
+    beginTournamentField: (name) => {
+      setInputMode({
+        kind: 'text',
+        label: 'Tournament — which agents race? Two to six, such as claude:opus claude:sonnet codex',
+        verb: 'start',
+        initial: 'claude:opus claude:sonnet',
+        submit: (value) => {
+          setInputMode(null)
+          void (boardVerbsRef.current?.tournament?.(name, value) ?? Promise.resolve({ kind: 'refused' as const, reason: 'the canvas is not ready yet' }))
+            .then((r) => self.say(r.kind === 'refused' ? r.reason : r.note ?? ''))
+        }
+      })
+      palette.openPalette()
+    },
     // M543. Every door lands here, the card's Cloud menu included. The task
     // becomes a request in cloudDispatchFor (shared, so a door cannot build a
     // second shape); main resolves the repository, scrubs, asks and sends.

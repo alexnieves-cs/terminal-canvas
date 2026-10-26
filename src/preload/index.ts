@@ -597,6 +597,9 @@ const bridge: CanvasBridge = {
   // M407 follow-up. A FIELD like `platform`: the folder main's expandTilde
   // reads, so a terminal's name can fold `/Users/<me>/x` and `~/x` into one place.
   home: homedir(),
+  // M610. A FIELD like `platform`: the hosted page stamps `--tc-hosted=1`
+  // (src/host-web/install.ts); the desktop app never does.
+  hosted: process.argv.includes('--tc-hosted=1'),
   boot: {
     onProgress: (listener) => {
       bootListener = listener

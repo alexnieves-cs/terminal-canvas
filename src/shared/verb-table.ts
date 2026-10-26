@@ -336,6 +336,10 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // keystroke (a paste) has no other place to say — nothing runs, so no plan
   // may name it.
   say: 'a sentence on the feedback line — nothing runs',
+  // M606. The palette's text field for choosing a tournament's agents; the
+  // field's submit is `tournament <task> <agents…>`, which the `tournament`
+  // verb already reaches from every door. A plan names the agents itself.
+  beginTournamentField: 'opens the palette\'s text field for the tournament verb\'s agent list — a plan writes `tournament <task> <agents…>` directly',
   // M123. The update notice: one GET of a public feed, but a GET a plan could
   // fire is a beacon on a schedule; the setting that automates it is not
   // planWritable for the same reason.

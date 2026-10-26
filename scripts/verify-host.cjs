@@ -44,6 +44,7 @@ const hubMod = load('src/host/hub.ts', 'hub')
 const serverMod = load('src/host/server.ts', 'server')
 const shim = load('src/host/electron-shim.ts', 'shim')
 const keys = load('src/host-web/keys.ts', 'keys')
+const tabKeys = load('src/shared/hosted-keys.ts', 'tab-keys')
 
 /** A socket the hub can hold, recording what it was sent. */
 function fakeSocket() {
@@ -380,6 +381,40 @@ function fakeSocket() {
       k.keyOf({ code: 'KeyN', key: 'Ñ' }) === 'n' && k.keyOf({ code: 'Digit1', key: '!' }) === '1' && k.keyOf({ code: 'Comma', key: '≤' }) === ',' &&
       k.parseAccelerator('', true) === null
     return { pass, detail: { mac, pc, plus, comma } }
+  })
+
+  // M610. A browser keeps ⌘N/⌘T/⌘W, and off a Mac there is no ⌘.
+  await check('host.keys.2 the chords a browser keeps are reached with ⌥, and the Keyboard page prints that', tabKeys, (k) => {
+    const f = (o) => ({ meta: false, ctrl: false, alt: false, shift: false, ...o })
+    const altN = k.appChordOf(f({ alt: true, key: 'n' }), true, false)
+    const altShiftT = k.appChordOf(f({ alt: true, shift: true, key: 't' }), true, true)
+    const altK = k.appChordOf(f({ alt: true, key: 'k' }), true, false)
+    const pass = altN !== null && altN.meta && !altN.alt && altShiftT !== null && altShiftT.meta && altShiftT.shift && altK === null &&
+      k.tabChord('⌘N', true) === '⌥N' && k.tabChord('⌘⇧T', true) === '⌥⇧T' && k.tabChord('⌘⌥N', true) === '⌥⌘N' && k.tabChord('⌘K', true) === '⌘K' &&
+      k.browserKeeps('⌘W') && !k.browserKeeps('⌘⌥N')
+    return { pass, detail: { altN, altShiftT, altK } }
+  })
+  await check('host.keys.3 off a Mac Ctrl stands for ⌘, Ctrl+Shift in a terminal or field, and V and plain Ctrl in a field are left alone', tabKeys, (k) => {
+    const f = (o) => ({ meta: false, ctrl: false, alt: false, shift: false, ...o })
+    const out = k.appChordOf(f({ ctrl: true, key: 'k' }), false, false)
+    const sigint = k.appChordOf(f({ ctrl: true, key: 'c' }), false, true)
+    const term = k.appChordOf(f({ ctrl: true, shift: true, key: 'k' }), false, true)
+    const paste = k.appChordOf(f({ ctrl: true, key: 'v' }), false, false)
+    const kept = k.appChordOf(f({ ctrl: true, key: 'n' }), false, false)
+    const macCtrl = k.appChordOf(f({ ctrl: true, key: 'k' }), true, false)
+    const pass = out !== null && out.meta && !out.ctrl && sigint === null && term !== null && term.meta && !term.shift && !term.ctrl &&
+      paste === null && kept === null && macCtrl === null &&
+      k.tabChord('⌘⇧K', false) === 'Ctrl+Shift+K' && k.tabChord('⌘N', false) === 'Alt+N' &&
+      k.hostedWords('while on, any program on this Mac') === 'while on, any program on the host'
+    return { pass, detail: { out, sigint, term, paste, kept, macCtrl, pc: k.tabChord('⌘⇧K', false) } }
+  })
+  await check('host.keys.4 the tab sends a translated key on to the page, and tells the renderer it is a tab', { mod: {} }, () => {
+    const chrome = read('src/host-web/host-chrome.ts')
+    const install = read('src/host-web/install.ts')
+    const pre = read('src/preload/index.ts')
+    const pass = chrome.includes('appChordOf(') && chrome.includes('!event.isTrusted') && chrome.includes('dispatchEvent(new KeyboardEvent') &&
+      install.includes("'--tc-hosted=1'") && pre.includes("hosted: process.argv.includes('--tc-hosted=1')")
+    return { pass }
   })
 
   // ── the shape of the build, the page and the deploy ──

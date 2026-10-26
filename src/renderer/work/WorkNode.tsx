@@ -98,6 +98,8 @@ export interface WorkNodeProps {
    * worktree, its check picking the winner. Absent renders nothing.
    */
   onTournament?: (itemId: string) => void
+  /** M606. The same tournament, with the agents chosen first. */
+  onTournamentField?: (itemId: string) => void
   /** M275. Whether any agent CLI answered discovery — a row of seats needs one, and the refusal says so by name. */
   agentAvailable?: boolean
   /**
@@ -411,13 +413,20 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                     {props.onTournament !== undefined && (() => {
                       const why = item.panelId === undefined ? 'no lane yet — start work on this item first'
                         : (item.checks ?? []).length === 0 && (item.recipeUsed?.definition.checks ?? []).length === 0 ? 'this task has no check — add one; the check is what picks the winner' : null
-                      return (
+                      return (<>
                         <li role="none">
                           <MenuItem className="pf__verb pf__verb--word" data-work-tournament disabled={why !== null}
                             title={why ?? 'the task on several agents at once, each in its own worktree — its check picks the winner'}
                             onSelect={() => props.onTournament?.(item.id)}>Tournament</MenuItem>
                         </li>
-                      )
+                        {props.onTournamentField !== undefined && (
+                          <li role="none">
+                            <MenuItem className="pf__verb pf__verb--word" data-work-tournament-field disabled={why !== null}
+                              title={why ?? 'choose which agents race, then start'}
+                              onSelect={() => props.onTournamentField?.(item.id)}>Tournament with…</MenuItem>
+                          </li>
+                        )}
+                      </>)
                     })()}
                   </ul>
                 </MenuContent>

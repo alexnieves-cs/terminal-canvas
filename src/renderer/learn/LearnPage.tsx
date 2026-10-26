@@ -7,6 +7,7 @@ import { draftLabel, type LessonCluster, type Proposal } from '@shared/lesson-pr
 import { ruleShape, type ProofRecord } from '@shared/lesson-proof'
 import { canAccept, provenance, type LearnedRule } from '@shared/lesson-library'
 import type { LearnRead, LearnRepo } from '@shared/learn'
+import { openSettingsPage } from '@renderer/settings/open'
 
 /**
  * M570–M572 (lane O). The Lessons page: what this canvas's repositories have
@@ -37,6 +38,8 @@ import type { LearnRead, LearnRepo } from '@shared/learn'
  */
 export interface LearnPageProps {
   panels: readonly Panel[]
+  /** M605. The Review page's other tab, where lessons come from. */
+  onShowQueue?: () => void
 }
 
 const ago = (at: number, now: number): string => {
@@ -82,6 +85,7 @@ export function LearnPage(p: LearnPageProps): JSX.Element {
       ) : repos.length === 0 ? (
         <p className="learn__empty" data-learn-empty="none">
           Nothing learned yet. A lesson is kept when you discard a file in a review, or send a review comment to an agent.
+          {p.onShowQueue !== undefined && <>{' '}<button type="button" className="pf__verb pf__verb--word" data-learn-show-queue onClick={p.onShowQueue}>See what is ready to review</button></>}
         </p>
       ) : repos.map((repo) => <RepoSection key={repo.root} repo={repo} agents={read.agents} now={now} onChanged={refresh} />)}
     </section>
@@ -125,7 +129,13 @@ function RepoSection({ repo, agents, now, onChanged }: { repo: LearnRepo; agents
       </h3>
       {repo.skipped > 0 && <p className="learn__note" data-learn-skipped>{plural(repo.skipped, 'stored line')} could not be read</p>}
       {!agents && repo.lessons.length > 0 && (
-        <p className="learn__note" data-learn-agents="off">Drafting a rule runs an agent, so it is off until you turn on “Lessons: let an agent draft and prove rules” in Settings.</p>
+        // M600. The reason the Draft and Prove buttons are off, said on the page
+        // (not only in their tooltips, which a keyboard or touch never shows),
+        // with the setting it names one press away.
+        <p className="learn__note" id={`learn-off-${repo.root}`} data-learn-agents="off">
+          Drafting a rule runs an agent, so it is off until you turn on “Lessons: let an agent draft and prove rules” in Settings.{' '}
+          <button type="button" className="pf__verb pf__verb--word" data-learn-open-settings onClick={() => openSettingsPage('agents')}>Open Agents settings</button>
+        </p>
       )}
       {note !== null && <p className="learn__note" data-learn-refusal>{note}</p>}
 
@@ -169,6 +179,7 @@ function RepoSection({ repo, agents, now, onChanged }: { repo: LearnRepo; agents
               <span className="learn-cluster__head">
                 <span className="learn-cluster__title">{plural(members.length, 'lesson')} about {c.paths.length === 1 ? c.paths[0] : plural(c.paths.length, 'file')}</span>
                 <button type="button" className="pf__verb pf__verb--word" data-learn-verb="draft" disabled={!agents || busy !== null}
+                  aria-describedby={agents ? undefined : `learn-off-${repo.root}`}
                   title={agents ? 'Ask an agent with no tools for one rule that would have prevented these — a draft you read, nothing is written' : 'Turn on “Lessons: let an agent draft and prove rules” in Settings first'}
                   onClick={() => draft(c)}>{busy === c.id ? 'Drafting…' : 'Draft a rule'}</button>
               </span>
@@ -226,8 +237,11 @@ function ProveForm({ repo, proposal, agents, lessons, onStarted, onRefused }: {
     return (
       <span className="learn-draft__verbs">
         <button type="button" className="pf__verb pf__verb--word" data-learn-verb="prove" disabled={!agents || !hasBase}
+          aria-describedby={!agents ? `learn-off-${repo.root}` : undefined}
           title={!agents ? 'Turn on “Lessons: let an agent draft and prove rules” in Settings first' : !hasBase ? 'None of these lessons kept the commit its work was made on, so there is nothing to replay from' : 'Replay the task in a scratch copy with this rule applied'}
           onClick={() => setOpen(true)}>{proposal.proof === undefined ? 'Prove…' : 'Prove again…'}</button>
+        {/* M600. Said beside the button, not only in its tooltip. */}
+        {agents && !hasBase && <span className="learn__note" data-learn-prove-reason>Nothing to replay from: none of these lessons kept the commit its work was made on.</span>}
       </span>
     )
   }

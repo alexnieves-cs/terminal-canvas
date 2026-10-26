@@ -767,7 +767,10 @@ function InspectorPanel({
               would make it. The flagship flow, readable from any of its panels. */}
           {contextBand.related?.chain !== undefined && (
             <ol className="inspector__chain" data-inspector-chain aria-label="This task, step by step">
-              {contextBand.related.chain.map((c) => (
+              {/* M608. Rest never lists what is missing: the steps that exist,
+                  then only the NEXT missing one (the flow's next step). Four
+                  grey "no …" lines in a row said nothing a person could act on. */}
+              {chainAtRest(contextBand.related.chain).map((c) => (
                 <li key={c.step} className="inspector__chain-step" data-chain-step={c.step} data-chain-present={c.present ? '' : undefined}>
                   <button type="button" className="inspector__chain-button"
                     disabled={onChainStep === undefined || (!c.present && c.step === 'issue')}
@@ -1633,4 +1636,10 @@ function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string
       <button type="button" className="pf__verb pf__verb--word" data-inspector-node-deselect onClick={() => select(templateId, null)}>Done</button>
     </section>
   )
+}
+
+/** M608. The chain at rest: every present step, then the first absent step a press can make (an absent issue cannot be made here). */
+export function chainAtRest<T extends { step: string; present: boolean }>(chain: readonly T[]): T[] {
+  const next = chain.find((c) => !c.present && c.step !== 'issue')
+  return chain.filter((c) => c.present || c === next)
 }

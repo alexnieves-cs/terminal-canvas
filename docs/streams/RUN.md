@@ -22,6 +22,7 @@ Five streams run at once on separate branches, each opened as its own PR against
 | N | Browser demo | M565–M569 | The renderer on the web, fed by `world-sim`; plan in [bold.md](bold.md) |
 | O | A harness that learns | M570–M579 | A caught mistake becomes a rule, kept only if a replay proves it; plan in [bold.md](bold.md) |
 | P | Multiplayer canvas | M580–M589 | Handoffs and a shared review queue on the shared canvas, judged by the collab server; plan in [bold.md](bold.md) |
+| U | UI and UX gaps | M600–M614 | The 24 items an app-wide audit found (2026-10-26): contrast, modal focus, the top bar, one empty-canvas card, a real Review page, hidden doors, plain words, the hosted tab's keys |
 
 ## Setting your lane
 

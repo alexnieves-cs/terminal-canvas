@@ -69,10 +69,12 @@ export function TournamentBracket(props: { run: (op: string, value?: string) => 
         <span className="tn-bracket__summary" data-tournament-summary>{status.score?.summary ?? (status.state === 'scoring' ? 'reading each lane\'s changes…' : `${status.entrants.filter((e) => !isEntrantFinished(e.state)).length} of ${status.entrants.length} still running`)}</span>
         {running && <button type="button" className="pf__verb pf__verb--word" data-tournament-stop disabled={busy} onClick={() => act('stop')}>Stop</button>}
         {/* M549. The judge and Combine, once the field is scored; each disabled by its own sentence. */}
-        {scored && (() => { const why = judgeRefusal(status); return <button type="button" className="pf__verb pf__verb--word" data-tournament-judge disabled={busy || why !== null} title={why ?? 'a read-only claude chat compares the passing entrants'} onClick={() => act('judge')}>Judge</button> })()}
+        {scored && (() => { const why = judgeRefusal(status); return <button type="button" className="pf__verb pf__verb--word" data-tournament-judge disabled={busy || why !== null} title={why ?? 'a read-only claude chat compares the passing entrants'} aria-describedby={why === null ? undefined : `tn-judge-${status.id}`} onClick={() => act('judge')}>Judge</button> })()}
         {scored && status.itemId !== undefined && <button type="button" className="pf__verb pf__verb--word" data-tournament-combine disabled={busy} title="open the task — its Combine tab puts lanes together and checks the result first" onClick={() => act('combine')}>Combine…</button>}
         {!running && <button type="button" className="pf__verb pf__verb--word" data-tournament-hide onClick={() => setHidden(status.id)} title="put the bracket away until the next tournament">Hide</button>}
       </header>
+      {/* M600. Why Judge is off, on the bracket and not only in a tooltip. */}
+      {scored && judgeRefusal(status) !== null && <p className="tn-bracket__why" id={`tn-judge-${status.id}`} data-tournament-judge-reason>Judge: {judgeRefusal(status)}</p>}
       <ol className="tn-bracket__field">
         {status.entrants.map((e) => {
           const ranked = rankOf.get(e.id)
@@ -85,7 +87,9 @@ export function TournamentBracket(props: { run: (op: string, value?: string) => 
               <span className="tn-bracket__facts">{entrantFacts(e, now)}</span>
               {(ranked?.why ?? e.reason) !== undefined && <span className="tn-bracket__why">{ranked?.why ?? e.reason}</span>}
               {e.checkTouched !== undefined && <span className="tn-bracket__why" data-entrant-check-touched title={e.checkTouched.join('\n')}>changed what its check runs: {e.checkTouched.slice(0, 3).join(', ')}{e.checkTouched.length > 3 ? ` +${e.checkTouched.length - 3}` : ''}</span>}
-              {scored && <button type="button" className="pf__verb pf__verb--word" data-tournament-pick={e.id} disabled={busy || why !== null} title={why ?? `keep ${e.label} as the task's lane and close the other chats`} onClick={() => act('pick', e.id)}>Pick</button>}
+              {scored && <button type="button" className="pf__verb pf__verb--word" data-tournament-pick={e.id} disabled={busy || why !== null} title={why ?? `keep ${e.label} as the task's lane and close the other chats`} aria-describedby={why === null ? undefined : `tn-pick-${e.id}`} onClick={() => act('pick', e.id)}>Pick</button>}
+              {/* M600. A Pick that is off says why under the entrant. */}
+              {scored && why !== null && <span className="tn-bracket__why" id={`tn-pick-${e.id}`} data-tournament-pick-reason>{why}</span>}
             </li>
           )
         })}

@@ -149,24 +149,40 @@ function secure(req: IncomingMessage): boolean {
   return (typeof proto === 'string' && proto.split(',')[0]!.trim() === 'https') || (req.socket as { encrypted?: boolean }).encrypted === true
 }
 
+/**
+ * The sign-in page. M610: it follows the computer's light or dark setting
+ * like the app does, says where the token comes from (the person opening a
+ * tab is often not the one who started the host), and keeps the failed
+ * line in a live region so a screen reader hears it.
+ */
 const SIGN_IN = (failed: boolean): string => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Terminal Canvas · sign in</title>
 <style>
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #12131a; color: #e6e8ee; font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; }
-  form { width: min(360px, calc(100vw - 32px)); display: grid; gap: 12px; }
+  :root { --bg: #f6f7f9; --card: #ffffff; --fg: #1b1e25; --muted: #5f6676; --line: #d9dce3; --field: #ffffff; --accent: #1b1e25; --on-accent: #ffffff; --bad: #b42323; --focus: #3b6fe0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12131a; --card: #191b23; --fg: #e6e8ee; --muted: #9aa1ae; --line: #2c2f3a; --field: #12131a; --accent: #e6e8ee; --on-accent: #12131a; --bad: #f08a8a; --focus: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; }
+  form { width: min(380px, 100%); display: grid; gap: 12px; padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
   h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
-  p { margin: 0; color: #8a919e; }
-  input { padding: 10px 12px; border-radius: 8px; border: 1px solid #2c2f3a; background: #1a1c24; color: inherit; font: inherit; }
-  button { padding: 10px 12px; border-radius: 8px; border: 0; background: #e6e8ee; color: #12131a; font: inherit; font-weight: 600; cursor: pointer; }
-  .bad { color: #f08a8a; }
+  p { margin: 0; color: var(--muted); }
+  input { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: inherit; font: inherit; }
+  button { padding: 10px 12px; border-radius: 8px; border: 0; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .hint { font-size: 13px; }
+  .bad { color: var(--bad); }
 </style></head>
 <body><form method="post" action="/__tc/sign-in">
   <h1>Terminal Canvas</h1>
   <p>This host runs shells. Enter its access token to open it.</p>
-  ${failed ? '<p class="bad">That token did not match.</p>' : ''}
-  <input name="token" type="password" autocomplete="current-password" autofocus aria-label="Access token" placeholder="Access token">
+  <p class="bad" role="alert">${failed ? 'That token did not match. Check it and try again.' : ''}</p>
+  <input name="token" type="password" autocomplete="current-password" autofocus aria-label="Access token" aria-describedby="token-hint" placeholder="Access token">
   <button type="submit">Open</button>
+  <p class="hint" id="token-hint">The token is the <code>TC_HOST_TOKEN</code> the host was started with. Ask whoever runs it.</p>
 </form></body></html>`
 
 export function startHost(options: HostOptions): Promise<RunningHost> {

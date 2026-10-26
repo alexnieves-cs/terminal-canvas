@@ -55,6 +55,7 @@ import { useTeamAsks } from '@renderer/shell/useTeamAsks'
 import { useTeamFlow } from '@renderer/team-flow/useTeamFlow'
 import { withoutHiddenLabs } from '@shared/labs'
 import { useLabsOff } from '@renderer/labs/useLabs'
+import { useModalFocus } from '@renderer/primitives'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -247,6 +248,10 @@ export function Palette(props: PaletteProps): JSX.Element {
   const scope = controller.scope
   const setScope = controller.setScope
   const inputRef = useRef<HTMLInputElement>(null)
+  // M600. The palette and the sheets inside it own the window while open:
+  // Tab wraps inside, and focus goes back where it was when it closes.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useModalFocus(rootRef)
   const selectedRef = useRef<HTMLLIElement>(null)
   // The last position a REAL mouse move reported. Blink re-dispatches a
   // mousemove at the UNCHANGED cursor position after a scroll, to refresh
@@ -717,9 +722,11 @@ export function Palette(props: PaletteProps): JSX.Element {
 
   return (
     <div
+      ref={rootRef}
       className="palette"
       data-screen-control=""
       role="dialog"
+      aria-modal="true"
       aria-label="Command palette"
       // The palette mounts INSIDE .canvas, whose onMouseDown is the background
       // handler — so without this every mousedown in here (a row pick, a click

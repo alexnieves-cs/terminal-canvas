@@ -430,6 +430,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
           },
           onLeave: () => setAdoptable(null)
         }}
+        onMoreWays={() => setLauncherPutAway(false)}
         onLayout={(id) => {
           const layout = STARTER_LAYOUTS.find((row) => row.id === id)
           if (layout === undefined) return
