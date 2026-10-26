@@ -74,13 +74,15 @@ export const VM_HOME = '/home/agent'
  * the agent runs. Auth keys are `-e NAME`: the runtime inherits the value
  * from the spawn's env, so it never sits on an argv.
  */
-export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: readonly string[] }): { binary: string; args: string[] } {
+export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: readonly string[] }, role: 'agent' | 'check' = 'agent'): { binary: string; args: string[] } {
   const proxy = `http://${spec.proxy.host}:${spec.proxy.port}`
   const mount = (source: string, target: string): string[] => ['--mount', `type=bind,source=${source},target=${target}`]
   const args = [
     ...(spec.runtime === 'orbstack' ? ['--context', 'orbstack'] : []),
     'run', '--rm', '-i',
-    '--name', vmName(spec.laneId),
+    // A lane's check runs in a second, fresh VM beside the agent's (whose
+    // stream-json process lives between turns), so the two never share a name.
+    '--name', role === 'agent' ? vmName(spec.laneId) : `${vmName(spec.laneId)}-check`,
     // Apple's CLI spells it `-l, --label`; docker takes `--label`. Both take the long form.
     '--label', `tc.lane=${spec.laneId}`,
     '--cpus', String(spec.cpus),
@@ -105,9 +107,9 @@ export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: read
 }
 
 /** Stop then remove, by name. Both are safe on a VM that is already gone; the caller ignores their exit codes. */
-export function vmStopArgs(runtime: VmRuntimeId, laneId: string): string[][] {
+export function vmStopArgs(runtime: VmRuntimeId, laneId: string, role: 'agent' | 'check' = 'agent'): string[][] {
   const ctx = runtime === 'orbstack' ? ['--context', 'orbstack'] : []
-  const name = vmName(laneId)
+  const name = role === 'agent' ? vmName(laneId) : `${vmName(laneId)}-check`
   return runtime === 'apple'
     ? [['stop', '--time', '5', name], ['delete', '--force', name]]
     : [[...ctx, 'stop', '--time', '5', name], [...ctx, 'rm', '--force', name]]
@@ -138,4 +140,9 @@ export function vmAgentArgv(command: string, args: readonly string[], firstSpawn
   }
   out.push('--permission-mode', 'bypassPermissions')
   return { kind: 'ok', command: 'claude', args: out }
+}
+
+/** One POSIX single-quoted word: the check's command line reaches the VM's `sh -c` as exactly the text the person wrote. */
+export function shellQuote(word: string): string {
+  return `'${word.replace(/'/g, `'\\''`)}'`
 }

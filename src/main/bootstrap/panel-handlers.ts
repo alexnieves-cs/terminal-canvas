@@ -86,6 +86,7 @@ export function createEnvReporter(state: MainState, stores: Stores, which: (comm
     // M550. Asked on every report, not cached: `container system start` is a
     // thing a person does mid-session, and Check again must see it.
     const vm = await probeVmRuntimesLive((name) => again ? whichFromEnv(name, env2) : which(name), env2)
+    state.vmProbe = vm
     return buildEnvReport({
       env: env2,
       shell: shellProbeOutcome(),

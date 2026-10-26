@@ -1,10 +1,17 @@
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { AgentSessionManager } from '../agent-session'
 import { claudeCliRunner } from '../claude-cli-runner'
 import { runAutoCheck } from '../auto-check-runner'
 import { createTonightRunner } from '../tonight-runner'
-import { powerSaveBlocker } from 'electron'
+import { app, powerSaveBlocker } from 'electron'
+import { createVmLanes } from '../vm-lanes'
+import { probeVmRuntimesLive } from '../vm-runtime'
+import { whichFromEnv } from '../shell-env'
+import { VM_DEFAULT_CPUS, VM_DEFAULT_IMAGE, VM_DEFAULT_MEMORY_MIB } from '../../shared/vm-lane'
 import { createPoolCaller } from '../pool-caller'
 import { createJobHandlers, type JobHandlers } from '../job-recovery'
 import type { RepoMark } from '../../shared/job-journal'
@@ -41,12 +48,32 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
   }
   const env = state.loginEnv
 
+  // M552 (lane J). Sandboxed lanes wrap the runner and the check runner: a
+  // panel marked sandboxed runs in a VM, every other spawn is untouched. The
+  // probe runs once here and again on every environment report (state.vmProbe).
+  void probeVmRuntimesLive((name) => whichFromEnv(name, env), env).then((p) => { state.vmProbe = p }, () => { /* the report says why */ })
+  const vmLanes = createVmLanes({
+    inner: claudeCliRunner,
+    runCheck: runAutoCheck,
+    exec: (binary, args, execEnv) => { execFile(whichFromEnv(binary, env) ?? binary, args, { env: execEnv, timeout: 30_000 }, () => { /* a VM already gone is the common case */ }) },
+    mkdir: (path) => mkdirSync(path, { recursive: true }),
+    rm: (path) => rmSync(path, { recursive: true, force: true }),
+    home: homedir(),
+    stateRoot: join(app.getPath('userData'), 'vm-lanes'),
+    runtime: () => state.vmProbe?.chosen ?? null,
+    settings: () => ({ image: VM_DEFAULT_IMAGE, cpus: VM_DEFAULT_CPUS, memoryMiB: VM_DEFAULT_MEMORY_MIB, allow: [] }),
+    // M554 starts the proxy; until then no lane can be entered.
+    proxy: () => null,
+    loginEnv: env
+  })
+  state.vmLanes = vmLanes
+
   // The bare name is kept when the probe found nothing: the spawn then fails
   // with ENOENT and the session reads `exited` with the reason in its stderr
   // tail, which is a named failure. M72 disables the chat verb by name before
   // it gets that far.
   const agents = new AgentSessionManager({
-    runner: claudeCliRunner,
+    runner: vmLanes.runner,
     command: state.claudePath ?? 'claude',
     // M90. Present only when found: an absent codex makes a codex send
     // `refused-backend`, never a spawn of a bare name that ENOENTs.
@@ -84,7 +111,8 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     preAnswer: (id, toolName) => state.approvals?.granted(id, toolName) ?? false
     ,
     // M475. A gated auto run's check: the login shell, the session's folder.
-    runCheck: runAutoCheck,
+    // M552. A sandboxed lane's check runs in its own fresh VM instead.
+    runCheck: vmLanes.runCheck,
     // M102. Each headless session gets the door and its OWN panel id and token
     // — the same block PtyManager gives a terminal — so `tc api` from a chat
     // is that chat's, never a claim.

@@ -191,5 +191,118 @@ check('vm.egress.1 HTTPS to a listed host or a strict subdomain of a *. entry pa
   return { pass: wrongYes.length === 0 && wrongNo.length === 0, detail: { wrongYes, wrongNo } }
 })
 
-console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
-if (results.some((r) => !r.pass)) process.exitCode = 1
+// M552 — the lane registry and its runner, over a fake runner and fake exec.
+const lanesMod = load('src/main/vm-lanes.ts', 'lanes')
+function rig(over = {}) {
+  const spawns = [], execs = [], fsOps = [], checks = [], kills = []
+  const procs = []
+  const inner = (spawn) => {
+    spawns.push(spawn)
+    const exitCbs = []
+    const p = { pid: 7, write() {}, onData() {}, onExit(cb) { exitCbs.push(cb) }, kill() { kills.push(spawn.command) }, exit: () => exitCbs.forEach((cb) => cb({ code: 0, signal: null })) }
+    procs.push(p)
+    return p
+  }
+  const lanes = lanesMod.mod.createVmLanes({
+    inner,
+    runCheck: async (spec) => { checks.push(spec); return { exitCode: 0, output: 'ok' } },
+    exec: (binary, args) => execs.push([binary, ...args].join(' ')),
+    mkdir: (p) => fsOps.push(`mkdir ${p}`), rm: (p) => fsOps.push(`rm ${p}`),
+    home: HOME, stateRoot: '/Users/fixture/Library/Application Support/tc/vm-lanes',
+    runtime: () => 'apple', settings: () => ({ image: 'terminal-canvas/lane:1', cpus: 2, memoryMiB: 2048, allow: ['registry.npmjs.org'] }),
+    proxy: () => ({ host: '192.168.64.1', port: 47801 }),
+    loginEnv: { PATH: '/usr/bin', HOME, CLAUDE_CODE_OAUTH_TOKEN: 'sk-fixture', GITHUB_TOKEN: 'ghp-fixture' },
+    ...over
+  })
+  return { lanes, spawns, execs, fsOps, checks, kills, procs }
+}
+const WT = '/Users/fixture/Library/Application Support/tc/worktrees/fix-login'
+const chatEnv = (id) => ({ PATH: '/usr/bin', TC_PANEL_ID: id, TC_PANEL_TOKEN: 'tok', TC_CONTROL_SOCKET: '/tmp/tc.sock', CLAUDE_CODE_OAUTH_TOKEN: 'sk-fixture', GITHUB_TOKEN: 'ghp-fixture' })
+const HOST_ARGS = ['-p', '--output-format', 'stream-json', '--permission-prompt-tool', 'stdio', '--resume', 'sess-1']
+
+check('vm.run.1 a panel not in a lane spawns exactly as before; a lane\'s spawn is `container run` with the image\'s claude, prompts off, and an env holding no app socket, panel token or other credential', lanesMod, () => {
+  const r = rig()
+  r.lanes.runner({ command: '/opt/homebrew/bin/claude', args: HOST_ARGS, cwd: WT, env: chatEnv('plain') })
+  const plain = r.spawns[0]
+  const entered = r.lanes.enter('chat-1', WT)
+  r.lanes.runner({ command: '/opt/homebrew/bin/claude', args: HOST_ARGS, cwd: WT, env: chatEnv('chat-1') })
+  const vm = r.spawns[1]
+  const afterImage = vm.args.slice(vm.args.indexOf('terminal-canvas/lane:1') + 1)
+  return {
+    pass: plain.command === '/opt/homebrew/bin/claude' && plain.args === HOST_ARGS && entered.kind === 'ok' &&
+      vm.command === 'container' && vm.args[0] === 'run' && afterImage[0] === 'claude' && afterImage.join(' ').includes('--session-id sess-1') &&
+      afterImage.slice(-2).join(' ') === '--permission-mode bypassPermissions' &&
+      vm.env.CLAUDE_CODE_OAUTH_TOKEN === 'sk-fixture' && !('GITHUB_TOKEN' in vm.env) && !('TC_PANEL_TOKEN' in vm.env) && !('TC_CONTROL_SOCKET' in vm.env) &&
+      !vm.args.some((a) => a.includes('sk-fixture')) && r.lanes.list()[0].running === true,
+    detail: { entered, env: Object.keys(vm.env), tail: afterImage }
+  }
+})
+
+check('vm.run.2 enter is refused by name with no runtime, no proxy or no token; it clears a stale VM by name and starts from a fresh state folder', lanesMod, () => {
+  const none = rig({ runtime: () => null }).lanes.enter('a', WT)
+  const noProxy = rig({ proxy: () => null }).lanes.enter('a', WT)
+  const noToken = rig({ loginEnv: { PATH: '/usr/bin', HOME } }).lanes.enter('a', WT)
+  const home = rig().lanes.enter('a', HOME)
+  const r = rig()
+  r.lanes.enter('chat-1', WT)
+  const state = '/Users/fixture/Library/Application Support/tc/vm-lanes/chat-1'
+  return {
+    pass: none.kind === 'refused' && /no VM runtime/.test(none.reason) && noProxy.kind === 'refused' && /proxy/.test(noProxy.reason) &&
+      noToken.kind === 'refused' && /setup-token/.test(noToken.reason) && home.kind === 'refused' &&
+      r.fsOps.join('|') === `rm ${state}|mkdir ${state}` && r.execs.join('|') === 'container stop --time 5 tc-lane-chat-1|container delete --force tc-lane-chat-1',
+    detail: { none, noProxy, noToken, fs: r.fsOps, execs: r.execs }
+  }
+})
+
+check('vm.run.3 a kill stops the VM by name as well as the client; a later spawn resumes; leave and disposeAll stop every lane and remove its state', lanesMod, () => {
+  const r = rig()
+  r.lanes.enter('chat-1', WT)
+  r.lanes.enter('chat-2', WT + '-2')
+  r.execs.length = 0
+  const p = r.lanes.runner({ command: 'claude', args: HOST_ARGS, cwd: WT, env: chatEnv('chat-1') })
+  p.kill()
+  const afterKill = [...r.execs]
+  r.procs[0].exit()
+  const stopped = r.lanes.list().find((l) => l.panelId === 'chat-1').running === false
+  r.lanes.runner({ command: 'claude', args: HOST_ARGS, cwd: WT, env: chatEnv('chat-1') })
+  const second = r.spawns[1].args
+  r.execs.length = 0; r.fsOps.length = 0
+  r.lanes.disposeAll()
+  return {
+    pass: r.kills.length === 1 && afterKill.join('|') === 'container stop --time 5 tc-lane-chat-1|container delete --force tc-lane-chat-1' && stopped &&
+      second.join(' ').includes('--resume sess-1') && r.lanes.list().length === 0 && r.execs.length === 4 &&
+      r.fsOps.filter((o) => o.startsWith('rm ')).length === 2 && r.lanes.leave('chat-1') === false,
+    detail: { afterKill, execs: r.execs, fs: r.fsOps }
+  }
+})
+
+// A command with a quote in it: the VM's sh must receive exactly this text.
+const CHECK_LINE = "npm test -- --grep \"it's\""
+const quote = (w) => `'${w.replace(/'/g, `'\\''`)}'`
+const asyncChecks = (async () => {
+  if (lanesMod.mod !== undefined) {
+    const r = rig()
+    r.lanes.enter('chat-1', WT)
+    r.execs.length = 0
+    await r.lanes.runCheck({ command: CHECK_LINE, cwd: WT, env: chatEnv('chat-1'), timeoutMs: 1000, signal: new AbortController().signal })
+    await r.lanes.runCheck({ command: 'npm test', cwd: WT, env: chatEnv('other'), timeoutMs: 1000, signal: new AbortController().signal })
+    const [inVm, onMac] = r.checks
+    ok('vm.run.4 the lane\'s check line is a quoted container run named -check ending in sh -c and the exact command; its VM is stopped after; the other panel\'s check is untouched',
+      inVm.command.startsWith("'container' 'run'") && inVm.command.includes("'tc-lane-chat-1-check'") && inVm.command.endsWith(` 'sh' '-c' ${quote(CHECK_LINE)}`) && quote("it's") === `'it'\\''s'` &&
+        !('TC_PANEL_TOKEN' in inVm.env) && r.execs.join('|') === 'container stop --time 5 tc-lane-chat-1-check|container delete --force tc-lane-chat-1-check' &&
+        onMac.command === 'npm test' && onMac.env.TC_PANEL_ID === 'other', inVm.command.slice(-80))
+    const r2 = rig()
+    r2.lanes.enter('chat-1', WT)
+    const p = r2.lanes.runner({ command: '/usr/local/bin/codex', args: ['exec'], cwd: WT, env: chatEnv('chat-1') })
+    const info = await new Promise((res) => p.onExit(res))
+    ok('vm.run.5 a lane refuses a backend other than claude: process exits with a null code and the reason as its stderr', info.code === null && /Claude Code only/.test(info.stderr), info)
+  } else {
+    ok('vm.run.4', false, lanesMod.error); ok('vm.run.5', false, lanesMod.error)
+  }
+})()
+
+asyncChecks.then(() => {
+  console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
+  if (results.some((r) => !r.pass)) process.exitCode = 1
+})
+

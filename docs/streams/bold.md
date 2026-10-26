@@ -129,6 +129,15 @@ prompts off without touching the Mac.
   row is usable for one engine. A runtime whose service was not asked or did not
   answer is never reported usable.
 
+- **The VM wraps the runner, not the manager.** `vm-lanes.ts` turns a
+  sandboxed panel's spawn into `container run …` through the same real runner,
+  keyed on the `TC_PANEL_ID` every chat process already carries (M102), so the
+  manager (lane C's) is unchanged. The VM client's env holds PATH, HOME and the
+  token only, never the app's socket or a panel token.
+- **The check runs in the VM too**, in a second fresh VM named `…-check`: a check
+  is code the agent may have written with prompts off, and running it on the Mac
+  would hand the Mac exactly what the VM keeps off it.
+
 ## K — Fork from any turn (M556–M560)
 
 - **M556** — a snapshot per turn: at each turn boundary, the lane's tree is
