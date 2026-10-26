@@ -129,7 +129,8 @@
     "verify:ux": "node scripts/verify-ux.cjs",
     "verify:auto": "node scripts/verify-auto.cjs",
     "verify:film": "node scripts/verify-film.cjs",
-    "verify:vm": "node scripts/verify-vm.cjs"
+    "verify:vm": "node scripts/verify-vm.cjs",
+    "verify:learn": "node scripts/verify-learn.cjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",

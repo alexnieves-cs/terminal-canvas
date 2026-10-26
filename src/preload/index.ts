@@ -263,6 +263,14 @@ const bridge: CanvasBridge = {
     radar: (lanes: unknown) => ipcRenderer.invoke(IPC.CLOUD_RADAR, lanes),
     onChanged: (listener) => subscribe<CloudLaneView>(IPC_EVENTS.CLOUD_CHANGED, listener)
   },
+  // M570 (lane O). The lessons a review taught.
+  learn: {
+    read: (roots: unknown) => ipcRenderer.invoke(IPC.LEARN_READ, roots),
+    record: (facts: unknown) => ipcRenderer.invoke(IPC.LEARN_RECORD, facts),
+    propose: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_PROPOSE, req),
+    decide: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_DECIDE, req),
+    prove: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_PROVE, req)
+  },
   tonight: {
     start: (batch: unknown) => ipcRenderer.invoke(IPC.TONIGHT_START, batch),
     stop: () => ipcRenderer.invoke(IPC.TONIGHT_STOP),

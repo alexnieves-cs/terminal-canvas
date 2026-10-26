@@ -359,7 +359,7 @@ export interface PaletteActions {
    * M268. Show the canvas or the Orchestration center page. The canvas host
    * stays mounted either way — this only chooses which sibling is visible.
    */
-  setCenterView(view: 'canvas' | 'orchestration' | 'team'): void
+  setCenterView(view: 'canvas' | 'orchestration' | 'team' | 'learn'): void
   /**
    * Arm the one-shot link mode with this panel as the source. The NEXT click
    * on the canvas completes or cancels it; see useLinkMode and Canvas.tsx's
@@ -1456,6 +1456,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'people team members organization presence who is working observe',
     group: 'canvas',
     run: () => actions.setCenterView('team')
+  })
+  // M570 (lane O). The Lessons page: what discards and sent review comments
+  // taught. Always here — reading what was kept spends nothing.
+  out.push({
+    id: 'learn.open',
+    title: 'Show Lessons',
+    subtitle: 'what your reviews taught the agents here',
+    searchText: 'lessons learn learned harness rules mistakes discarded comments review claude.md skills',
+    group: 'canvas',
+    run: () => actions.setCenterView('learn')
   })
   out.push({
     id: 'canvas.reset',
