@@ -13605,8 +13605,11 @@ tr[data-session-row]:focus-within .sessions-world,
    and branch shrink a hundred times faster than the title — "Claude — L…"
    lost the one fact the header exists for while the path still showed in
    full. No min-width on the title: a floor pushed a narrow chat's auto chip
-   and its dismiss out of the frame (shot inspector-caps hit-tests that). */
-.pf__chrome .pf__path, .pf__chrome .pf__branch { flex: 0 100 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+   and its dismiss out of the frame (shot inspector-caps hit-tests that).
+   Not a terminal's: its name strip stands proud of the frame and is laid
+   out around the north port (M397 A4); shrinking its path slid the state
+   badge over the port an edge ends on (verify:panels edge.paint.1). */
+.pf:not(.pf--kind-terminal) .pf__chrome :is(.pf__path, .pf__branch) { flex: 0 100 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* M609. The palette's band label ("COMMANDS") sat 8px left of the section
    headers under it. Same inset as .palette__section, with a hairline above
    so it reads as the bigger grouping rather than a misaligned header. */
