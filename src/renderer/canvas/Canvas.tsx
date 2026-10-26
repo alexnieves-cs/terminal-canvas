@@ -2500,10 +2500,10 @@ export function Canvas({
   // failing check, the changes to review); absent, the task's remembered side.
   const [focusTask, setFocusTask] = useState<{ itemId: string; from: 'canvas' | 'orchestration'; side?: FocusSide; at: number } | null>(null)
   const openFocusTask = useCallback((itemId: string, side?: FocusSide): void => {
-    // Sessions, Review and People are pages, not a task's origin. Back returns
+    // Sessions, Review, People and Lessons are pages, not a task's origin. Back returns
     // to the canvas, the same way team already did. Orchestrate is an origin,
     // and a task opened from focus keeps the one it was opened from.
-    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow === 'team' || centerViewNow === 'sessions' || centerViewNow === 'review' ? 'canvas' : centerViewNow, ...(side === undefined ? {} : { side }), at: Date.now() }))
+    setFocusTask((cur) => ({ itemId, from: centerViewNow === 'focus' ? (cur?.from ?? 'canvas') : centerViewNow === 'team' || centerViewNow === 'sessions' || centerViewNow === 'review' || centerViewNow === 'learn' ? 'canvas' : centerViewNow, ...(side === undefined ? {} : { side }), at: Date.now() }))
     setCenterView('focus')
   }, [centerViewNow, setCenterView])
   const closeFocusTask = useCallback((): void => {

@@ -17,6 +17,8 @@ import { createWorktreeManager } from '../worktree-manager'
 import { createBaselineCapture } from '../baseline-capture'
 import { createGitRunner } from '../git-runner'
 import { createMemoryStore } from '../memory-store'
+import { createLessonStore, type LessonStore } from '../lesson-store'
+import { withLessonCapture } from '../lesson-capture'
 import { createBrokerAudit } from '../broker-audit'
 import { createDecisionAudit, type DecisionAudit } from '../decision-audit'
 import { createLastExitStore, type LastExitStore } from '../last-exit'
@@ -73,6 +75,8 @@ export interface Stores {
   fileWatchers: FileWatchers
   toolboxCache: ToolboxCache
   memoryStore: ReturnType<typeof createMemoryStore>
+  /** M570 (lane O). What discards and sent comments taught, per repository. */
+  lessonStore: LessonStore
   teammateMemory: ReturnType<typeof createMemoryStore>
   brokerAudit: ReturnType<typeof createBrokerAudit>
   /** M369. Every person-sourced ledger row, scrubbed, outliving the ledger's trim. */
@@ -169,7 +173,10 @@ export function createStores(state: MainState): Stores {
   let scratchIndexSeq = 0
   // M53. The subject's own peer count is the refusal the renderer cannot make
   // stale; removal is a FILE unlink through node, never a git write.
-  const reviewDiscard = createReviewDiscarder({
+  // M570 (lane O). Each discarded file becomes a lesson — read before the
+  // discard, recorded after it, never able to block it (lesson-capture.ts).
+  const lessonStore = createLessonStore({ dir: join(userData, 'lessons') })
+  const reviewDiscard = withLessonCapture(createReviewDiscarder({
     run: gitRunner,
     peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
     removeFile: (p) => unlinkSync(p),
@@ -179,6 +186,11 @@ export function createStores(state: MainState): Stores {
     // M285. The engine's own identity read, so the re-check before a write
     // and the answer the person read are one computation.
     identityOf: (root, base) => reviewEngine.identityOf(root, base)
+  }), {
+    fileDiff: (req) => reviewEngine.fileDiff(req),
+    commonRootOf: (root) => reviewEngine.commonRootOf(root),
+    record: (lessons) => { lessonStore.add(lessons) },
+    now: () => Date.now()
   })
   const reviewCommit = createReviewCommitter({
     run: gitRunner,
@@ -450,7 +462,7 @@ export function createStores(state: MainState): Stores {
     layoutStore, layoutSnapshots, credentialStore, gitRunner, reviewEngine,
     reviewDiscard, reviewCommit, baselineCapture, captureBaseline, dropBaseline,
     runLedger, checkOutputs, agentTranscripts, scrollbackLog, worktreeManager, ptyManager,
-    fileWatchers, toolboxCache, memoryStore, teammateMemory, brokerAudit, decisionAudit,
+    fileWatchers, toolboxCache, memoryStore, lessonStore, teammateMemory, brokerAudit, decisionAudit,
     attention, phoneAlerts, controlSocketPath, launcherDir, lastExit, jobs
   }
 }

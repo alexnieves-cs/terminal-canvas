@@ -945,6 +945,13 @@ export function registerIpcHandlers(
     const lanes = Array.isArray(raw) ? raw.filter((l): l is { id: string; path: string } => typeof l?.id === 'string' && typeof l.path === 'string' && l.path.startsWith('/')).slice(0, RADAR_LANES_MAX) : []
     return kit.laneRadar === undefined ? { at: Date.now(), collisions: [], unread: lanes.map((l) => ({ id: l.id, reason: 'the radar is not wired in this process' })) } : kit.laneRadar(lanes.map((l) => ({ id: l.id, path: l.path })))
   })
+  // M570 (lane O). The doors validate their own input (main/learn.ts); an
+  // unwired process answers empty and refuses, never pretends to have kept one.
+  ipcMain.handle(IPC.LEARN_READ, (_event, roots: unknown) => (kit.learn === undefined ? { repos: [] } : kit.learn.read(roots)))
+  ipcMain.handle(IPC.LEARN_RECORD, (_event, facts: unknown) => (kit.learn === undefined ? { ok: false, reason: 'lessons are not wired in this process' } : kit.learn.record(facts)))
+  ipcMain.handle(IPC.LEARN_PROPOSE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'drafting a rule is not wired in this process' } : kit.learn.propose(req)))
+  ipcMain.handle(IPC.LEARN_PROVE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'proving a rule is not wired in this process' } : kit.learn.prove(req)))
+  ipcMain.handle(IPC.LEARN_DECIDE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'lessons are not wired in this process' } : kit.learn.decide(req)))
   ipcMain.handle(IPC.SETUP_READ, (_event, cwd: unknown) => (typeof cwd === 'string' ? kit.setupRead(cwd) : { kind: 'not-a-repo' as const }))
   ipcMain.handle(IPC.SETUP_SAVE, (_event, setup: unknown) => kit.setupSave(setup))
   ipcMain.handle(IPC.SETUP_PREPARE, (_event, req: unknown) => {
