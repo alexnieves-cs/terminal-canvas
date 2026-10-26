@@ -39,16 +39,21 @@ export interface CloudProvider {
 }
 
 /**
- * The assignee login and the mention are GitHub's and Anthropic's names as
- * documented when this was written; they are listed as manual-only facts in
- * docs/load-bearing.md, because `npm run verify` never calls GitHub.
+ * The assignee and the mention are names other people own, and `npm run
+ * verify` never calls GitHub, so they are recorded here rather than proved.
+ * REST assignment of Copilot was a public preview in 2026-10: GitHub's docs
+ * name the actor `copilot-swe-agent`, and the REST door took it only with
+ * the `[bot]` suffix (community discussion 164267). If an assignment lands
+ * but no session starts, this row is the first suspect; the lane then sits
+ * at `dispatched` and turns needs-you after NO_PR_AFTER_MS, so the failure
+ * is visible, not silent.
  */
 export const PROVIDERS: readonly CloudProvider[] = [
   {
     id: 'copilot',
     label: 'Copilot coding agent',
     dispatch: 'assign',
-    assignee: 'copilot-swe-agent',
+    assignee: 'copilot-swe-agent[bot]',
     needs: 'Copilot coding agent enabled for this repository'
   },
   {
