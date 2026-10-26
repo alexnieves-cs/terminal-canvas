@@ -63,6 +63,7 @@ import type { CredentialStore } from './credential-store'
 import { accountOfCredentialKey } from '../shared/credential-schema'
 import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, AccountStatus, AccountUseResult, ShareListResult, ShareMemberResult, ShareMembersResult, ShareResult } from '../shared/account'
 import type { TeamAskRow } from '../shared/team-asks'
+import { EMPTY_TEAM_FLOW, parseFlowRequest, type FlowRequest, type TeamFlowSnapshot } from '../shared/team-flow'
 import type { TeamAskAnswerRequest } from '../shared/ipc-contract'
 import { parseRendererOp, parseWorkspaceRole, type CanvasOp, type CanvasSharedView, type SharedTextOpen, type Verdict, type WorkspaceRole } from '../shared/canvas-ops'
 import { parseTextCursor, type LocalPresence, type PresenceRoster } from '../shared/presence'
@@ -512,6 +513,9 @@ export interface PresenceHandlers {
   /** M377. The team's asks this person may answer, and their answer to one. Inert: none, and every answer refused. */
   teamAsks(): TeamAskRow[]
   answerTeamAsk(req: TeamAskAnswerRequest): Verdict
+  /** M582. The team's handoffs and review queue for this person, and one write in their name. Inert: empty, and every write refused. */
+  teamFlow(): TeamFlowSnapshot
+  writeTeamFlow(req: FlowRequest): Verdict
 }
 const SHARING_NOT_WIRED = 'sharing is not wired in this build'
 export const INERT_PRESENCE: PresenceHandlers = {
@@ -526,7 +530,9 @@ export const INERT_PRESENCE: PresenceHandlers = {
   textOpen: () => null, textClose: () => {},
   textUpdate: () => ({ ok: false, reason: SHARING_NOT_WIRED }),
   teamAsks: () => [],
-  answerTeamAsk: () => ({ ok: false, reason: SHARING_NOT_WIRED })
+  answerTeamAsk: () => ({ ok: false, reason: SHARING_NOT_WIRED }),
+  teamFlow: () => EMPTY_TEAM_FLOW,
+  writeTeamFlow: () => ({ ok: false, reason: SHARING_NOT_WIRED })
 }
 
 /**
@@ -858,6 +864,13 @@ export function registerIpcHandlers(
     if (typeof askId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(askId)) return { ok: false, reason: 'no such ask' }
     if (answer !== 'allow' && answer !== 'deny') return { ok: false, reason: 'an answer is allow or deny' }
     return presence.answerTeamAsk({ workspaceId, askId, answer })
+  })
+  // M582. Handoffs and the review queue: read, and one write — shape-checked
+  // here (parseFlowRequest), the name it is written in decided by main.
+  ipcMain.handle(IPC.TEAM_FLOW, () => presence.teamFlow())
+  ipcMain.handle(IPC.TEAM_FLOW_WRITE, (_event, raw: unknown): Verdict => {
+    const req = parseFlowRequest(raw)
+    return req === undefined ? { ok: false, reason: 'not a handoff or review request' } : presence.writeTeamFlow(req)
   })
   ipcMain.handle(IPC.TEXT_UPDATE, (_event, id: unknown, update: unknown): Verdict => {
     if (typeof id !== 'string' || !WORKSPACE_ID.test(id) || !(update instanceof Uint8Array)) return { ok: false, reason: 'not a shared text update' }

@@ -358,7 +358,9 @@ app.whenReady().then(() => {
   // worktree with the rule applied, judged by recurrence and the check.
   // +2: fork:turns / fork:branch (M556–M558, lane K) — a chat's turn
   // snapshots, and a worktree and conversation forked from one.
-  const EXPECTED_CHANNELS = 232
+  // +2: team:flow / team:flow-write (M582, lane P) — the multiplayer canvas's
+  // handoffs and shared review queue, read and written in the person's name.
+  const EXPECTED_CHANNELS = 234
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

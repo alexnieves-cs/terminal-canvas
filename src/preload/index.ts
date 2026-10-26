@@ -7,6 +7,7 @@ import type { PresenceRoster } from '../shared/presence'
 import type { WorldConnection } from '../shared/world-events'
 import type { TeamObserved } from '../shared/team'
 import type { TeamAskRow } from '../shared/team-asks'
+import type { TeamFlowSnapshot } from '../shared/team-flow'
 import type { AccountSessionMeta } from '../shared/account'
 import type { CanvasSharedView, SharedSaveMeta, SharedTextPush } from '../shared/canvas-ops'
 import type { PersistedRoutine } from '../shared/routines'
@@ -502,7 +503,10 @@ const bridge: CanvasBridge = {
     onObserved: (listener) => subscribe<TeamObserved>(IPC_EVENTS.TEAM_OBSERVED, listener),
     asks: () => ipcRenderer.invoke(IPC.TEAM_ASKS),
     answerAsk: (req) => ipcRenderer.invoke(IPC.TEAM_ASK_ANSWER, req),
-    onAsks: (listener) => subscribe<TeamAskRow[]>(IPC_EVENTS.TEAM_ASKS_CHANGED, listener)
+    onAsks: (listener) => subscribe<TeamAskRow[]>(IPC_EVENTS.TEAM_ASKS_CHANGED, listener),
+    flow: () => ipcRenderer.invoke(IPC.TEAM_FLOW),
+    writeFlow: (req) => ipcRenderer.invoke(IPC.TEAM_FLOW_WRITE, req),
+    onFlow: (listener) => subscribe<TeamFlowSnapshot>(IPC_EVENTS.TEAM_FLOW_CHANGED, listener)
   },
   broker: {
     audit: (limit, service) => ipcRenderer.invoke(IPC.BROKER_AUDIT, limit, service)
