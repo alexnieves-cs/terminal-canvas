@@ -233,7 +233,7 @@ export function createTournamentRunner(deps: TournamentDeps): TournamentRunner {
       const t: Live = {
         spec,
         status: {
-          id: deps.mintId(), title: spec.title, task: spec.task, root: spec.root, check: spec.check.command, state: 'starting', startedAt: now,
+          id: deps.mintId(), title: spec.title, task: spec.task, root: spec.root, check: spec.check.command, state: 'starting', startedAt: now, ...(spec.itemId === undefined ? {} : { itemId: spec.itemId }),
           entrants: spec.entrants.map((e) => ({ id: e.id, label: e.label, backend: e.backend, ...(e.model === undefined ? {} : { model: e.model }), panelId: e.panelId as string, state: 'queued' as const, costUsd: BACKENDS[e.backend].reportsCost ? 0 : null, checkFailures: 0 }))
         },
         rows: new Map(),

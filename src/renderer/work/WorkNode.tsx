@@ -90,6 +90,12 @@ export interface WorkNodeProps {
    * room to state it.
    */
   onSwarm: (itemId: string, preset: SwarmPresetId) => void
+  /**
+   * M548. THE CARD'S TOURNAMENT DOOR — the canvas gesture behind the
+   * `tournament` verb: the task on several agents at once, each in its own
+   * worktree, its check picking the winner. Absent renders nothing.
+   */
+  onTournament?: (itemId: string) => void
   /** M275. Whether any agent CLI answered discovery — a row of seats needs one, and the refusal says so by name. */
   agentAvailable?: boolean
   /** M115. Open the pull request from the lane. */
@@ -374,6 +380,22 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                         </li>
                       )
                     })}
+                    {/* M548. The tournament rides this menu rather than a new
+                        button: it is an arrangement of agents over the task too,
+                        and the card's resting face stays as it was. Refused by
+                        the two facts the card holds — a lane to fork from and a
+                        check to decide — in the verb's own words. */}
+                    {props.onTournament !== undefined && (() => {
+                      const why = item.panelId === undefined ? 'no lane yet — start work on this item first'
+                        : (item.checks ?? []).length === 0 && (item.recipeUsed?.definition.checks ?? []).length === 0 ? 'this task has no check — add one; the check is what picks the winner' : null
+                      return (
+                        <li role="none">
+                          <MenuItem className="pf__verb pf__verb--word" data-work-tournament disabled={why !== null}
+                            title={why ?? 'the task on several agents at once, each in its own worktree — its check picks the winner'}
+                            onSelect={() => props.onTournament?.(item.id)}>Tournament</MenuItem>
+                        </li>
+                      )
+                    })()}
                   </ul>
                 </MenuContent>
               </Menu>

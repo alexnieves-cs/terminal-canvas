@@ -291,6 +291,7 @@ export const VERBS: readonly VerbDef[] = [
   // that already exists, bounded by its turn limit, its check and the usage
   // window. It IS on TEAMMATE_REFUSED_VERBS (plan.ts): a night of runs across
   // every lane is the person's to start, never a teammate's plan.
+  { id: 'tournament', label: 'Run as a tournament', args: [{ name: 'op', kind: 'value' }, { name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['runTournament'], target: 'canvas', hint: 'one task on several agents, each in its own worktree, and its check picks the winner: `tournament <task> [agent:model …]`, `tournament stop`, `tournament pick [entrant]` (keeps the winner as the task\'s lane and closes the others\' chats; their worktrees stay), `tournament judge` (a read-only comparison), `tournament combine` (the task\'s Combine tab)' },
   { id: 'tonight', label: 'Run tonight', args: [{ name: 'op', kind: 'value', optional: true }], destructive: false, actions: ['runTonight'], target: 'canvas', hint: 'run the open tasks one at a time while you are away — paused at usage limits, Mac kept awake; `tonight stop` ends the batch' },
   { id: 'workspace-from-template', label: 'New workspace from template', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['workspaceFromTemplate'], target: 'canvas', hint: 'a fresh workspace holding the shape' },
   { id: 'zoom-reset', label: 'Reset zoom', args: [], destructive: false, actions: ['resetZoom'], target: 'canvas', hint: 'the initial camera' },
@@ -567,6 +568,8 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: 'an action node whose line is: preview-capture' },
   'preview-bind': { canvas: 'Bind source / Change source on the preview pane', palette: 'preview.bind', agent: 'tc plan preview-bind', workflow: 'an action node whose line is: preview-bind' },
   'fit-task': { canvas: 'Fit task (primary) in the canvas HUD\'s zoom cluster — also lights the related lens', palette: 'task.fit', agent: 'tc plan fit-task', workflow: 'an action node whose line is: fit-task' },
+  // M548. The card's Tournament verb, the bracket's Pick and Stop, the three palette rows, and the line.
+  tournament: { canvas: 'Tournament in a work card\'s Swarm… menu, then Pick or Stop on the bracket', palette: 'task.tournament', agent: 'tc plan tournament wk1 claude:opus codex', workflow: 'an action node whose line is: tournament stop' },
   tonight: { canvas: 'Run tonight on the New task sheet', palette: 'task.tonight', agent: 'tc plan tonight', workflow: 'an action node whose line is: tonight stop' },
   'show-task': { canvas: 'Show on a work card', palette: 'task.show', agent: 'tc plan show-task wk1', workflow: 'an action node whose line is: show-task wk1' },
   'show-related': { canvas: 'Show related in the ⋯ menu of any panel of a task, and Related in the command pill with one panel of a task selected', palette: 'task.related', agent: 'tc plan show-related wk1', workflow: 'an action node whose line is: show-related wk1' },

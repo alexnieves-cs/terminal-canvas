@@ -13446,6 +13446,30 @@ tr[data-session-row]:focus-within .sessions-world,
 /* ── /st:H ── */
 
 /* ── st:I ── */
+/* M548. The tournament bracket: screen space, top centre, under the HUD.
+   Columns side by side; the state edge is the entrant's tone, drawn through
+   [data-tone] like every frame, never a colour of its own. */
+.tn-bracket {
+  position: absolute; top: calc(var(--sp-6) * 2); left: 50%; transform: translateX(-50%); z-index: 40;
+  max-width: min(1100px, calc(100% - var(--sp-6) * 2)); padding: var(--sp-3);
+  background: var(--panel-bg); border: 1px solid var(--line); border-radius: var(--r-md);
+  font: var(--t-sm) / 1.4 var(--font-ui); color: var(--fg);
+}
+.tn-bracket__head { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.tn-bracket__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-bracket__check { font: var(--t-xs) / 1.4 var(--font-mono); color: var(--fg-3); }
+.tn-bracket__summary { color: var(--fg-2); flex: 1; }
+.tn-bracket__field { display: flex; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; overflow-x: auto; }
+.tn-bracket__entrant {
+  flex: 1 1 0; min-width: 180px; display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-2); border: 1px solid var(--line); border-left: 3px solid var(--tone); border-radius: var(--r-sm);
+}
+.tn-bracket__entrant[data-winner] { border-color: var(--tone); box-shadow: 0 0 0 1px var(--tone-dim); }
+.tn-bracket__label { font-weight: 600; }
+.tn-bracket__state { color: var(--tone); }
+.tn-bracket__facts { font: var(--t-xs) / 1.4 var(--font-mono); color: var(--fg-2); }
+.tn-bracket__why { font-size: var(--t-xs); color: var(--fg-3); }
+.tn-bracket__entrant .pf__verb { align-self: flex-start; }
 /* ── /st:I ── */
 
 /* ── st:J ── */

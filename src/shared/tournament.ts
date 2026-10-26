@@ -1,5 +1,6 @@
 import { parseAutoCheck, type AutoCheck } from './auto'
 import { BACKENDS, BACKEND_IDS, type AgentBackend } from './agent-backends'
+import type { PersistedWorkItem } from './work-items'
 
 /**
  * M546. TOURNAMENT — one task, N agents, each in its own worktree, and the
@@ -69,6 +70,8 @@ export interface TournamentSpec {
   timeLimitMs?: number
   /** Auto turn limit per entrant; absent is the custom mode's. */
   limit?: number
+  /** M548. The board task the tournament is for, echoed on its status so Pick can make the winner that task's lane. */
+  itemId?: string
 }
 
 /** What one entrant's run came to: the auto run's verdict, widened by the tournament's own two stops. */
@@ -223,6 +226,7 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
   if (r.budgetUsd !== undefined && (typeof r.budgetUsd !== 'number' || !Number.isFinite(r.budgetUsd) || r.budgetUsd <= 0)) return { kind: 'refused', reason: 'the budget is not a positive sum of money' }
   if (r.timeLimitMs !== undefined && (typeof r.timeLimitMs !== 'number' || !Number.isFinite(r.timeLimitMs) || r.timeLimitMs <= 0)) return { kind: 'refused', reason: 'the time limit is not a positive number of milliseconds' }
   if (r.limit !== undefined && (typeof r.limit !== 'number' || !Number.isInteger(r.limit) || r.limit <= 0)) return { kind: 'refused', reason: 'the turn limit is not a positive whole number' }
+  if (r.itemId !== undefined && (typeof r.itemId !== 'string' || r.itemId === '')) return { kind: 'refused', reason: 'the task is not named' }
   const entrants: TournamentEntrant[] = []
   const ids = new Set<string>()
   for (const [i, e] of r.entrants.entries()) {
@@ -252,7 +256,8 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
       task, root: r.root, entrants, check: check.check as AutoCheck,
       ...(r.budgetUsd === undefined ? {} : { budgetUsd: r.budgetUsd as number }),
       ...(r.timeLimitMs === undefined ? {} : { timeLimitMs: r.timeLimitMs as number }),
-      ...(r.limit === undefined ? {} : { limit: r.limit as number })
+      ...(r.limit === undefined ? {} : { limit: r.limit as number }),
+      ...(r.itemId === undefined ? {} : { itemId: r.itemId as string })
     }
   }
 }
@@ -312,6 +317,8 @@ export interface TournamentStatus {
   root: string
   /** The check's command line. */
   check: string
+  /** M548. The board task, when the tournament was started from one. */
+  itemId?: string
   state: TournamentState
   entrants: EntrantStatus[]
   /** Present once the field is scored. */
@@ -327,4 +334,134 @@ export function outcomeOf(e: EntrantStatus): EntrantOutcome {
     durationMs: e.startedAt !== undefined && e.endedAt !== undefined ? Math.max(0, e.endedAt - e.startedAt) : null,
     diff: e.diff ?? null
   }
+}
+
+// ── M548 — starting one from a task, and the bracket's words ──────────────
+
+/** One entrant as a field names it: `claude`, `claude:opus`, `codex:gpt-5`. */
+export interface FieldEntry { backend: AgentBackend; model?: string }
+
+/**
+ * The field a tournament runs when none is named: two claude models, then
+ * every other agent this Mac has, up to four. Two models of one agent is
+ * still a real comparison (they write different code), and a Mac with only
+ * claude still gets a tournament rather than a refusal.
+ */
+export function defaultField(available: (b: AgentBackend) => boolean): FieldEntry[] {
+  const field: FieldEntry[] = []
+  if (available('claude')) field.push({ backend: 'claude', model: 'opus' }, { backend: 'claude', model: 'sonnet' })
+  for (const b of ['codex', 'copilot'] as const) if (available(b) && field.length < 4) field.push({ backend: b })
+  return field
+}
+
+/** A typed field (`claude:opus codex`), by name: an unknown agent or a missing CLI is refused, never dropped. */
+export function parseField(text: string, available: (b: AgentBackend) => boolean): { kind: 'ok'; field: FieldEntry[] } | { kind: 'refused'; reason: string } {
+  const words = text.trim().split(/[\s,]+/).filter((w) => w !== '')
+  const field: FieldEntry[] = []
+  for (const w of words) {
+    const [name, model, extra] = w.split(':')
+    if (!BACKEND_IDS.includes(name as AgentBackend) || extra !== undefined || model === '') return { kind: 'refused', reason: `${w} is not an agent — name one of ${BACKEND_IDS.join(', ')}, optionally as agent:model` }
+    const backend = name as AgentBackend
+    if (!available(backend)) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
+    field.push({ backend, ...(model === undefined ? {} : { model }) })
+  }
+  if (field.length < TOURNAMENT_ENTRANTS_MIN) return { kind: 'refused', reason: `a tournament needs at least ${TOURNAMENT_ENTRANTS_MIN} entrants` }
+  if (field.length > TOURNAMENT_ENTRANTS_MAX) return { kind: 'refused', reason: `a tournament takes at most ${TOURNAMENT_ENTRANTS_MAX} entrants` }
+  return { kind: 'ok', field }
+}
+
+/**
+ * The spec a task card starts, before panel ids: the task's text (title,
+ * brief or description, and its acceptance criteria — Tonight's rule) and
+ * its check (the card's checks, else its recipe's, joined with `&&`). A
+ * task with no check is refused by name, the model's rule reached at the
+ * door, so the card can say why before anything is minted.
+ */
+export function tournamentFromItem(item: PersistedWorkItem, root: string, field: readonly FieldEntry[]): { kind: 'ok'; spec: Record<string, unknown> } | { kind: 'refused'; reason: string } {
+  if (item.state === 'done' || item.merged !== undefined) return { kind: 'refused', reason: 'this task is done — a tournament needs open work' }
+  const checks = [...(item.checks ?? []), ...(item.checks === undefined || item.checks.length === 0 ? item.recipeUsed?.definition.checks ?? [] : [])].map((c) => c.trim()).filter((c) => c !== '')
+  if (checks.length === 0) return { kind: 'refused', reason: 'this task has no check — add one to the task (or its recipe); the check is what picks the winner' }
+  const what = (item.brief ?? item.description ?? '').trim()
+  const criteria = (item.criteria ?? []).filter((c) => c.trim() !== '')
+  const task = [what === '' ? item.title : `${item.title}\n\n${what}`, ...(criteria.length === 0 ? [] : [`Done when:\n${criteria.map((c) => `- ${c}`).join('\n')}`])].join('\n\n')
+  return {
+    kind: 'ok',
+    spec: { title: item.key ?? item.title, task, root, check: { command: checks.join(' && ') }, entrants: field.map((f, i) => ({ id: String.fromCharCode(97 + i), backend: f.backend, ...(f.model === undefined ? {} : { model: f.model }) })) }
+  }
+}
+
+/**
+ * The tone a bracket column wears, from the closed set the renderer's
+ * `panel-state.ts` draws (`[data-tone]`): colour comes from there and only
+ * there, and this is the one map from an entrant's state into it.
+ */
+export const ENTRANT_TONES: Readonly<Record<EntrantState, string>> = {
+  queued: 'starting', running: 'working', checking: 'working', checked: 'done', claimed: 'idle',
+  stuck: 'exited', 'over-budget': 'exited', 'over-time': 'exited', stopped: 'idle'
+}
+
+const minutes = (ms: number): string => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))}s` : `${Math.round(ms / 60_000)}m`)
+
+/** A bracket column's facts line: the change, the cost and the time, each only when known. */
+export function entrantFacts(e: EntrantStatus, nowMs: number): string {
+  const parts: string[] = []
+  if (e.diff != null) parts.push(`+${e.diff.added} −${e.diff.removed} in ${e.diff.files.length} file${e.diff.files.length === 1 ? '' : 's'}`)
+  else if (e.diff === null) parts.push('changes unread')
+  parts.push(e.costUsd === null ? 'cost not reported' : `$${e.costUsd.toFixed(2)}`)
+  if (e.startedAt !== undefined) parts.push(minutes((e.endedAt ?? nowMs) - e.startedAt))
+  if (e.checkFailures > 0) parts.push(`${e.checkFailures} failed check${e.checkFailures === 1 ? '' : 's'}`)
+  return parts.join(' · ')
+}
+
+/**
+ * Whether Pick may take this entrant, or why not. Only a scored field, and
+ * only an eligible entrant: picking one the check did not pass would make
+ * "the check decides" a suggestion.
+ */
+export function pickRefusal(st: TournamentStatus | null, entrantId: string | undefined): string | null {
+  if (st === null) return 'no tournament has run'
+  if (st.score === undefined) return st.state === 'scoring' ? 'the field is still being scored' : 'the tournament is still running — wait, or stop it first'
+  const id = entrantId ?? st.score.winner ?? undefined
+  if (id === undefined) return 'no entrant passed the check, so there is nothing to pick'
+  const ranked = st.score.ranking.find((r) => r.id === id)
+  if (ranked === undefined) return `no entrant is called ${id}`
+  if (!ranked.eligible) return `${st.entrants.find((e) => e.id === id)?.label ?? id} cannot be picked: ${ranked.why}`
+  return null
+}
+
+// ── M549 — the judge ──────────────────────────────────────────────────────
+
+/** The judge compares what passed; with fewer than two there is nothing to compare. Null when it may run. */
+export function judgeRefusal(st: TournamentStatus | null): string | null {
+  if (st === null) return 'no tournament has run'
+  if (st.score === undefined) return st.state === 'scoring' ? 'the field is still being scored' : 'the tournament is still running — the judge reads finished work'
+  const passed = st.score.ranking.filter((r) => r.eligible).length
+  if (passed < 2) return passed === 1 ? 'only one entrant passed the check — there is nothing to compare; pick it' : 'no entrant passed the check, so there is nothing to compare'
+  return null
+}
+
+/**
+ * The judge's one message. It runs READ-ONLY (plan mode) at the repository's
+ * main tree, so it can read every entrant's worktree and change none of
+ * them; its comparison is advice, and the scorer's winner stands unless a
+ * person picks another. Only passing entrants are listed — a failed run's
+ * code is not a candidate, and showing it invites "take the best parts" of
+ * code that did not pass. Where two entrants each have something the other
+ * lacks, it names the files, because combining is the person's next step
+ * (the task's Combine tab), never the judge's.
+ */
+export function judgePrompt(st: TournamentStatus): string {
+  const ranked = (st.score?.ranking ?? []).filter((r) => r.eligible)
+  const rows = ranked.map((r) => {
+    const e = st.entrants.find((x) => x.id === r.id) as EntrantStatus
+    const d = e.diff
+    return `- ${r.rank}. ${e.label} — branch ${e.branch ?? '(unknown)'}, worktree ${e.path ?? '(unknown)'}; ${d == null ? 'changes unread' : `+${d.added} −${d.removed} in ${d.files.length} file${d.files.length === 1 ? '' : 's'}`}; the scorer's note: ${r.why}`
+  })
+  return [
+    `You are judging a tournament: ${ranked.length} agents each worked the same task in their own git worktree, and each of the entrants below passed the check \`${st.check}\`.`,
+    `The task:\n${st.task}`,
+    `The passing entrants, in the scorer's order (smaller change, less overlap with other lanes, lower cost and time rank first):\n${rows.join('\n')}`,
+    'Read each worktree\'s changes against where its branch forked from the main branch (for example `git -C <worktree> diff $(git -C <worktree> merge-base HEAD <the main tree\'s branch>)`). Change nothing: do not edit, commit, push or run anything that writes.',
+    'Then write a short comparison, at most twelve lines: what each entrant did differently, any risk the check would not catch, and which one you would keep and why. If two entrants each have a part worth keeping, name the files to take from each — the person can put them together with Combine on the task.'
+  ].join('\n\n')
 }

@@ -72,6 +72,8 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   'swarm',
   // M480. A night of auto runs across every lane: the person's to start.
   'tonight',
+  // M548. Several agents and worktrees at once, and Pick closes chats: the person's to start and to pick.
+  'tournament',
   'workflow-add', 'workflow-set', 'workflow-remove', 'workflow-edge', 'workflow-unedge', 'workflow-move', 'workflow-save', 'workflow-copy', 'workflow-run', 'node-test',
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.

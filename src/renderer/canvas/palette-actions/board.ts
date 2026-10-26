@@ -52,6 +52,7 @@ export type BoardActions = Pick<PaletteActions,
   | 'arrangeTask'
   | 'fitTask'
   | 'runTonight'
+  | 'runTournament'
   | 'focusTask'
   | 'addWorkItem'
   | 'beginStartWork'
@@ -120,6 +121,8 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       if (r.kind === 'refused') return r
       return { kind: 'ran', note: tonightWords({ kind: 'started', tasks: tasks.length, checked: tasks.filter((t) => t.check !== undefined).length, skipped: skipped.length }) }
     },
+    // M548. The tournament reads the board, the panels and the worktree lanes — Canvas's, the same delegation.
+    runTournament: async (op, value) => boardVerbsRef.current?.tournament?.(op, value) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     // M324. The focus view is Canvas's page; the same delegation.
     focusTask: (panelId) => boardVerbsRef.current?.focus?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     // M113. The dedupe lives in upsertWorkItem; the id the caller gets back is

@@ -97,6 +97,30 @@ Decisions (lane I):
 - **An unreported cost is the middle of the field, never $0**, and a dollar
   budget over a backend that reports no cost is refused unless a time limit
   holds it.
+- **Main runs, the renderer names and places** (M547–M548). The renderer
+  mints each entrant's panel id and places the chats beside the card; main
+  makes each worktree, creates each chat through the same door as
+  `agent:create`, and starts each checked run. Entrants fork from the main
+  tree, whatever folder of the repository the task's lane was in.
+- **A tournament starts from a task that has a lane and a check.** The lane
+  says which repository; a never-started task is refused by name rather than
+  guessed into one. The default field is claude opus and sonnet plus every
+  other agent found, up to four.
+- **The bracket is a screen-space overlay, not a new panel kind** (M548): it
+  holds no authored state, draws nothing until a tournament has run, and so
+  changes no resting scene and no golden. Its colour is the entrant's tone
+  through `[data-tone]`.
+- **Pick keeps the winner and closes the other chats; it removes no
+  worktree.** The winner becomes the task's lane (`panelId`, `worktreeId`),
+  so Review, Open PR and the morning queue read it through their own doors.
+  Losing branches may hold work a person wants; the Worktrees list removes a
+  lane on purpose. Only a scored, eligible entrant can be picked.
+- **The judge is advice, never a second scorer** (M549): a read-only (plan
+  mode) claude chat at the main tree, shown only the passing entrants.
+  Combine opens the task's Combine tab, which already checks a combined tree
+  before anything lands, rather than growing a second merge path.
+- **The door is the card's Swarm… menu**, not a new card button, so the
+  card's resting face is unchanged.
 
 ## J — Sandboxed lanes in a micro-VM (M550–M555)
 

@@ -306,9 +306,231 @@ const diffCheck = (async () => {
   }
 })()
 
+// ── M548 — the doors, the field and the bracket's words ───────────────────
+const plan = load('src/shared/plan.ts', 'plan')
+const verbs = load('src/shared/verb-table.ts', 'verbs')
+const tones = load('src/renderer/panels/panel-state.ts', 'tones')
+const { readFileSync } = require('node:fs')
+const src = (rel) => readFileSync(join(ROOT, rel), 'utf8')
+
+const ITEM = { id: 'wk1', key: 'ENG-7', title: 'ISO weeks', brief: 'Parse 2026-W43.', criteria: ['round-trips'], state: 'working', panelId: 'c1', checks: ['npm test', 'npm run lint'], createdAt: 1, updatedAt: 1 }
+const has = (list) => (b) => list.includes(b)
+
+// tournament.field.1. The default field is two claude models and every
+//      other agent found, up to four; a typed field is refused by name for an
+//      unknown agent or a missing CLI, never trimmed.
+check('tournament.field.1 the default field is claude opus and sonnet plus every other agent found, and a typed field names what it refuses', model, (T) => {
+  const all = T.defaultField(has(['claude', 'codex', 'copilot']))
+  const claudeOnly = T.defaultField(has(['claude']))
+  const none = T.defaultField(has([]))
+  const typed = T.parseField('claude:opus, codex', has(['claude', 'codex']))
+  const unknown = T.parseField('claude gpt', has(['claude']))
+  const missing = T.parseField('claude codex', has(['claude']))
+  const one = T.parseField('claude', has(['claude']))
+  return {
+    pass: all.map((f) => f.backend + (f.model ?? '')).join() === 'claudeopus,claudesonnet,codex,copilot' && claudeOnly.length === 2 && none.length === 0 &&
+      typed.kind === 'ok' && typed.field[0].model === 'opus' && typed.field[1].backend === 'codex' &&
+      unknown.kind === 'refused' && /gpt is not an agent/.test(unknown.reason) && missing.kind === 'refused' && /codex was not found/.test(missing.reason) && one.kind === 'refused',
+    detail: { all, typed, unknown, missing }
+  }
+})
+
+// tournament.field.2. A card's task becomes the spec: its text with the
+//      criteria, its checks joined, the main tree it works in; a task with no
+//      check or a done one is refused at the door.
+check('tournament.field.2 a task card becomes a spec with its text, criteria and checks, and a task with no check is refused by name', model, (T) => {
+  const built = T.tournamentFromItem(ITEM, '/repo/lane', T.defaultField(has(['claude', 'codex'])))
+  const parsed = built.kind === 'ok' ? T.parseTournament({ ...built.spec, itemId: 'wk1' }) : null
+  const noCheck = T.tournamentFromItem({ ...ITEM, checks: [] }, '/repo', [])
+  const recipe = T.tournamentFromItem({ ...ITEM, checks: [], recipeUsed: { definition: { checks: ['make check'] } } }, '/repo', T.defaultField(has(['claude'])))
+  const done = T.tournamentFromItem({ ...ITEM, state: 'done' }, '/repo', [])
+  return {
+    pass: built.kind === 'ok' && parsed.kind === 'ok' && parsed.spec.check.command === 'npm test && npm run lint' && /Parse 2026-W43/.test(parsed.spec.task) && /- round-trips/.test(parsed.spec.task) &&
+      parsed.spec.title === 'ENG-7' && parsed.spec.itemId === 'wk1' && parsed.spec.entrants.map((e) => e.id).join() === 'a,b,c' &&
+      noCheck.kind === 'refused' && /no check/.test(noCheck.reason) && recipe.kind === 'ok' && recipe.spec.check.command === 'make check' && done.kind === 'refused',
+    detail: { built, noCheck, done }
+  }
+})
+
+// tournament.bracket.1. Pick takes only a scored, eligible entrant; the
+//      columns' tones are all in panel-state's closed set (colour comes only
+//      from there); the facts line says an unreported cost rather than $0.
+check('tournament.bracket.1 Pick refuses an unscored field and an ineligible entrant, every column tone is panel-state\'s, and an unreported cost is said', model, (T) => {
+  const base = { id: 'tn', title: 't', task: 't', root: '/r', check: 'npm test', startedAt: 0, entrants: [
+    { id: 'a', label: 'claude', backend: 'claude', panelId: 'c1', state: 'checked', costUsd: 1.5, checkFailures: 0, startedAt: 0, endedAt: 120_000, diff: { files: ['x'], added: 3, removed: 1 } },
+    { id: 'b', label: 'codex', backend: 'codex', panelId: 'c2', state: 'stuck', costUsd: null, checkFailures: 2, startedAt: 0, endedAt: 60_000, diff: null }] }
+  const scored = { ...base, state: 'done', score: T.scoreTournament(base.entrants.map(T.outcomeOf)) }
+  const running = { ...base, state: 'running' }
+  const toneOk = tones.mod !== undefined && Object.values(T.ENTRANT_TONES).every((t) => tones.mod.TONES.includes(t))
+  return {
+    pass: T.pickRefusal(null, undefined) !== null && /still running/.test(T.pickRefusal(running, 'a')) && T.pickRefusal(scored, undefined) === null && T.pickRefusal(scored, 'a') === null &&
+      /cannot be picked/.test(T.pickRefusal(scored, 'b')) && toneOk && T.entrantFacts(base.entrants[0], 0) === '+3 −1 in 1 file · $1.50 · 2m' &&
+      /cost not reported/.test(T.entrantFacts(base.entrants[1], 0)) && /changes unread/.test(T.entrantFacts(base.entrants[1], 0)),
+    detail: { toneOk, facts: base.entrants.map((e) => T.entrantFacts(e, 0)) }
+  }
+})
+
+// tournament.doors.1. The fourth door is real: `tournament` is a verb whose
+//      action is `runTournament`, its agent line and its action-node line
+//      bind, a teammate's plan is refused it, its palette rows exist, the
+//      card's Swarm… menu carries it, and the canvas mounts the bracket.
+const doorsLoaded = { mod: plan.mod !== undefined && verbs.mod !== undefined ? { P: plan.mod, V: verbs.mod } : undefined, error: plan.error ?? verbs.error }
+check('tournament.doors.1 tournament is a verb with a card gesture, three palette rows, an agent line and an action-node line that bind, refused to a teammate', doorsLoaded, ({ P, V }) => {
+  const facts = { panels: [{ id: 'wk1', kind: 'work' }] }
+  const verb = V.VERBS.find((v) => v.id === 'tournament')
+  const door = V.V9_DOORS.tournament
+  const start = P.buildPlan(P.parsePlanLine('tournament wk1 claude:opus codex'), facts)
+  const stop = P.buildPlan(P.parsePlanLine('tournament stop'), facts)
+  const pick = P.buildPlan(P.parsePlanLine('tournament pick b'), facts)
+  const mate = start.kind === 'plan' ? P.agentDoorRefusal(start.plan.steps[0], facts, { teammateId: 'tm1' }) : null
+  const commands = src('src/renderer/palette/commands.ts')
+  const card = src('src/renderer/work/WorkNode.tsx')
+  const node = src('src/renderer/canvas/PanelNode.tsx')
+  const canvas = src('src/renderer/canvas/Canvas.tsx')
+  const exec = src('src/renderer/canvas/palette-actions/executor.ts')
+  const pass = verb !== undefined && verb.actions.join() === 'runTournament' && verb.destructive === false && door !== undefined && door.palette === 'task.tournament' &&
+    start.kind === 'plan' && start.plan.steps[0].args.op === 'wk1' && start.plan.steps[0].args.value === 'claude:opus codex' &&
+    stop.kind === 'plan' && stop.plan.steps[0].args.op === 'stop' && pick.kind === 'plan' && pick.plan.steps[0].args.value === 'b' && typeof mate === 'string' &&
+    ["id: 'task.tournament'", "id: 'task.tournament-stop'", "id: 'task.tournament-pick'", "id: 'task.tournament-judge'", "id: 'task.tournament-combine'"].every((id) => commands.includes(id)) &&
+    card.includes('data-work-tournament') && /onTournament=\{\(itemId\) => \{ void paletteActionsRef\.current\?\.runTournament\(itemId\)/.test(node) &&
+    canvas.includes('<TournamentBracket run={paletteActions.runTournament}') && exec.includes("case 'tournament': return self.runTournament(")
+  return { pass, detail: { verb, door, start: start.kind, stop: stop.kind, pick: pick.kind, mate } }
+})
+
+// tournament.verb.1. The renderer's half over fakes: a start mints a panel
+//      per entrant, hands main the card's spec with those ids, and places
+//      each entrant's chat linked from the card; Pick closes the others and
+//      makes the winner the task's lane; a never-started task is refused.
+const verbMod = load('src/renderer/canvas/tournament-verb.ts', 'verb')
+const panelsMod = load('src/renderer/panels/panels.ts', 'panels')
+const verbCheck = (async () => {
+  const id = 'tournament.verb.1 a start mints and places one linked chat per entrant from the card\'s spec; Pick closes the rest and makes the winner the task\'s lane'
+  if (verbMod.mod === undefined || panelsMod.mod === undefined || model.mod === undefined) { ok(id, false, verbMod.error ?? panelsMod.error); return }
+  const Pn = panelsMod.mod
+  const T = model.mod
+  try {
+    const sent = []
+    const closed = []
+    let status = null
+    globalThis.window = { canvas: { tournament: {
+      start: async (raw) => {
+        sent.push(raw)
+        const parsed = T.parseTournament(raw)
+        if (parsed.kind !== 'ok') return parsed
+        status = { id: 'tn-1', title: parsed.spec.title, task: parsed.spec.task, root: '/repo', check: parsed.spec.check.command, itemId: parsed.spec.itemId, state: 'running', startedAt: 0,
+          entrants: parsed.spec.entrants.map((e) => ({ id: e.id, label: e.label, backend: e.backend, ...(e.model ? { model: e.model } : {}), panelId: e.panelId, sessionId: `s-${e.id}`, path: `/wt/${e.panelId}`, worktreeId: `wt-${e.id}`, state: 'running', costUsd: 0, checkFailures: 0 })) }
+        return { kind: 'started', status }
+      },
+      stop: async () => true,
+      status: async () => status
+    } } }
+    let items = [{ ...ITEM, panelId: 'c1' }]
+    let panels = [Pn.makeWorkPanel('w1', { x: 0, y: 0 }, 1, 'wk1', 'ISO weeks'), Pn.makeChatPanel('c1', { x: 600, y: 0 }, 2, { cwd: '/repo/lane', sessionId: 's0' })]
+    const deps = {
+      panelsRef: { get current() { return panels }, set current(v) { panels = v } },
+      setPanels: (fn) => { panels = typeof fn === 'function' ? fn(panels) : fn },
+      commitHistory: () => {},
+      workItemsRef: { get current() { return items }, set current(v) { items = v } },
+      setWorkItems: (v) => { items = v },
+      nextIdRef: { current: 10 }, mergedRef: { current: false },
+      placer: () => (_cur, made) => made,
+      hostRef: { current: null }, viewportRef: { current: { x: 0, y: 0, scale: 1 } },
+      presetRowsRef: { current: [{ agent: 'claude-code', available: true }, { agent: 'codex', available: true }] },
+      closePanel: (pid) => { closed.push(pid); panels = panels.filter((p) => p.rect.id !== pid) }
+    }
+    const run = verbMod.mod.tournamentVerb(deps)
+    const started = await run('w1')
+    const chats = panels.filter((p) => p.kind === 'chat' && p.rect.id !== 'c1')
+    const cardLinks = panels.find((p) => p.rect.id === 'w1').links ?? []
+    const linked = chats.every((c) => cardLinks.some((l) => l.to === c.rect.id && l.label === 'entrant'))
+    status = { ...status, state: 'done', entrants: status.entrants.map((e) => ({ ...e, state: e.id === 'b' ? 'checked' : 'stuck', endedAt: 1, diff: { files: ['x'], added: 1, removed: 0 } })) }
+    status.score = T.scoreTournament(status.entrants.map(T.outcomeOf))
+    const loser = await run('pick', 'a')
+    const picked = await run('pick')
+    const item = items.find((i) => i.id === 'wk1')
+    const fresh = await (verbMod.mod.tournamentVerb({ ...deps, workItemsRef: { current: [{ ...ITEM, panelId: undefined }] } }))('wk1')
+    const pass = started.kind === 'ran' && sent[0].itemId === 'wk1' && sent[0].root === '/repo/lane' && sent[0].entrants.map((e) => e.panelId).join() === 'c10,c11,c12' &&
+      chats.length === 3 && chats.every((c) => c.chat.dispatch === true && c.chat.cwd.startsWith('/wt/')) && chats[0].chat.agentOptions.model === 'opus' && chats[2].chat.backend === 'codex' && linked &&
+      loser.kind === 'refused' && picked.kind === 'ran' && closed.sort().join() === 'c10,c12' && item.panelId === 'c11' && item.worktreeId === 'wt-b' &&
+      fresh.kind === 'refused' && /start this task once/.test(fresh.reason)
+    ok(id, pass, JSON.stringify({ started, loser, picked, closed, item: { panelId: item.panelId, worktreeId: item.worktreeId }, fresh }).slice(0, 400))
+  } catch (error) {
+    ok(id, false, error.stack)
+  } finally {
+    delete globalThis.window
+  }
+})()
+
+// ── M549 — the judge and combine ──────────────────────────────────────────
+const JUDGED = () => {
+  const T = model.mod
+  const entrants = [
+    { id: 'a', label: 'claude · opus', backend: 'claude', panelId: 'c1', branch: 'tc/a', path: '/wt/a', state: 'checked', costUsd: 1, checkFailures: 0, startedAt: 0, endedAt: 1, diff: { files: ['x'], added: 5, removed: 0 } },
+    { id: 'b', label: 'codex', backend: 'codex', panelId: 'c2', branch: 'tc/b', path: '/wt/b', state: 'checked', costUsd: null, checkFailures: 0, startedAt: 0, endedAt: 1, diff: { files: ['x', 'y'], added: 9, removed: 2 } },
+    { id: 'c', label: 'claude · sonnet', backend: 'claude', panelId: 'c3', branch: 'tc/c', path: '/wt/c', state: 'stuck', costUsd: 1, checkFailures: 3, startedAt: 0, endedAt: 1, diff: { files: ['z'], added: 1, removed: 0 } }]
+  return { id: 'tn', title: 'ENG-7', task: 'Parse ISO weeks', root: '/repo', check: 'npm test', itemId: 'wk1', state: 'done', startedAt: 0, entrants, score: T.scoreTournament(entrants.map(T.outcomeOf)) }
+}
+
+// tournament.judge.1. The judge runs only over a scored field with two or
+//      more passes; its message lists the PASSING entrants only (a failed
+//      run's code is not a candidate), names the check, and says to change
+//      nothing.
+check('tournament.judge.1 the judge needs two passing entrants, and its message lists only those, names the check and forbids any change', model, (T) => {
+  const st = JUDGED()
+  const prompt = T.judgePrompt(st)
+  const one = { ...st, score: T.scoreTournament(st.entrants.slice(0, 1).concat(st.entrants[2]).map(T.outcomeOf)) }
+  return {
+    pass: T.judgeRefusal(st) === null && /only one entrant passed/.test(T.judgeRefusal(one)) && /still running/.test(T.judgeRefusal({ ...st, score: undefined, state: 'running' })) &&
+      prompt.includes('/wt/a') && prompt.includes('/wt/b') && !prompt.includes('/wt/c') && !prompt.includes('sonnet') && prompt.includes('`npm test`') && /Change nothing/.test(prompt) && /Combine/.test(prompt),
+    detail: prompt.slice(0, 300)
+  }
+})
+
+// tournament.judge.2. The judge's chat is read-only (plan mode) at the main
+//      tree, linked from the card, and is sent the prompt; combine opens the
+//      task's focus view rather than a second merge path.
+const judgeCheck = async () => {
+  const id = 'tournament.judge.2 the judge is a plan-mode chat at the main tree, linked from the card and sent the comparison; combine opens the task\'s focus view'
+  if (verbMod.mod === undefined || panelsMod.mod === undefined || model.mod === undefined) { ok(id, false, verbMod.error ?? panelsMod.error); return }
+  const Pn = panelsMod.mod
+  try {
+    const created = []
+    const sentMsgs = []
+    const focused = []
+    const st = JUDGED()
+    globalThis.window = { canvas: {
+      tournament: { status: async () => st, start: async () => ({ kind: 'refused', reason: 'x' }), stop: async () => false },
+      agentSession: { create: async (spec) => { created.push(spec); return { kind: 'created', snapshot: {} } }, send: async (pid, text) => { sentMsgs.push({ pid, text }); return 'sent' } }
+    } }
+    globalThis.crypto ??= require('node:crypto').webcrypto
+    let panels = [Pn.makeWorkPanel('w1', { x: 0, y: 0 }, 1, 'wk1', 'ISO weeks')]
+    const run = verbMod.mod.tournamentVerb({
+      panelsRef: { get current() { return panels }, set current(v) { panels = v } },
+      setPanels: (fn) => { panels = typeof fn === 'function' ? fn(panels) : fn }, commitHistory: () => {},
+      workItemsRef: { current: [ITEM] }, setWorkItems: () => {}, nextIdRef: { current: 20 }, mergedRef: { current: false },
+      placer: () => (_cur, made) => made, hostRef: { current: null }, viewportRef: { current: { x: 0, y: 0, scale: 1 } },
+      presetRowsRef: { current: [{ agent: 'claude-code', available: true }] }, closePanel: () => {}, focusItem: (iid) => focused.push(iid)
+    })
+    const judged = await run('judge')
+    const chat = panels.find((p) => p.rect.id === 'c20')
+    const combined = await run('combine')
+    const link = (panels.find((p) => p.rect.id === 'w1').links ?? []).find((l) => l.to === 'c20')
+    const pass = judged.kind === 'ran' && created.length === 1 && created[0].cwd === '/repo' && created[0].agentOptions.permissionMode === 'plan' &&
+      chat !== undefined && chat.chat.agentOptions.permissionMode === 'plan' && link?.label === 'judge' && sentMsgs.length === 1 && sentMsgs[0].pid === 'c20' && sentMsgs[0].text === model.mod.judgePrompt(st) &&
+      combined.kind === 'ran' && focused.join() === 'wk1'
+    ok(id, pass, JSON.stringify({ judged, created, combined, focused }).slice(0, 400))
+  } catch (error) {
+    ok(id, false, error.stack)
+  } finally {
+    delete globalThis.window
+  }
+}
+
 ;(async () => {
   await runnerChecks
   await diffCheck
+  await verbCheck
+  await judgeCheck()
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length > 0) process.exit(1)
