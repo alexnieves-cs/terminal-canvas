@@ -350,7 +350,9 @@ app.whenReady().then(() => {
   // film's record read and its save.
   // +3: tournament:start / tournament:stop / tournament:status (M547, lane I)
   // — N entrants on one task, each in its own lane, run and scored by main.
-  const EXPECTED_CHANNELS = 225
+  // +2: team:flow / team:flow-write (M582, lane P) — the multiplayer canvas's
+  // handoffs and shared review queue, read and written in the person's name.
+  const EXPECTED_CHANNELS = 227
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

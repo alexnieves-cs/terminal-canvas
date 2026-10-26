@@ -15,7 +15,8 @@
     "K": "M556-M560",
     "L": "M561-M564",
     "N": "M565-M569",
-    "O": "M570-M579"
+    "O": "M570-M579",
+    "P": "M580-M589"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -134,6 +135,11 @@
     ],
     "O": [
       "scripts/verify-learn.cjs"
+    ],
+    "P": [
+      "scripts/verify-multiplayer.cjs",
+      "src/shared/team-flow.ts",
+      "src/renderer/team-flow/**"
     ]
   }
 }

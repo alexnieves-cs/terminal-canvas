@@ -54,3 +54,9 @@ Format:
 - File: src/renderer/styles.css
 - Smallest change: the reduced-motion block near `.canvas--behind-orch` sets `.orch__connector--lit { animation: none; }`, but the base rule `.orch__connector--lit { … animation: edge-current … }` comes later at the same specificity, so it wins and the lit connector still animates under reduced motion (only the global block's `.01ms` keeps it invisible). Re-state `@media (prefers-reduced-motion: reduce) { .orch__connector--lit { animation: none; } }` from inside your `st:` block. Found by `verify:panels:orchestrate` orch-parity.app.3, which now counts only animations with a visible duration (M458).
 - Status: open
+
+### Q-008 · Handoffs and reviews on the collab compliance trail
+- From: P · To: D (finished — any lane may take it with Alex's go-ahead)
+- File: server/collab/server.ts (`auditEntryOf`), server/collab/persistence.ts (`AUDIT_ACTIONS`), a new supabase migration widening `collab.audit`'s action CHECK
+- Smallest change: M581 adds seven ops (`handoff-open`, `handoff-reply`, `handoff-withdraw`, `review-open`, `review-claim`, `review-verdict`, `review-close`). The server already judges every one of them, but `auditEntryOf` returns null for them, so the trail does not record them. Add the seven words to the CHECK in a migration, to `AUDIT_ACTIONS`, and a row each in `auditEntryOf` (target the object id; detail `accept`/`decline`, the verdict or the outcome — never the note, title or summary).
+- Status: open

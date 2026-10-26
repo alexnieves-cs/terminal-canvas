@@ -6,11 +6,17 @@
  *   canvas:groups  Y.Map< docKey, Y.Map<field, value> >   one field map per group
  *   canvas:files   Y.Map< docKey, Y.Text >                 one TEXT per shared file panel
  *   canvas:asks    Y.Map< docKey, Y.Map<field, value> >   one field map per team ask (M375)
+ *   canvas:handoffs Y.Map< docKey, Y.Map<field, value> >  one field map per handoff (M581)
+ *   canvas:reviews Y.Map< docKey, Y.Map<field, value> >   one field map per review in the team's queue (M581)
  *
  * An ask's answers are one field PER PERSON (`answer:<user id>`), for the
  * panels' reason: two people answering at once are two registers, and both
  * survive. An answer and an ask's `closed` are each written once and never
  * rewritten, so the owner decides over answers that cannot move under it.
+ * M581's two maps keep the same shape for the same reason: a handoff's
+ * replies (`reply:<user id>`) and a review's claims and verdicts
+ * (`claim:<user id>`, `verdict:<user id>`) are one field per person, each
+ * written once, and `withdrawn` / `closed` are written once by the maker.
  *
  * A shared file's key is its file panel's key, so the text lives and dies with
  * the panel (a tombstoned panel's text refuses every edit) and two panels on
@@ -53,9 +59,10 @@
  */
 import * as Y from 'yjs'
 import { TEAM_DOC_MAP } from './team'
+import { handoffState, stewardOf, type HandoffRead, type ReviewRead } from './team-flow'
 import {
-  ASK_OUTCOMES, CANVAS_ASKS, CANVAS_FILES, RECT_FIELDS, SHARED_CONNECTORS_MAX, SHARED_SHAPE_MAX, SHARED_TEXT_MAX,
-  type AskAnswer, type AskOutcome, type CanvasOp, type OpContext, type PanelContentField, type SharedAsk, type SharedGroup, type SharedPanel, type SharedRelay
+  ASK_OUTCOMES, CANVAS_ASKS, CANVAS_FILES, CANVAS_HANDOFFS, CANVAS_REVIEWS, HANDOFF_NOTE_MAX, REVIEW_OUTCOMES, REVIEW_SUMMARY_MAX, REVIEW_TITLE_MAX, RECT_FIELDS, SHARED_CONNECTORS_MAX, SHARED_SHAPE_MAX, SHARED_TEXT_MAX,
+  type AskAnswer, type AskOutcome, type CanvasOp, type HandoffReply, type ReviewOutcome, type ReviewVerdict, type SharedHandoff, type SharedReview, type OpContext, type PanelContentField, type SharedAsk, type SharedGroup, type SharedPanel, type SharedRelay
 } from './canvas-ops'
 import { parseConnectors, parseShapeRecord, shapeSummary, type Connector, type ShapeRecord } from './flowchart'
 import { RELAY_PROGRAM, RELAY_SESSION_ID } from './relay-protocol'
@@ -76,6 +83,8 @@ const panelsOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_PANELS
 const groupsOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_GROUPS)
 const filesOf = (doc: Y.Doc): Y.Map<unknown> => doc.getMap(CANVAS_FILES)
 const asksOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_ASKS)
+const handoffsOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_HANDOFFS)
+const reviewsOf = (doc: Y.Doc): Y.Map<Y.Map<unknown>> => doc.getMap(CANVAS_REVIEWS)
 
 /** M375. An answer's field in an ask's map: one per person, so concurrent answers both survive. */
 export const ANSWER_PREFIX = 'answer:'
@@ -107,6 +116,92 @@ export function readSharedAsks(doc: Y.Doc): Array<{ ask: SharedAsk; answers: Rec
     out.push({ ask, answers, ...(isOutcome(closed) ? { closed } : {}) })
   })
   return out
+}
+
+/** M581. One field per person in a handoff's map (`reply:`) and a review's (`claim:`, `verdict:`). */
+export const REPLY_PREFIX = 'reply:'
+export const CLAIM_PREFIX = 'claim:'
+export const VERDICT_PREFIX = 'verdict:'
+const HANDOFF_FIELDS = new Set(['panel', 'from', 'to', 'note', 'scrubbed', 'at', 'n'])
+const REVIEW_FIELDS = new Set(['panel', 'owner', 'title', 'summary', 'scrubbed', 'at'])
+const isReply = (v: unknown): v is HandoffReply => v === 'accept' || v === 'decline'
+const isVerdict = (v: unknown): v is ReviewVerdict => v === 'approve' || v === 'changes'
+const isReviewOutcome = (v: unknown): v is ReviewOutcome => typeof v === 'string' && (REVIEW_OUTCOMES as readonly string[]).includes(v)
+
+function handoffOf(key: string, fm: unknown): SharedHandoff | undefined {
+  if (!(fm instanceof Y.Map)) return undefined
+  const panel = str(fm.get('panel')), from = str(fm.get('from')), to = str(fm.get('to')), note = str(fm.get('note'))
+  const scrubbed = num(fm.get('scrubbed')), at = num(fm.get('at')), n = num(fm.get('n'))
+  if (panel === undefined || from === undefined || to === undefined || note === undefined || scrubbed === undefined || at === undefined || n === undefined) return undefined
+  if (!Number.isInteger(n) || n < 1 || note.length > HANDOFF_NOTE_MAX) return undefined
+  return { id: key, panel, from, to, note, scrubbed, at, n }
+}
+
+function reviewOf(key: string, fm: unknown): SharedReview | undefined {
+  if (!(fm instanceof Y.Map)) return undefined
+  const panel = str(fm.get('panel')), owner = str(fm.get('owner')), title = str(fm.get('title')), summary = str(fm.get('summary'))
+  const scrubbed = num(fm.get('scrubbed')), at = num(fm.get('at'))
+  if (panel === undefined || owner === undefined || title === undefined || summary === undefined || scrubbed === undefined || at === undefined) return undefined
+  if (title.length > REVIEW_TITLE_MAX || summary.length > REVIEW_SUMMARY_MAX) return undefined
+  return { id: key, panel, owner, title, summary, scrubbed, at }
+}
+
+/** M581. Every well-formed handoff with its replies (by user id) and whether its maker withdrew it. */
+export function readSharedHandoffs(doc: Y.Doc): HandoffRead[] {
+  const out: HandoffRead[] = []
+  handoffsOf(doc).forEach((fm, key) => {
+    const handoff = handoffOf(key, fm)
+    if (handoff === undefined) return
+    const replies: Record<string, HandoffReply> = {}
+    for (const [k, v] of fm.entries()) if (k.startsWith(REPLY_PREFIX) && isReply(v)) replies[k.slice(REPLY_PREFIX.length)] = v
+    out.push({ handoff, replies, withdrawn: fm.get('withdrawn') === true })
+  })
+  return out
+}
+
+/** M581. Every well-formed review with who is looking, the verdicts so far and, once closed, how it ended. */
+export function readSharedReviews(doc: Y.Doc): ReviewRead[] {
+  const out: ReviewRead[] = []
+  reviewsOf(doc).forEach((fm, key) => {
+    const review = reviewOf(key, fm)
+    if (review === undefined) return
+    const claims: string[] = []
+    const verdicts: Record<string, ReviewVerdict> = {}
+    for (const [k, v] of fm.entries()) {
+      if (k.startsWith(CLAIM_PREFIX) && v === true) claims.push(k.slice(CLAIM_PREFIX.length))
+      else if (k.startsWith(VERDICT_PREFIX) && isVerdict(v)) verdicts[k.slice(VERDICT_PREFIX.length)] = v
+    }
+    const closed = fm.get('closed')
+    out.push({ review, claims: claims.sort(), verdicts, ...(isReviewOutcome(closed) ? { closed } : {}) })
+  })
+  return out
+}
+
+/** M581. Who holds a live panel's agent now, from the doc (team-flow.ts stewardOf); null when the panel is not live. */
+export function panelSteward(doc: Y.Doc, panel: string): ReturnType<typeof stewardOf> | null {
+  const fm = panelsOf(doc).get(panel)
+  const owner = fm === undefined || isTombstone(fm) ? undefined : str(fm.get('owner'))
+  return owner === undefined ? null : stewardOf(panel, owner, readSharedHandoffs(doc))
+}
+
+/** The context handoff-open / review-open is judged in: the panel's owner and its steward chain. */
+function stewardContext(doc: Y.Doc, panel: string): Pick<OpContext, 'panelOwner' | 'panelSteward' | 'panelHandoffOpen' | 'panelHanded'> {
+  const fm = panelsOf(doc).get(panel)
+  const owner = fm === undefined || isTombstone(fm) ? null : str(fm.get('owner')) ?? null
+  if (owner === null) return { panelOwner: null, panelSteward: null }
+  const s = stewardOf(panel, owner, readSharedHandoffs(doc))
+  return { panelOwner: owner, panelSteward: s.steward, panelHandoffOpen: s.open !== null, panelHanded: s.handed }
+}
+
+function handoffContext(doc: Y.Doc, id: string): OpContext['handoff'] {
+  const q = readSharedHandoffs(doc).find((r) => r.handoff.id === id)
+  return q === undefined ? null : { from: q.handoff.from, to: q.handoff.to, settled: handoffState(q.handoff, q.replies, q.withdrawn).state !== 'open' }
+}
+
+function reviewContext(doc: Y.Doc, id: string): OpContext['review'] {
+  const fm = reviewsOf(doc).get(id)
+  const owner = fm === undefined ? undefined : str(fm.get('owner'))
+  return owner === undefined ? null : { owner, closed: fm?.has('closed') === true }
 }
 
 /** One shared file's text, or undefined when that file is not shared (or the key holds something malformed). */
@@ -257,6 +352,10 @@ export function readSharedGroups(doc: Y.Doc): SharedGroup[] {
 
 /** The context authorizeCanvasOp needs, read from the doc as it stands now. */
 export function opContext(doc: Y.Doc, op: CanvasOp, userId: string): OpContext {
+  if (op.kind === 'handoff-open') return { userId, ...stewardContext(doc, op.handoff.panel) }
+  if (op.kind === 'handoff-reply' || op.kind === 'handoff-withdraw') return { userId, panelOwner: null, handoff: handoffContext(doc, op.handoffId) }
+  if (op.kind === 'review-open') return { userId, ...stewardContext(doc, op.review.panel), review: reviewContext(doc, op.review.id) }
+  if (op.kind === 'review-claim' || op.kind === 'review-verdict' || op.kind === 'review-close') return { userId, panelOwner: null, review: reviewContext(doc, op.reviewId) }
   if (op.kind === 'ask-answer' || op.kind === 'ask-close') {
     const fm = asksOf(doc).get(op.askId)
     return { userId, panelOwner: null, askOwner: fm === undefined ? null : str(fm.get('owner')) ?? null, askClosed: fm?.has('closed') === true }
@@ -377,6 +476,55 @@ export function applyCanvasOp(doc: Y.Doc, op: CanvasOp, origin: unknown): void {
         if (fm !== undefined && !fm.has('closed')) fm.set('closed', op.outcome)
         return
       }
+      // M581. The same written-once rule as the asks: a second reply, claim
+      // or verdict from one person, or any after the end, is the server's to
+      // refuse and never ours to make.
+      case 'handoff-open': {
+        const hs = handoffsOf(doc)
+        if (hs.has(op.handoff.id)) return
+        const fm = new Y.Map<unknown>()
+        const { id: _id, ...fields } = op.handoff
+        for (const [k, v] of Object.entries(fields)) fm.set(k, v)
+        hs.set(op.handoff.id, fm)
+        return
+      }
+      case 'handoff-reply': {
+        const fm = handoffsOf(doc).get(op.handoffId)
+        if (fm === undefined || fm.has('withdrawn') || fm.has(REPLY_PREFIX + op.by)) return
+        fm.set(REPLY_PREFIX + op.by, op.reply)
+        return
+      }
+      case 'handoff-withdraw': {
+        const fm = handoffsOf(doc).get(op.handoffId)
+        if (fm !== undefined && !fm.has('withdrawn')) fm.set('withdrawn', true)
+        return
+      }
+      case 'review-open': {
+        const rs = reviewsOf(doc)
+        if (rs.has(op.review.id)) return
+        const fm = new Y.Map<unknown>()
+        const { id: _id, ...fields } = op.review
+        for (const [k, v] of Object.entries(fields)) fm.set(k, v)
+        rs.set(op.review.id, fm)
+        return
+      }
+      case 'review-claim': {
+        const fm = reviewsOf(doc).get(op.reviewId)
+        if (fm === undefined || fm.has('closed') || fm.has(CLAIM_PREFIX + op.by)) return
+        fm.set(CLAIM_PREFIX + op.by, true)
+        return
+      }
+      case 'review-verdict': {
+        const fm = reviewsOf(doc).get(op.reviewId)
+        if (fm === undefined || fm.has('closed') || fm.has(VERDICT_PREFIX + op.by)) return
+        fm.set(VERDICT_PREFIX + op.by, op.verdict)
+        return
+      }
+      case 'review-close': {
+        const fm = reviewsOf(doc).get(op.reviewId)
+        if (fm !== undefined && !fm.has('closed')) fm.set('closed', op.outcome)
+        return
+      }
       default:
         return
     }
@@ -405,6 +553,7 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
   const copy = new Y.Doc({ gc: false })
   Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc))
   const panels = panelsOf(copy), groups = groupsOf(copy), files = filesOf(copy), asks = asksOf(copy), team = copy.getMap(TEAM_DOC_MAP)
+  const handoffs = handoffsOf(copy), reviews = reviewsOf(copy)
   const before = (key: string): Omit<OpContext, 'userId'> => {
     const fm = panels.get(key)
     if (fm === undefined) return { panelOwner: null }
@@ -417,6 +566,15 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
   // already existed is being rewritten (refused), never written.
   const askBefore = new Map<string, { owner: string | null; fields: Set<string> }>()
   asks.forEach((fm, key) => { askBefore.set(key, { owner: str(fm.get('owner')) ?? null, fields: new Set(fm.keys()) }) })
+  // M581. The same, for handoffs and reviews — and each panel's steward chain
+  // as it stood, so an update cannot hand itself the right to hand.
+  const handoffBefore = new Map<string, { ctx: OpContext['handoff']; fields: Set<string> }>()
+  handoffs.forEach((fm, key) => { handoffBefore.set(key, { ctx: handoffContext(copy, key), fields: new Set(fm.keys()) }) })
+  const reviewBefore = new Map<string, { ctx: OpContext['review']; fields: Set<string> }>()
+  reviews.forEach((fm, key) => { reviewBefore.set(key, { ctx: reviewContext(copy, key), fields: new Set(fm.keys()) }) })
+  const stewardBefore = new Map<string, ReturnType<typeof stewardContext>>()
+  const stewardCtx = (panel: string): ReturnType<typeof stewardContext> => stewardBefore.get(panel) ?? { panelOwner: null, panelSteward: null }
+  for (const key of panels.keys()) stewardBefore.set(key, stewardContext(copy, key))
   // Context is read BEFORE the update applies: "whose panel was it" must not
   // be answered by the update that is being judged.
   const ctxBefore = new Map<string, Omit<OpContext, 'userId'>>()
@@ -542,6 +700,54 @@ export function inspectUpdate(doc: Y.Doc, update: Uint8Array): Array<{ op: Canva
           if (k.startsWith(ANSWER_PREFIX) && isAnswer(v)) out.push({ op: { kind: 'ask-answer', askId: key, by: k.slice(ANSWER_PREFIX.length), answer: v }, ctx })
           else if (k === 'closed' && isOutcome(v)) out.push({ op: { kind: 'ask-close', askId: key, outcome: v }, ctx })
           else unknown(`ask ${key}.${k} is not an answer or an outcome`)
+        }
+      } else if (type === handoffs) {
+        for (const key of keys) {
+          if (key === null) { unknown('canvas:handoffs changed as a list'); continue }
+          if (handoffBefore.has(key)) { unknown(`handoff ${key} replaced or removed`); continue }
+          const fm = handoffs.get(key)
+          const h = handoffOf(key, fm)
+          if (h === undefined || [...(fm?.keys() ?? [])].some((k) => !HANDOFF_FIELDS.has(k))) { unknown(`handoff ${key} created malformed`); continue }
+          out.push({ op: { kind: 'handoff-open', handoff: h }, ctx: stewardCtx(h.panel) })
+        }
+      } else if (parent === handoffs && item !== null && typeof item.parentSub === 'string') {
+        const key = item.parentSub
+        // A handoff created by this same update is judged as its handoff-open.
+        const was = handoffBefore.get(key)
+        if (was === undefined) continue
+        const fm = changed as unknown as Y.Map<unknown>
+        const ctx = { panelOwner: null, handoff: was.ctx }
+        for (const k of keys) {
+          if (k === null) { unknown(`handoff ${key} changed as a list`); continue }
+          if (was.fields.has(k)) { unknown(`handoff ${key}.${k} rewritten`); continue }
+          const v = fm.get(k)
+          if (k.startsWith(REPLY_PREFIX) && isReply(v)) out.push({ op: { kind: 'handoff-reply', handoffId: key, by: k.slice(REPLY_PREFIX.length), reply: v }, ctx })
+          else if (k === 'withdrawn' && v === true) out.push({ op: { kind: 'handoff-withdraw', handoffId: key }, ctx })
+          else unknown(`handoff ${key}.${k} is not a reply or a withdrawal`)
+        }
+      } else if (type === reviews) {
+        for (const key of keys) {
+          if (key === null) { unknown('canvas:reviews changed as a list'); continue }
+          if (reviewBefore.has(key)) { unknown(`review ${key} replaced or removed`); continue }
+          const fm = reviews.get(key)
+          const r = reviewOf(key, fm)
+          if (r === undefined || [...(fm?.keys() ?? [])].some((k) => !REVIEW_FIELDS.has(k))) { unknown(`review ${key} created malformed`); continue }
+          out.push({ op: { kind: 'review-open', review: r }, ctx: { ...stewardCtx(r.panel), review: null } })
+        }
+      } else if (parent === reviews && item !== null && typeof item.parentSub === 'string') {
+        const key = item.parentSub
+        const was = reviewBefore.get(key)
+        if (was === undefined) continue
+        const fm = changed as unknown as Y.Map<unknown>
+        const ctx = { panelOwner: null, review: was.ctx }
+        for (const k of keys) {
+          if (k === null) { unknown(`review ${key} changed as a list`); continue }
+          if (was.fields.has(k)) { unknown(`review ${key}.${k} rewritten`); continue }
+          const v = fm.get(k)
+          if (k.startsWith(CLAIM_PREFIX) && v === true) out.push({ op: { kind: 'review-claim', reviewId: key, by: k.slice(CLAIM_PREFIX.length) }, ctx })
+          else if (k.startsWith(VERDICT_PREFIX) && isVerdict(v)) out.push({ op: { kind: 'review-verdict', reviewId: key, by: k.slice(VERDICT_PREFIX.length), verdict: v }, ctx })
+          else if (k === 'closed' && isReviewOutcome(v)) out.push({ op: { kind: 'review-close', reviewId: key, outcome: v }, ctx })
+          else unknown(`review ${key}.${k} is not a claim, a verdict or an outcome`)
         }
       } else if (type === team) {
         for (const key of keys) {

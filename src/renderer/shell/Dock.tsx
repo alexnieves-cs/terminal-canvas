@@ -21,6 +21,8 @@ import { dismissLost, setQueueCursor, useQueueCursor } from './useTaskQueue'
 import { CheckRunOutput } from '@renderer/checks/CheckRunOutput'
 import { teamAskWords } from '@shared/team-asks'
 import { answerTeamAsk, useTeamAsks } from './useTeamAsks'
+import { TeamFlowSection } from '@renderer/team-flow/TeamFlowSection'
+import { useTeamFlow } from '@renderer/team-flow/useTeamFlow'
 
 export interface DockProps {
   /** Which pane the navigator shows, when it shows. */
@@ -250,6 +252,10 @@ function DockImpl({
   // M378. The team's asks wait on this person too — on anyone who may edit
   // the canvas. They are not a queue kind.
   const team = useTeamAsks()
+  // M583. A handoff offered to this person and the team's review queue wait
+  // on them the same way, and are spoken with the team's asks.
+  const flow = useTeamFlow()
+  const teamWaiting = team.length + flow.handoffs.length + flow.reviews.length
   // R-005. The badge and the spoken count are the queue. Snooze and a team
   // ask have no kind on the frozen queue, so they are spoken only when the
   // queue itself is empty — otherwise the button would say nothing is
@@ -260,8 +266,8 @@ function DockImpl({
     ? `Notifications: ${needsYouCount(badgeCount)}`
     : snoozed.length > 0
       ? `Notifications: ${snoozed.length} snoozed`
-      : team.length > 0
-        ? `Notifications: ${needsYouCount(team.length)}`
+      : teamWaiting > 0
+        ? `Notifications: ${needsYouCount(teamWaiting)}`
         : 'Notifications: nothing waiting'
   const now = Date.now()
   const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
@@ -611,6 +617,9 @@ function DockImpl({
                 </ul>
               </>
             )}
+            {/* M583. Handoffs, the team's review queue, and this person's own
+                offers and reviews still out (team-flow/TeamFlowSection). */}
+            <TeamFlowSection onGoToPanel={onGoToPanel} {...(onTeamAskRefused === undefined ? {} : { onRefused: onTeamAskRefused })} />
             {/* D17 / 4.4. Read-only: what needs you in OTHER workspaces, by
                 name and count (their panels are not rendered here, so a label
                 would be a guess). The jump is the existing activation, then
