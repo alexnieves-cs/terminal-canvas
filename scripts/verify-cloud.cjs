@@ -404,6 +404,71 @@ const LANE = { id: 'l', repo: 'o/r', issue: 12, provider: 'copilot', title: 't',
     return { pass, detail: { round, mixed, junk } }
   })
 
+  // M543 — cloud.task.1. A board task becomes ONE request shape at every door:
+  //        a GitHub issue hands that issue over, a PR is refused, a local task
+  //        names its lane's folder, no lane is refused by name, a lane already
+  //        in flight is refused, and an unknown provider names the real ones.
+  check('cloud.task.1 a task becomes one request: its issue, or its lane folder; a PR, no lane, a lane in flight and an unknown agent are refused by name', lane, (L) => {
+    const gh = { id: 'wi1', source: 'github', key: 'o/r#7', url: 'https://github.com/o/r/issues/7', title: 'Add a test', brief: 'Cover the parser', criteria: ['npm test passes'] }
+    const fromIssue = L.cloudDispatchFor(gh, 'copilot', '/repo', [])
+    const fromPr = L.cloudDispatchFor({ ...gh, url: 'https://github.com/o/r/pull/7' }, 'copilot', undefined, [])
+    const local = L.cloudDispatchFor({ id: 'wi2', source: 'local', title: 'Tidy' }, 'claude-action', '/repo', [])
+    const noLane = L.cloudDispatchFor({ id: 'wi2', source: 'local', title: 'Tidy' }, 'copilot', undefined, [])
+    const busy = L.cloudDispatchFor(gh, 'copilot', '/repo', [{ workItemId: 'wi1', state: 'working' }])
+    const settled = L.cloudDispatchFor(gh, 'copilot', '/repo', [{ workItemId: 'wi1', state: 'merged' }])
+    const odd = L.cloudDispatchFor(gh, 'devin', '/repo', [])
+    const pass = fromIssue.repo === 'o/r' && fromIssue.issue === 7 && fromIssue.cwd === undefined && fromIssue.task === 'Cover the parser\nDone when:\n- npm test passes' &&
+      typeof fromPr.refused === 'string' && /pull request/.test(fromPr.refused) &&
+      local.cwd === '/repo' && local.repo === undefined && local.task === 'Tidy' && local.provider === 'claude-action' &&
+      typeof noLane.refused === 'string' && /no repository/.test(noLane.refused) &&
+      typeof busy.refused === 'string' && /in flight/.test(busy.refused) && settled.issue === 7 &&
+      typeof odd.refused === 'string' && /copilot or claude-action/.test(odd.refused)
+    return { pass, detail: { fromIssue, fromPr, local, noLane, busy, odd } }
+  })
+
+  // M543 — cloud.word.1. Every lane state has a word and a tone from the ONE
+  //        vocabulary (panel-state.ts, state.2), and ready is not called merged.
+  const words = load('src/renderer/panels/panel-state.ts', 'words')
+  check('cloud.word.1 every cloud lane state has a word and a known tone in panel-state, ready and merged say different words, and failed and needs-you ask for the person', words, (W) => {
+    const tones = ['kind', 'asleep', 'none', 'starting', 'working', 'needs-you', 'idle', 'done', 'exited']
+    const states = lane.mod?.CLOUD_LANE_STATES ?? []
+    const all = Object.fromEntries(states.map((s) => [s, W.cloudLaneWord(s)]))
+    const pass = states.length === 8 && Object.values(all).every((w) => typeof w?.word === 'string' && w.word !== '' && tones.includes(w.tone)) &&
+      all.ready.word !== all.merged.word && all.failed.tone === 'needs-you' && all['needs-you'].tone === 'needs-you' && new Set(Object.values(all).map((w) => w.word)).size === 8
+    return { pass, detail: all }
+  })
+
+  // M543 — cloud.doors.1. `cloud-send` has its four doors and lands on ONE
+  //        action: the card's Cloud… menu (one row per provider, wired in
+  //        PanelNode), both palette rows, an agent line and an action-node line
+  //        that bind, the executor's case — and a teammate's plan is refused,
+  //        since the verb opens a GitHub issue another agent picks up.
+  const plan = load('src/shared/plan.ts', 'plan')
+  const verbs = load('src/shared/verb-table.ts', 'verbs')
+  check('cloud.doors.1 cloud-send: the card menu, both palette rows, an agent line and an action node bind to one sendToCloud, and a teammate caller is refused', plan, (P) => {
+    const read = (f) => require('node:fs').readFileSync(join(ROOT, f), 'utf8')
+    const card = read('src/renderer/work/WorkNode.tsx')
+    const node = read('src/renderer/canvas/PanelNode.tsx')
+    const cmds = read('src/renderer/palette/commands.ts')
+    const exec = read('src/renderer/canvas/palette-actions/executor.ts')
+    const board = read('src/renderer/canvas/palette-actions/board.ts')
+    const facts = { panels: [{ id: 'wk1', kind: 'work' }] }
+    const bound = P.buildPlan(P.parsePlanLine('cloud-send wk1 copilot'), facts)
+    const step = bound?.kind === 'plan' ? bound.plan.steps[0] : undefined
+    const teammate = step === undefined ? null : P.agentDoorRefusal(step, facts, { teammateId: 'tm1' })
+    const door = verbs.mod?.V9_DOORS?.['cloud-send']
+    const doors = {
+      card: card.includes('data-work-cloud-send={p.id}') && card.includes('props.onSendToCloud?.(panel.rect.id, p.id)') && /onSendToCloud=\{\(panelId, provider\) =>[^\n]*sendToCloud\(panelId, provider\)/.test(node),
+      palette: cmds.includes("id: 'task.cloud.copilot'") && cmds.includes("id: 'task.cloud.claude-action'"),
+      agent: step?.verb === 'cloud-send' && step.args.panel === 'wk1' && step.args.provider === 'copilot',
+      workflow: door?.workflow === 'an action node whose line is: cloud-send wk1 copilot',
+      executor: /case 'cloud-send': return self\.sendToCloud\(/.test(exec),
+      oneShape: /cloudDispatchFor\(item, provider, cwd, cloudLanesNow\(\)\)/.test(board),
+      teammate: typeof teammate === 'string' && teammate.length > 0
+    }
+    return { pass: Object.values(doors).every(Boolean), detail: { doors, teammate } }
+  })
+
   console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
   if (results.some((r) => !r.pass)) process.exitCode = 1
 })()

@@ -20,6 +20,8 @@ import { getChat } from '@renderer/chat/chat-store'
 import { allRecipes } from '@shared/recipes'
 import { recipeUse } from '@shared/recipe-portability'
 import { tonightBatchFrom, tonightWords } from '@shared/tonight'
+import { cloudDispatchFor, providerById } from '@shared/cloud-lane'
+import { cloudLanesNow, rememberCloudLane } from '@renderer/work/cloud-lanes-store'
 import { isWorkPanel, isChatPanel } from '@renderer/panels/panels'
 import type { PaletteActions } from '@renderer/palette/commands'
 import { bindFitTask } from '@renderer/canvas/flight'
@@ -52,6 +54,7 @@ export type BoardActions = Pick<PaletteActions,
   | 'arrangeTask'
   | 'fitTask'
   | 'runTonight'
+  | 'sendToCloud'
   | 'focusTask'
   | 'addWorkItem'
   | 'beginStartWork'
@@ -119,6 +122,30 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       const r = await door.start({ tasks })
       if (r.kind === 'refused') return r
       return { kind: 'ran', note: tonightWords({ kind: 'started', tasks: tasks.length, checked: tasks.filter((t) => t.check !== undefined).length, skipped: skipped.length }) }
+    },
+    // M543. Every door lands here, the card's Cloud menu included. The task
+    // becomes a request in cloudDispatchFor (shared, so a door cannot build a
+    // second shape); main resolves the repository, scrubs, asks and sends.
+    sendToCloud: async (panelId, provider) => {
+      const door = window.canvas?.cloud
+      if (door === undefined) return { kind: 'refused', reason: 'cloud lanes are not available in this window' }
+      const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+      if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
+      if (!isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card — a cloud lane is sent from one` }
+      const item = (workItemsRef.current ?? []).find((i) => i.id === panel.work.itemId)
+      if (item === undefined) return { kind: 'refused', reason: 'this card\'s task is no longer on the board' }
+      const lane = item.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === item.panelId)
+      const cwd = lane !== undefined && isChatPanel(lane) ? lane.chat.cwd : undefined
+      const req = cloudDispatchFor(item, provider, cwd, cloudLanesNow())
+      if ('refused' in req) return { kind: 'refused', reason: req.refused }
+      const r = await door.dispatch(req)
+      const who = providerById(req.provider)?.label ?? req.provider
+      switch (r.kind) {
+        case 'dispatched': rememberCloudLane(r.lane); return { kind: 'ran', note: `sent to ${who} as issue #${r.lane.issue}${r.redacted > 0 ? ` — ${r.redacted} secret${r.redacted === 1 ? '' : 's'} scrubbed first` : ''}` }
+        case 'handoff-failed': rememberCloudLane(r.lane); return { kind: 'refused', reason: r.reason }
+        case 'cancelled': return { kind: 'refused', reason: 'not sent' }
+        default: return { kind: 'refused', reason: r.reason }
+      }
     },
     // M324. The focus view is Canvas's page; the same delegation.
     focusTask: (panelId) => boardVerbsRef.current?.focus?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },

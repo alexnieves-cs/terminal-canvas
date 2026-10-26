@@ -459,6 +459,7 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
       // action every other door takes — with the shape chosen, so
       // the sheet opens on it rather than on a blank arrangement.
       onSwarm={(itemId, preset) => paletteActionsRef.current?.beginStartWork({ itemId, swarm: preset })}
+      onSendToCloud={(panelId, provider) => { const a = paletteActionsRef.current; if (a !== undefined && a !== null) void a.sendToCloud(panelId, provider).then((r) => a.say(r.kind === 'refused' ? r.reason : r.note ?? '')) }}
       agentAvailable={claudeAvailable(presetRows) || codexAvailable(presetRows)}
       onOpenPr={(itemId) => paletteActionsRef.current?.openPr(itemId)}
       prReason={item === undefined ? 'this item is no longer on the board' : prRefusalSync(item, credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined), item.teammateId === undefined ? undefined : teammates?.find((t) => t.id === item.teammateId))}

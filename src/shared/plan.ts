@@ -72,6 +72,8 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   'swarm',
   // M480. A night of auto runs across every lane: the person's to start.
   'tonight',
+  // M543. Sends the task to GitHub as an issue someone else's agent picks up.
+  'cloud-send',
   'workflow-add', 'workflow-set', 'workflow-remove', 'workflow-edge', 'workflow-unedge', 'workflow-move', 'workflow-save', 'workflow-copy', 'workflow-run', 'node-test',
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.

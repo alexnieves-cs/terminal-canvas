@@ -386,3 +386,42 @@ export function parseCloudLane(raw: unknown, now: number): ParsedCloudLane {
 }
 
 const isIssueNumber = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v > 0
+
+// ── What a board task sends ────────────────────────────────────────────────
+
+/**
+ * M543. The request a board task becomes, or the sentence why it cannot.
+ * Pure over the task's own fields so every door (the card's Cloud menu, the
+ * palette row, an agent line, an action node) builds the same request:
+ *
+ * - a task added from a GitHub ISSUE hands that issue over (`repo`, `issue`);
+ *   a pull request is refused — it is already someone's work;
+ * - any other task names its lane's folder, and main reads the repository
+ *   from that folder's origin remote; with no lane there is nothing to read,
+ *   and that is said rather than guessed.
+ * - a task with a lane still in flight is refused, so one task never has two
+ *   cloud agents racing each other on it.
+ */
+export function cloudDispatchFor(
+  item: { id: string; source: string; key?: string; url?: string; title: string; description?: string; brief?: string; criteria?: readonly string[] },
+  provider: string,
+  laneCwd: string | undefined,
+  existing: readonly Pick<CloudLane, 'workItemId' | 'state'>[]
+): { provider: CloudProviderId; title: string; task: string; workItemId: string; repo?: string; issue?: number; cwd?: string } | { refused: string } {
+  const row = providerById(provider)
+  if (row === undefined) return { refused: `${JSON.stringify(provider)} is not a cloud agent — ${PROVIDERS.map((p) => p.id).join(' or ')}` }
+  if (existing.some((l) => l.workItemId === item.id && !isSettled(l.state))) return { refused: 'this task already has a cloud lane in flight — wait for it to settle, or forget it first' }
+  const parts = [item.brief, item.description].filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+  const criteria = (item.criteria ?? []).filter((c) => c.trim() !== '')
+  const task = [parts.length === 0 ? item.title : parts.join('\n\n'), ...(criteria.length === 0 ? [] : ['Done when:', ...criteria.map((c) => `- ${c}`)])].join('\n')
+  const base = { provider: row.id, title: item.title, task, workItemId: item.id }
+  if (item.source === 'github' && item.key !== undefined) {
+    const m = /^([^/\s#]+\/[^/\s#]+)#(\d+)$/.exec(item.key)
+    if (m !== null) {
+      if (item.url !== undefined && /\/pull\/\d+/.test(item.url)) return { refused: `${item.key} is a pull request — a cloud agent is handed an issue` }
+      return { ...base, repo: m[1] as string, issue: Number(m[2]) }
+    }
+  }
+  if (laneCwd === undefined) return { refused: 'this task has no repository yet — start it in a repository first, or add it from a GitHub issue' }
+  return { ...base, cwd: laneCwd }
+}
