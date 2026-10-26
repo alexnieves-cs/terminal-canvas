@@ -20,7 +20,7 @@ import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnaps
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { HostState } from './exit-explain'
-import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
+import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult, NightFilmExportRequest, NightFilmExportResult, NightFilmRecord, NightFilmRecordRequest } from './export'
 import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
 import type { FlowchartExportRequest, FlowchartExportResult, FlowchartReadRequest, FlowchartReadResult } from './flowchart-files'
 import type { ToolGenerateRequest, ToolGenerateResult } from './tool-spec'
@@ -711,6 +711,19 @@ export const IPC = {
    * picture is refused before the sheet opens. Never rejects.
    */
   EXPORT_FLOWCHART: 'export:flowchart',
+  /**
+   * M562 (lane L). What the night left on record — the ledger up to the
+   * night's end and the Tonight batch — for the night film's script. Read in
+   * main because `ledger:timeline` is capped at the panes' 200 rows.
+   */
+  FILM_NIGHT: 'film:night',
+  /**
+   * M563 (lane L). The night film as MP4 bytes, to a file the person picks.
+   * Main writes only a box tree of the muxer's own shape; the words in the
+   * frames passed the outward gate when the script was built, and the count
+   * comes back with the path.
+   */
+  EXPORT_NIGHT_FILM: 'export:night-film',
   /** M251. A Markdown deck as .pptx, scrubbed field by field, through a save dialog. */
   DECK_EXPORT_PPTX: 'deck:export-pptx',
   /**
@@ -2189,6 +2202,12 @@ export interface CanvasBridge {
     deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
     /** A diagram's Mermaid/SVG text, scrubbed by the outward gate, to a file the person chooses; the count is on the answer. */
     flowchart(req: FlowchartExportRequest): Promise<FlowchartExportResult>
+    /** M563. See EXPORT_NIGHT_FILM. */
+    nightFilm(req: NightFilmExportRequest): Promise<NightFilmExportResult>
+  }
+  /** M562. See FILM_NIGHT. */
+  film: {
+    night(req: NightFilmRecordRequest): Promise<NightFilmRecord>
   }
   tool: {
     /** M252. A description in, a tool OUT — never run. The renderer saves it unreviewed. */

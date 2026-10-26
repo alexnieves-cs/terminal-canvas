@@ -4097,6 +4097,22 @@ adding a SECOND binary export later (a video, a PDF of the canvas) and assuming 
 precedent covers it. It does not — it covers the case where the bytes never were text.
 Grep finds a bypassing TEXT reader; nothing can grep for this, so it lives here.
 
+**The night film is the SECOND binary export, and it is gated because it is DRAWN, never
+captured (`shared/night-film.ts`, `renderer/film/`, `main/film-export.ts`, M561–M564).** The
+PNG's exception above does not cover it, so the film was built so that it is not needed: every
+word a frame can show (a panel's name, a ledger row's title, a command, a morning-queue line)
+passes `outward` in `nightFilmScript`, and the painter draws only the script and the frame
+model, never a terminal, a chat or anything read from the live canvas. The count travels on the
+save and comes back in the sentence, like `panelText`'s. Two things keep it that way, and both
+fail silently: a painter that grows a second source of words (a live pane's last line "for
+context") ships that line unscrubbed in pixels, which is why `verify:film film.wire.1` pins the
+painter's and encoder's imports; and a caption CLIPPED before it is scrubbed can cut a token
+below the length its pattern needs and let the head through, which is why the script scrubs
+first (`film.script.3`). Main writes only bytes of the muxer's own box shape
+(`film.door.2`), so the save door cannot be used to drop an arbitrary file. Do not "upgrade"
+the film to a screen recording of the canvas: that is the PNG's case, without the person having
+framed the shot.
+
 **Auto's counter is main's; the chip is a projection, and the snapshot keeps the resolved
 run (`agent-session.ts`'s `startAuto`, `shared/auto.ts`, M97).** The rule is M82's from the
 other side: the renderer's count can be wrong — stale after a reload, behind a batched

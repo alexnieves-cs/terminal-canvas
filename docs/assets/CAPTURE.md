@@ -8,7 +8,7 @@ What is in this folder, where it came from, and how to add a real screen recordi
 |---|---|
 | `logo.png` | `build/icon.png` at 256 px. |
 | `screens/*.png` | Seven of the fourteen design mockups in [`docs/redesign/mockups/`](../redesign/mockups/), palette-reduced to keep the repo small. Names and numbers in them (Steward, ledger-export, `$3.12`) are sample data. |
-| `tour.gif` | The seven `screens/` images as a looping slideshow (800 px, 2.6 s each). It is not a recording of the app. |
+| `night-film.gif` | M564. The app's own night film (`src/shared/night-film.ts`, drawn and encoded by `src/renderer/film/`) run on the sample night in `src/shared/night-film-sample.ts`, at 720 px and 8 fps. Regenerate it with `node_modules/.bin/electron scripts/film-sample.cjs` (ffmpeg on PATH). It replaced `tour.gif`, a slideshow of the mockups below. |
 | `social-preview.png` | 1280×640 card for the repository's social preview (Settings → General → Social preview). |
 
 The README says the pictures are mockups. When real captures replace them, change that sentence too.
