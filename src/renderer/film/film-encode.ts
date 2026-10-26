@@ -28,7 +28,18 @@ export interface FilmEncodeOptions {
   clock?: (ms: number) => string
 }
 
-const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+/**
+ * A yield that is not throttled: setTimeout(0) is clamped to a second while
+ * the window is in the background, which would stretch a ten-second render
+ * to minutes for a person who switched apps while it ran.
+ */
+const yieldToUi = (): Promise<void> => new Promise((resolve) => {
+  const ch = new MessageChannel()
+  ch.port1.onmessage = () => { ch.port1.close(); resolve() }
+  ch.port2.postMessage(null)
+})
+/** An encoder that holds frames this long without returning one has stalled. */
+const STALL_MS = 30_000
 
 /** The first H.264 config this build can encode, or null when it can encode none. */
 export async function filmCodec(): Promise<string | null> {
@@ -53,6 +64,7 @@ export async function encodeFilm(script: FilmScript, opts: FilmEncodeOptions = {
   const samples: Mp4Sample[] = []
   let avcC: Uint8Array | null = null
   let failure: Error | null = null
+  let lastTs = -Infinity
   const encoder = new VideoEncoder({
     output: (chunk, meta) => {
       const desc = meta?.decoderConfig?.description
@@ -63,6 +75,11 @@ export async function encodeFilm(script: FilmScript, opts: FilmEncodeOptions = {
       const data = new Uint8Array(chunk.byteLength)
       chunk.copyTo(data)
       // Durations in the MP4's own timescale (fps × 1000 per second): one frame is 1000.
+      // The MP4 has no composition offsets (ctts), so samples must arrive in
+      // presentation order; an encoder that reorders (B-frames) is refused by
+      // name rather than written as a film that stutters.
+      if (chunk.timestamp < lastTs) failure = new Error('the encoder reordered frames, which this film writer cannot store')
+      lastTs = chunk.timestamp
       samples.push({ data, duration: 1000, key: chunk.type === 'key' })
     },
     error: (e) => { failure = e instanceof Error ? e : new Error(String(e)) }
@@ -76,7 +93,12 @@ export async function encodeFilm(script: FilmScript, opts: FilmEncodeOptions = {
       const video = new VideoFrame(canvas, { timestamp: Math.round(i * frameUs), duration: Math.round(frameUs) })
       encoder.encode(video, { keyFrame: i % (script.fps * KEY_EVERY_S) === 0 })
       video.close()
-      while (encoder.encodeQueueSize > QUEUE_MAX) await yieldToUi()
+      const waitFrom = performance.now()
+      while (encoder.encodeQueueSize > QUEUE_MAX) {
+        if (failure !== null) throw failure
+        if (performance.now() - waitFrom > STALL_MS) throw new Error('the video encoder stopped responding')
+        await yieldToUi()
+      }
       if (i % script.fps === 0) { opts.onProgress?.(i, total); await yieldToUi() }
     }
     await encoder.flush()

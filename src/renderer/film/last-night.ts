@@ -51,6 +51,7 @@ export async function makeLastNightFilm(deps: LastNightDeps): Promise<LastNightR
       from, to,
       panels: deps.panels.map((p) => filmPanelOf(p, deps.labelOf(p))),
       timeline: record.entries,
+      seenBefore: record.seenBefore,
       tonight: record.tonight,
       queue: deps.queue
     })

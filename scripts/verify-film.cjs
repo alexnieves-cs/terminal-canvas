@@ -136,6 +136,17 @@ check('film.script.6 rows outside the window and tool rows are not shots; a clos
   return { pass: s.shots.length === 1 && s.shots[0].caption === 'Check passed on a closed panel' && s.shots[0].panelId === undefined && s.tones.length === 0, detail: s.shots }
 })
 
+// film.script.7. A panel whose own appear shot was ranked out still fades
+//   in no later than its first kept shot, and `seenBefore` from main marks a
+//   panel as already there without its older rows crossing the bridge.
+check('film.script.7 a panel is never focused before it has faded in, and seenBefore keeps an old panel on screen from the start', film, (L) => {
+  const fails = Array.from({ length: 23 }, (_, i) => cmd('a', 'npm test', FROM + (i + 1) * 12 * MIN, 1))
+  const s = L.nightFilmScript(base({ seenBefore: ['a'], timeline: [...fails, cmd('b', 'make', FROM + 5 * MIN, 0)] }))
+  const a = s.panels.find((p) => p.id === 'a'), b = s.panels.find((p) => p.id === 'b')
+  const bShots = s.shots.filter((x) => x.panelId === 'b')
+  return { pass: a.appearAt === 0 && bShots.length === 1 && bShots[0].kind === 'passed' && bShots[0].at >= b.appearAt && b.appearAt > 0, detail: { a: a.appearAt, b: b.appearAt, bShots } }
+})
+
 // film.frame.1. The frame model: the four scenes at their times, a caption
 //   and a focused panel only while a shot holds, the tone a record set, and
 //   the same frame for the same t (any frame can be drawn alone).
@@ -155,13 +166,14 @@ check('film.frame.1 the frame model: title, night, queue and end at their times;
 
 // film.window.1. Which night "Last night" means: the batch when one ran,
 //   else the absence, else the last twelve hours; never under half an hour.
-check('film.window.1 the night is the Tonight batch, else the absence, else twelve hours, and never under half an hour', film, (L) => {
+check('film.window.1 the night is the Tonight batch (unless it ended over a day ago), else the absence, else twelve hours, and never under half an hour', film, (L) => {
   const now = TO
   const a = L.nightWindow({ startedAt: FROM, endedAt: FROM + 60 * MIN, tasks: [] }, null, now)
   const b = L.nightWindow(null, FROM + 30 * MIN, now)
   const c = L.nightWindow(null, null, now)
   const d = L.nightWindow(null, now - MIN, now)
-  return { pass: a.from === FROM && a.to === FROM + 60 * MIN && b.from === FROM + 30 * MIN && b.to === now && c.from === now - 12 * 60 * MIN && d.from === now - 30 * MIN, detail: { a, b, c, d } }
+  const stale = L.nightWindow({ startedAt: FROM - 48 * 60 * MIN, endedAt: FROM - 40 * 60 * MIN, tasks: [] }, null, now)
+  return { pass: stale.to === now && stale.from === now - 12 * 60 * MIN && a.from === FROM && a.to === FROM + 60 * MIN && b.from === FROM + 30 * MIN && b.to === now && c.from === now - 12 * 60 * MIN && d.from === now - 30 * MIN, detail: { a, b, c, d } }
 })
 
 // M563 — film.mux.1. The MP4 writer: ftyp, then moov (fast start), then mdat;
@@ -196,10 +208,11 @@ check('film.mux.2 a film with no frames, or one that does not open on a key fram
 
 // film.door.1–.3. Main's doors, with a fake dialog and write.
 const muxed = mux.mod === undefined ? null : mux.mod.muxMp4({ width: 2, height: 2, timescale: 30, avcC: new Uint8Array(1), samples: [{ data: new Uint8Array([9, 9]), duration: 1, key: true }] })
+const box = (type, body) => { const n = body.length + 8; return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255, ...[...type].map((c) => c.charCodeAt(0)), ...body] }
 const mkDoors = (D, answer) => {
   const writes = []
   const d = D.createFilmDoors({
-    timeline: async () => ({ entries: [cmd('a', 'x', FROM + MIN, 0), cmd('a', 'y', TO + MIN, 0), ev(TO + 2 * MIN, 'check', 'a', 'z')], reachedStart: true }),
+    timeline: async () => ({ entries: [cmd('old', 'w', FROM - 9 * MIN, 0), cmd('a', 'x', FROM + MIN, 0), ev(FROM + 2 * MIN, 'tool', 'a', 'Edit a.ts'), cmd('a', 'y', TO + MIN, 0), ev(TO + 2 * MIN, 'check', 'a', 'z')], reachedStart: true }),
     tonight: () => null,
     askPath: async () => answer,
     write: (path, data) => writes.push({ path, data: [...data] }),
@@ -209,13 +222,13 @@ const mkDoors = (D, answer) => {
 }
 
 ;(async () => {
-  await checkAsync('film.door.1 the save writes exactly the film\'s bytes where the person picked, and reports the gate\'s count; cancel writes nothing', doors, async (D) => {
-    const yes = mkDoors(D, '/tmp/n.mp4')
+  await checkAsync('film.door.1 the save writes exactly the film\'s bytes where the person picked (always as .mp4), and reports the gate\'s count; cancel writes nothing', doors, async (D) => {
+    const yes = mkDoors(D, '/tmp/n')
     const r = await yes.d.nightFilm({ bytes: muxed, seconds: 60, redacted: 2 })
     const no = mkDoors(D, null)
     const c = await no.d.nightFilm({ bytes: muxed, seconds: 60, redacted: 0 })
     return {
-      pass: r.kind === 'written' && r.path === '/tmp/n.mp4' && r.redacted === 2 && r.seconds === 60 && yes.writes.length === 1 && JSON.stringify(yes.writes[0].data) === JSON.stringify([...muxed]) &&
+      pass: r.kind === 'written' && r.path === '/tmp/n.mp4' && yes.writes[0].path === '/tmp/n.mp4' && r.redacted === 2 && r.seconds === 60 && yes.writes.length === 1 && JSON.stringify(yes.writes[0].data) === JSON.stringify([...muxed]) &&
         c.kind === 'cancelled' && no.writes.length === 0,
       detail: { r, c, writes: yes.writes.length }
     }
@@ -224,25 +237,27 @@ const mkDoors = (D, answer) => {
   // film.door.2. The door writes only a film of the muxer's shape: any other
   //   bytes are refused before the dialog opens, so it cannot be used to
   //   drop an arbitrary file on disk.
-  await checkAsync('film.door.2 bytes that are not a film of the muxer\'s shape are refused before the dialog opens', doors, async (D) => {
+  await checkAsync('film.door.2 bytes that are not a film of the muxer\'s shape, a valid-looking header over junk among them, are refused before the dialog opens', doors, async (D) => {
     let asked = 0
     const d = D.createFilmDoors({ timeline: async () => ({ entries: [], reachedStart: true }), tonight: () => null, askPath: async () => { asked += 1; return '/tmp/x' }, write: () => {} })
     const rs = await Promise.all([
       d.nightFilm({ bytes: new TextEncoder().encode('#!/bin/sh\nrm -rf ~\n'), seconds: 1, redacted: 0 }),
       d.nightFilm({ bytes: new Uint8Array(0), seconds: 1, redacted: 0 }),
       d.nightFilm({ bytes: 'not bytes', seconds: 1, redacted: 0 }),
-      d.nightFilm({ bytes: Uint8Array.from([...muxed, 0, 0, 0]), seconds: 1, redacted: 0 })
+      d.nightFilm({ bytes: Uint8Array.from([...muxed, 0, 0, 0]), seconds: 1, redacted: 0 }),
+      // A file that only LOOKS like a film at the top: ftyp, a moov of junk, and an mdat carrying a script.
+      d.nightFilm({ bytes: Uint8Array.from([...box('ftyp', [105, 115, 111, 109]), ...box('moov', [...box('junk', [1, 2, 3])]), ...box('mdat', [...new TextEncoder().encode('#!/bin/sh\n')])]), seconds: 1, redacted: 0 })
     ])
     return { pass: rs.every((r) => r.kind === 'failed') && asked === 0 && D.isFilmBytes(muxed), detail: { rs, asked } }
   })
 
-  await checkAsync('film.door.3 the record read refuses a window that ends first or spans more than a day, and leaves out rows after the night', doors, async (D) => {
+  await checkAsync('film.door.3 the record read refuses a window that ends first or spans more than a day; it sends only the night\'s rows, no tool rows, and names the panels seen before', doors, async (D) => {
     const { d } = mkDoors(D, null)
     const r = await d.filmNight({ from: FROM, to: TO })
     const a = await d.filmNight({ from: TO, to: FROM })
     const b = await d.filmNight({ from: FROM, to: FROM + 25 * 60 * MIN })
     const c = await d.filmNight({ from: 'x', to: TO })
-    return { pass: r.kind === 'ok' && r.entries.length === 1 && r.tonight === null && a.kind === 'refused' && b.kind === 'refused' && c.kind === 'refused', detail: { r, a, b, c } }
+    return { pass: r.kind === 'ok' && r.entries.length === 1 && r.entries[0].row.command === 'x' && JSON.stringify(r.seenBefore) === '["old"]' && r.tonight === null && a.kind === 'refused' && b.kind === 'refused' && c.kind === 'refused', detail: { r, a, b, c } }
   })
 
   // film.wire.1. The pieces are joined: main handles both channels and

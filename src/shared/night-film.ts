@@ -71,6 +71,8 @@ export interface FilmInput {
   panels: readonly FilmPanelInput[]
   /** The durable record, any order. Rows outside the window are read only to learn which panels already existed. */
   timeline: readonly TimelineEntry[]
+  /** Panels main saw on record before the window (`film:night` sends this instead of the older rows themselves). */
+  seenBefore?: readonly string[]
   tonight?: TonightStatus | null
   queue?: readonly MorningItem[]
   /** Wall clock → words. Injected so the suite is not at the mercy of a time zone. */
@@ -242,7 +244,7 @@ export function nightFilmScript(input: FilmInput): FilmScript {
 
   // A panel APPEARS at its first record in the window when nothing about it
   // was written before the window; otherwise it was already there.
-  const seenBefore = new Set<string>()
+  const seenBefore = new Set<string>(input.seenBefore ?? [])
   for (const e of input.timeline) {
     const at = e.kind === 'command' ? e.row.startedAt : e.kind === 'event' ? e.row.at : null
     const id = e.kind === 'gap' ? undefined : e.row.panelId
@@ -308,7 +310,13 @@ export function nightFilmScript(input: FilmInput): FilmScript {
     .sort((a, b) => a.at - b.at)
 
   const appearAt = new Map<string, number>()
-  for (const [id, wall] of firstAt) appearAt.set(id, shots.find((s) => s.kind === 'appear' && s.panelId === id)?.at ?? filmTimeOf(wall, from, to))
+  // When a panel's own appear shot was ranked out, it still fades in no later
+  // than its first kept shot — the camera never flies to a panel not yet there.
+  for (const [id, wall] of firstAt) {
+    const own = shots.find((s) => s.kind === 'appear' && s.panelId === id)?.at
+    const first = shots.find((s) => s.panelId === id)?.at
+    appearAt.set(id, own ?? Math.min(filmTimeOf(wall, from, to), first ?? Infinity))
+  }
   const panels: FilmPanel[] = input.panels.map((p) => ({ id: p.id, label: gate(p.label, FILM_LABEL_MAX), kind: gate(p.kind, FILM_LABEL_MAX), rect: { ...p.rect }, appearAt: appearAt.get(p.id) ?? 0 }))
 
   const queueAll = input.queue ?? []
@@ -493,16 +501,20 @@ export const filmFrameCount = (script: FilmScript): number => Math.round((script
 
 /** Without a batch or an absence to go by, a "night" is the last twelve hours. */
 export const FILM_DEFAULT_NIGHT_MS = 12 * 60 * 60_000
+/** A Tonight batch that ended longer ago than this is not last night's. */
+export const FILM_STALE_BATCH_MS = 24 * 60 * 60_000
 /** A window shorter than this has nothing to film; it is widened back from its end. */
 export const FILM_MIN_NIGHT_MS = 30 * 60_000
 
 /**
- * M564. Which window "Last night" covers: the Tonight batch when one ran (its
- * start to its end, or now while it still runs), else the person's absence,
+ * M564. Which window "Last night" covers: the Tonight batch when one ran in the
+ * last day (its start to its end, or now while it still runs), else the person's absence,
  * else the last twelve hours. Never shorter than half an hour.
  */
 export function nightWindow(tonight: TonightStatus | null | undefined, awaySince: number | null, now: number): { from: number; to: number } {
-  const to = tonight?.endedAt ?? now
-  const from = tonight?.startedAt ?? awaySince ?? now - FILM_DEFAULT_NIGHT_MS
+  // A batch that ended more than a day ago is not "last night"; the runner keeps its status until the next one.
+  const batch = tonight !== null && tonight !== undefined && (tonight.endedAt ?? now) >= now - FILM_STALE_BATCH_MS ? tonight : null
+  const to = batch?.endedAt ?? now
+  const from = batch?.startedAt ?? awaySince ?? now - FILM_DEFAULT_NIGHT_MS
   return { from: Math.min(from, to - FILM_MIN_NIGHT_MS), to }
 }

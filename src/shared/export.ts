@@ -42,12 +42,13 @@ export type DeckPdfExportResult =
 export interface NightFilmRecordRequest { from: number; to: number }
 
 /**
- * M562. What the night left on record: the ledger up to the night's end (the
- * rows before it say which panels already existed) and the Tonight batch, so
- * the renderer can build the script without the panes' 200-row cap.
+ * M562. What the night left on record: the ledger rows inside the night
+ * (tool rows left out — hundreds a night, never a shot), the panels already
+ * on record before it, and the Tonight batch, so the renderer can build the
+ * script without the panes' 200-row cap.
  */
 export type NightFilmRecord =
-  | { kind: 'ok'; entries: TimelineEntry[]; tonight: TonightStatus | null }
+  | { kind: 'ok'; entries: TimelineEntry[]; seenBefore: string[]; tonight: TonightStatus | null }
   | { kind: 'refused'; reason: string }
 
 /**
