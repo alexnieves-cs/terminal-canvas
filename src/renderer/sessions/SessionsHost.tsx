@@ -124,7 +124,7 @@ export function SessionsHost({ onShowOrchestrate, confirmEnd, onEnd, onPause, on
   return (
     <section className="sessions-host" data-sessions-host aria-label="Sessions" data-sessions-attention={attention.length > 0 ? String(attention.length) : undefined}>
       <header className="sessions-host__bar">
-        <h1 className="sessions-host__title" data-sessions-title>{sessionsTitle(board.facts)}</h1>
+        <h1 className="sessions-host__title" data-sessions-title>{sessionsTitle(board.facts, attention.length)}</h1>
         {spend !== null && <span className="sessions-spend" data-sessions-spend>{spend}</span>}
         <div className="sessions-host__tools">
           <button type="button" className="sessions-new" data-sessions-new {...shellControl(() => { onNewSession?.() })}>+ New session</button>

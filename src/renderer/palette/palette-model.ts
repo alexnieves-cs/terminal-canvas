@@ -257,7 +257,13 @@ export function filterCommands(
     // a copy, so the row keeps its own section everywhere else and the
     // headers stay one-per-section (check 30, `verify:panels:core` 48).
     const lifted = scope === null && (leadsQuery(query, command) || (resting && command.leadsAtRest === true))
-    if (match !== null) scored.push({ command: lifted ? { ...command, group: 'task' } : command, score: match, order, weak: isWeakMatch(query, command) })
+    const weak = isWeakMatch(query, command)
+    // M609. A SETTING found only by a scattered subsequence is never shown:
+    // "plaid" lit p-l-a-i-d across "Phone alerts: after this many idle
+    // minutes", and setting rows crowded out the panels typed for. A setting
+    // still answers its own words (word starts, initials, a lead).
+    if (match !== null && weak && scope === null && command.group === 'setting') return
+    if (match !== null) scored.push({ command: lifted ? { ...command, group: 'task' } : command, score: match, order, weak })
   })
   // M409 (C5). At most WEAK_CAP rows that only a scattered subsequence found,
   // the best of them. Top level only: inside a scope (search, capability) the
