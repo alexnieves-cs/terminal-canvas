@@ -20,9 +20,10 @@ import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { installMenuBar } from './menu-bar'
 import { installTmuxAdopt } from './tmux-adopt'
+import { installCloudLanes } from './bootstrap/cloud-wiring'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
-import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors } from './bootstrap/presence-wiring'
+import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors, createTeamFlowDoors } from './bootstrap/presence-wiring'
 import { createRelayWiring } from './bootstrap/relay-wiring'
 import { startWorldSimWiring } from './bootstrap/world-sim-wiring'
 import { createWorldFeedWiring } from './bootstrap/world-feed-wiring'
@@ -137,7 +138,9 @@ state.presence = createPresenceWiring(state, stores, account)
 // The shared canvas binds into the hub's rooms (bindCanvas reads this at use).
 // M377. A teammate's side of the team queue; its list is pushed on every asks change.
 const teamAskDoors = createTeamAskDoors(state, account)
-state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'), teamAskDoors.push)
+// M582. Handoffs and the shared review queue, over the same binding.
+const teamFlowDoors = createTeamFlowDoors(state, account)
+state.canvasSync = createCanvasSyncWiring(state, stores, account, app.getPath('userData'), teamAskDoors.push, teamFlowDoors.push)
 // M376. The team queue's owner side (off until agents.teamAsks is on).
 state.teamAsks = createTeamAskWiring(state, stores, account, app.getPath('userData'))
 const shareDoors = createShareDoors(state, stores, account)
@@ -387,6 +390,8 @@ app.whenReady().then(async () => {
       textUpdate: (id, update) => state.canvasSync?.textUpdate(id, update) ?? { ok: false, reason: 'sharing is not wired in this build' },
       teamAsks: teamAskDoors.teamAsks,
       answerTeamAsk: teamAskDoors.answerTeamAsk,
+      teamFlow: teamFlowDoors.teamFlow,
+      writeTeamFlow: teamFlowDoors.writeTeamFlow,
       ...shareDoors
     },
     // The pty relay: one socket per relay panel, held in main with the token.
@@ -482,6 +487,19 @@ app.whenReady().then(async () => {
   // window is read at use (rule 1): it can be closed and remade.
   installMenuBar(() => state.window)
   installTmuxAdopt(() => state.loginEnv)
+  // M543. Cloud lanes: beside registerIpcHandlers like tmux:adopt, since they
+  // need the control wiring's broker and a positional parameter would shift
+  // every harness entry. The origin is read per dispatch, at use.
+  const cloud = installCloudLanes(state, {
+    broker: control.broker,
+    originOf: async (cwd) => {
+      const answer = await stores.gitRunner(['-C', cwd, 'remote', 'get-url', 'origin'])
+      return answer.ok && answer.stdout.trim() !== '' ? answer.stdout.trim() : null
+    },
+    git: stores.gitRunner,
+    commonRootOf: (p) => stores.reviewEngine.commonRootOf(p)
+  })
+  app.on('will-quit', () => cloud.stop())
 
   // A second launch of this build reaches the running instance here rather
   // than starting a process of its own. Restoring is not optional: on darwin
@@ -516,6 +534,9 @@ app.on('before-quit', () => {
   // so a guest's control is handed back now rather than after the 60s grace.
   relay.dispose()
   worldSim?.stop()
+  // M573 (lane O). A lesson replay's agent is killed, never left running on
+  // after the app, billing, in a scratch tree nobody will read.
+  kit.learn?.stop()
   // Offline in the org's rows too; not awaited — quit does not wait on a network.
   void teamReporter.stop()
 
@@ -549,6 +570,7 @@ app.on('before-quit', () => {
     agents: state.agents ?? undefined,
     tonight: state.tonight ?? undefined,
     vmLanes: state.vmLanes ?? undefined,
+    tournament: state.tournament ?? undefined,
     // M84. A watcher's child is an ordinary process: nothing else in this
     // sequence would reach it, and a quit mid-run would orphan it.
     watchers: state.watchRunner ?? undefined

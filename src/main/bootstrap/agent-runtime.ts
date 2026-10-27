@@ -24,6 +24,7 @@ import { requestFromRendererWith } from '../ipc'
 import { resolveTranscript } from '../transcript-reader'
 import { carriedMeter } from '../agent-transcript-log'
 import { windowUtilization } from '../../shared/rate-limit'
+import { promptCount } from '../../shared/turn-fork'
 import { effectiveCaps, type AgentCaps, type AgentSessionEvent } from '../../shared/agent-session'
 import { IPC_EVENTS, type PoolMintReply, type PoolMintRequest } from '../../shared/ipc-contract'
 import type { PanelTokens, MainState } from './context'
@@ -272,6 +273,12 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     if (event.type === 'result') {
       const snap = agents.get(event.id)
       if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, ...(snap.meter?.spentUsd === undefined ? {} : { spentUsd: snap.meter.spentUsd }), turns: snap.turns })
+      // M556 (lane K). The tree after this turn, as a hidden ref — named by
+      // the prompts the durable transcript holds, never by snap.turns, which
+      // restarts with the process. Fire and forget: it never throws.
+      if (snap && layoutStore.getSetting('agents.turnSnapshots') === true) {
+        void stores.turnForks.capture(event.id, expandTilde(snap.cwd), promptCount(agentTranscripts.read(event.id).turns))
+      }
     }
     // Presence folds each workspace's agents into its awareness payload's
     // agentStatus/statusLine. Read at use: the hub may be off (not configured,

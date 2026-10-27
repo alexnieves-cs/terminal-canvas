@@ -32,6 +32,8 @@ import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPr
 import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
 import type { TonightStatus } from '../shared/tonight'
+import type { ForkRequest, ForkResult, TurnSnapshotRow } from '../shared/turn-fork'
+import type { TournamentStatus } from '../shared/tournament'
 import type { EventRow, RunRow, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -48,7 +50,7 @@ import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, 
 import { INERT_EXPORTERS, type Exporters } from './export'
 import { INERT_TOOLS, type ToolHandlers } from './tool-generate'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
-import type { DeckPdfExportRequest, PanelTextExportRequest } from '../shared/export'
+import type { DeckPdfExportRequest, NightFilmExportRequest, NightFilmRecordRequest, PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -61,6 +63,7 @@ import type { CredentialStore } from './credential-store'
 import { accountOfCredentialKey } from '../shared/credential-schema'
 import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, AccountStatus, AccountUseResult, ShareListResult, ShareMemberResult, ShareMembersResult, ShareResult } from '../shared/account'
 import type { TeamAskRow } from '../shared/team-asks'
+import { EMPTY_TEAM_FLOW, parseFlowRequest, type FlowRequest, type TeamFlowSnapshot } from '../shared/team-flow'
 import type { TeamAskAnswerRequest } from '../shared/ipc-contract'
 import { parseRendererOp, parseWorkspaceRole, type CanvasOp, type CanvasSharedView, type SharedTextOpen, type Verdict, type WorkspaceRole } from '../shared/canvas-ops'
 import { parseTextCursor, type LocalPresence, type PresenceRoster } from '../shared/presence'
@@ -236,6 +239,13 @@ export interface AgentHandlers {
   vmLanes?(): import('../shared/vm-lane').VmLanesView
   tonightStop?(): boolean
   tonightStatus?(): TonightStatus | null
+  /** M556–M558 (lane K). Optional, like tonight's: a harness without them answers empty / refused. */
+  forkTurns?(panelId: string): Promise<TurnSnapshotRow[]>
+  forkBranch?(req: ForkRequest): Promise<ForkResult>
+  /** M547. The tournament's doors (main/tournament-runner.ts). Optional, for the same reason as Tonight's. */
+  tournamentStart?(raw: unknown): Promise<{ kind: 'started'; status: TournamentStatus } | { kind: 'refused'; reason: string }>
+  tournamentStop?(): boolean
+  tournamentStatus?(): TournamentStatus | null
   /** M98. The tools granted for a session, in grant order. */
   grants(id: string): string[]
   /** M98. Drop every grant for a session; it asks again. */
@@ -505,6 +515,9 @@ export interface PresenceHandlers {
   /** M377. The team's asks this person may answer, and their answer to one. Inert: none, and every answer refused. */
   teamAsks(): TeamAskRow[]
   answerTeamAsk(req: TeamAskAnswerRequest): Verdict
+  /** M582. The team's handoffs and review queue for this person, and one write in their name. Inert: empty, and every write refused. */
+  teamFlow(): TeamFlowSnapshot
+  writeTeamFlow(req: FlowRequest): Verdict
 }
 const SHARING_NOT_WIRED = 'sharing is not wired in this build'
 export const INERT_PRESENCE: PresenceHandlers = {
@@ -519,7 +532,9 @@ export const INERT_PRESENCE: PresenceHandlers = {
   textOpen: () => null, textClose: () => {},
   textUpdate: () => ({ ok: false, reason: SHARING_NOT_WIRED }),
   teamAsks: () => [],
-  answerTeamAsk: () => ({ ok: false, reason: SHARING_NOT_WIRED })
+  answerTeamAsk: () => ({ ok: false, reason: SHARING_NOT_WIRED }),
+  teamFlow: () => EMPTY_TEAM_FLOW,
+  writeTeamFlow: () => ({ ok: false, reason: SHARING_NOT_WIRED })
 }
 
 /**
@@ -852,6 +867,13 @@ export function registerIpcHandlers(
     if (answer !== 'allow' && answer !== 'deny') return { ok: false, reason: 'an answer is allow or deny' }
     return presence.answerTeamAsk({ workspaceId, askId, answer })
   })
+  // M582. Handoffs and the review queue: read, and one write — shape-checked
+  // here (parseFlowRequest), the name it is written in decided by main.
+  ipcMain.handle(IPC.TEAM_FLOW, () => presence.teamFlow())
+  ipcMain.handle(IPC.TEAM_FLOW_WRITE, (_event, raw: unknown): Verdict => {
+    const req = parseFlowRequest(raw)
+    return req === undefined ? { ok: false, reason: 'not a handoff or review request' } : presence.writeTeamFlow(req)
+  })
   ipcMain.handle(IPC.TEXT_UPDATE, (_event, id: unknown, update: unknown): Verdict => {
     if (typeof id !== 'string' || !WORKSPACE_ID.test(id) || !(update instanceof Uint8Array)) return { ok: false, reason: 'not a shared text update' }
     // Bounded before Yjs parses it: a replica's honest update is one burst of
@@ -942,6 +964,13 @@ export function registerIpcHandlers(
     const lanes = Array.isArray(raw) ? raw.filter((l): l is { id: string; path: string } => typeof l?.id === 'string' && typeof l.path === 'string' && l.path.startsWith('/')).slice(0, RADAR_LANES_MAX) : []
     return kit.laneRadar === undefined ? { at: Date.now(), collisions: [], unread: lanes.map((l) => ({ id: l.id, reason: 'the radar is not wired in this process' })) } : kit.laneRadar(lanes.map((l) => ({ id: l.id, path: l.path })))
   })
+  // M570 (lane O). The doors validate their own input (main/learn.ts); an
+  // unwired process answers empty and refuses, never pretends to have kept one.
+  ipcMain.handle(IPC.LEARN_READ, (_event, roots: unknown) => (kit.learn === undefined ? { repos: [] } : kit.learn.read(roots)))
+  ipcMain.handle(IPC.LEARN_RECORD, (_event, facts: unknown) => (kit.learn === undefined ? { ok: false, reason: 'lessons are not wired in this process' } : kit.learn.record(facts)))
+  ipcMain.handle(IPC.LEARN_PROPOSE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'drafting a rule is not wired in this process' } : kit.learn.propose(req)))
+  ipcMain.handle(IPC.LEARN_PROVE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'proving a rule is not wired in this process' } : kit.learn.prove(req)))
+  ipcMain.handle(IPC.LEARN_DECIDE, (_event, req: unknown) => (kit.learn === undefined ? { ok: false, reason: 'lessons are not wired in this process' } : kit.learn.decide(req)))
   ipcMain.handle(IPC.SETUP_READ, (_event, cwd: unknown) => (typeof cwd === 'string' ? kit.setupRead(cwd) : { kind: 'not-a-repo' as const }))
   ipcMain.handle(IPC.SETUP_SAVE, (_event, setup: unknown) => kit.setupSave(setup))
   ipcMain.handle(IPC.SETUP_PREPARE, (_event, req: unknown) => {
@@ -1000,6 +1029,17 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TONIGHT_STOP, () => agents.tonightStop?.() ?? false)
   ipcMain.handle(IPC.TONIGHT_STATUS, () => agents.tonightStatus?.() ?? null)
   ipcMain.handle(IPC.VM_LANES, () => agents.vmLanes?.() ?? { lanes: [], egress: [] })
+  ipcMain.handle(IPC.FORK_TURNS, (_event, panelId: unknown) => (typeof panelId === 'string' ? agents.forkTurns?.(panelId) ?? [] : []))
+  ipcMain.handle(IPC.FORK_BRANCH, (_event, req: unknown) => {
+    const r = req as Partial<ForkRequest> | null
+    if (r === null || typeof r !== 'object' || typeof r.fromPanelId !== 'string' || typeof r.toPanelId !== 'string' || typeof r.turn !== 'number') {
+      return { kind: 'refused', reason: 'a fork names a panel, a new panel id and a turn' }
+    }
+    return agents.forkBranch?.({ fromPanelId: r.fromPanelId, toPanelId: r.toPanelId, turn: r.turn }) ?? { kind: 'refused', reason: 'forks are not available in this process' }
+  })
+  ipcMain.handle(IPC.TOURNAMENT_START, (_event, raw: unknown) => agents.tournamentStart?.(raw) ?? { kind: 'refused', reason: 'tournaments are not available in this process' })
+  ipcMain.handle(IPC.TOURNAMENT_STOP, () => agents.tournamentStop?.() ?? false)
+  ipcMain.handle(IPC.TOURNAMENT_STATUS, () => agents.tournamentStatus?.() ?? null)
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))
@@ -1168,6 +1208,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.EXPORT_DECK_PDF, (_event, req: DeckPdfExportRequest) => exporters.deckPdf(req))
   ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
+  // M562–M563 (lane L). Optional on the object so a harness that builds its own exporters still registers.
+  ipcMain.handle(IPC.FILM_NIGHT, (_event, req: NightFilmRecordRequest) => exporters.filmNight?.(req) ?? { kind: 'refused', reason: 'the night film is not wired' })
+  ipcMain.handle(IPC.EXPORT_NIGHT_FILM, (_event, req: NightFilmExportRequest) => exporters.nightFilm?.(req) ?? { kind: 'failed', reason: 'the night film is not wired' })
   // Shape-checked in main/flowchart-files.ts, which answers a refusal by name for anything malformed — so what arrives here is passed on untouched.
   ipcMain.handle(IPC.EXPORT_FLOWCHART, (_event, req: unknown) => flowcharts.export(req))
   ipcMain.handle(IPC.FLOWCHART_READ, (_event, req: unknown) => flowcharts.read(req))

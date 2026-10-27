@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { app, shell } from 'electron'
 import { whichFromEnv } from '../shell-env'
 import { createCombineRunner } from '../combine-runner'
@@ -10,6 +10,13 @@ import { createIntegrator, createReceiptStore } from '../integrator'
 import { createRepoSetupStore } from '../repo-setup-store'
 import { createRecipeStore } from '../recipe-store'
 import { createEditorOpener, type KitHandlers } from '../kit'
+import { createLearnDoors } from '../learn'
+import { createLearnStore } from '../learn-store'
+import { createLessonProposer } from '../lesson-proposer'
+import { claudeCliRunner } from '../claude-cli-runner'
+import { createProofRunner } from '../lesson-proof-runner'
+import { runAutoCheck } from '../auto-check-runner'
+import { prepareFailureLine } from '../../shared/repo-setup'
 import type { EditorId } from '../../shared/editor-open'
 import type { Stores } from './stores'
 import type { MainState } from './context'
@@ -23,7 +30,7 @@ const SCHEMES: Record<EditorId, string | null> = { vscode: 'vscode', cursor: 'cu
  * before the startup probe resolves the login PATH.
  */
 export function createKitHandlers(state: MainState, stores: Stores, userData: string): KitHandlers {
-  const { reviewEngine, gitRunner, layoutStore, checkOutputs, runLedger } = stores
+  const { reviewEngine, gitRunner, layoutStore, checkOutputs, runLedger, lessonStore } = stores
   const worktreesDir = join(userData, 'worktrees')
   const mainRootOf = async (cwd: string): Promise<string | null> => {
     const answer = await reviewEngine.resolveRepo(cwd)
@@ -75,6 +82,33 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
     openUrl: async (url) => { if (/^(vscode|cursor|windsurf|zed|subl):\/\//.test(url)) await shell.openExternal(url) },
     openPath: (path) => shell.openPath(path)
   })
+  // M573. The replay's worktree sits beside the lanes' (and is removed on
+  // every way out, and a crash's leftovers are swept at the next replay); the repository's
+  // SAVED setup prepares it; the check is the auto gate's runner, so a
+  // proof's pass is the same exit-0 rule.
+  const proofRunner = createProofRunner({
+    run: gitRunner,
+    worktreesDir,
+    readFile: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } },
+    writeFile: (p, text) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, text) },
+    removeDir: (p) => { try { rmSync(p, { recursive: true, force: true }) } catch { /* left for git worktree prune */ } },
+    isLink: (p) => { try { return lstatSync(p).isSymbolicLink() } catch { return false } },
+    listDir: (d) => { try { return readdirSync(d) } catch { return [] } },
+    prepare: async (lane) => {
+      const r = await setup.prepare({ lane })
+      return r.kind === 'prepared' || r.kind === 'no-setup' ? { kind: r.kind } : { kind: r.kind, detail: prepareFailureLine(r) ?? 'the setup failed' }
+    },
+    runner: claudeCliRunner,
+    command: () => state.claudePath ?? 'claude',
+    env: () => state.loginEnv,
+    runCheck: async (spec) => {
+      const r = await runAutoCheck({ ...spec, env: state.loginEnv })
+      // A timeout or a check that never started is a failure even if a code came back (autoCheckPassed's rule).
+      return { exitCode: r.timedOut === true || r.error !== undefined ? null : r.exitCode, output: r.error === undefined ? r.output : `${r.output}\n${r.error}` }
+    },
+    now: () => Date.now()
+  })
+
   return {
     combine: (req) => combine.run(req),
     setupRead: (cwd) => setup.read(cwd),
@@ -90,6 +124,44 @@ export function createKitHandlers(state: MainState, stores: Stores, userData: st
     combineReceipts: async (root) => receipts.list(typeof root === 'string' ? await reviewEngine.commonRootOf(root) : undefined),
     setupPreflight: (req) => setup.preflight(req),
     recipeHistory: (id) => recipes.history(id),
-    laneRadar
+    laneRadar,
+    // M570 (lane O). The same root resolver as Accept, so a lane's lessons file under the tree it merges into.
+    // M571. The proposer is M252's headless no-tools run on the sessions' own claude; the switch is read per press.
+    learn: createLearnDoors({
+      lessons: lessonStore,
+      learn: createLearnStore({ dir: join(userData, 'learn') }),
+      commonRootOf: (p) => reviewEngine.commonRootOf(p),
+      baselineOf: (id) => layoutStore.baseline(id),
+      agentsOn: () => layoutStore.getSetting('learn.agents') === true,
+      propose: createLessonProposer({ runner: claudeCliRunner, command: () => state.claudePath ?? 'claude', env: () => state.loginEnv }),
+      prove: proofRunner.run,
+      stopProof: proofRunner.stop,
+      // M576. Accept and Retire write the person's CLAUDE.md or a project
+      // skill; through a temp file and a rename, so a crash mid-write leaves
+      // the old file, never half of the new one.
+      files: {
+        // Absent is null; any other failure throws, so an unreadable CLAUDE.md is never taken for a missing one.
+        read: (p) => {
+          try { return readFileSync(p, 'utf8') } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+            throw error
+          }
+        },
+        create: (p, text) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, text, { flag: 'wx' }) },
+        write: (p, text) => {
+          mkdirSync(dirname(p), { recursive: true })
+          const tmp = `${p}.tc-learn-${process.pid}.tmp`
+          writeFileSync(tmp, text)
+          renameSync(tmp, p)
+        },
+        remove: (p) => {
+          rmSync(p, { force: true })
+          // A skill's directory, left empty, goes with it; one holding anything else stays.
+          if (basename(p) === 'SKILL.md') { try { rmdirSync(dirname(p)) } catch { /* not empty, or not ours to remove */ } }
+        },
+        isLink: (p) => { try { return lstatSync(p).isSymbolicLink() } catch { return false } }
+      },
+      now: () => Date.now()
+    })
   }
 }

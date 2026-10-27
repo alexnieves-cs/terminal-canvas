@@ -154,7 +154,7 @@ export function startedFact(at: number | null): string | null {
  * empty canvas is "Sessions" and a canvas of only asleep sessions does not
  * say "0 live".
  */
-export function sessionsTitle(facts: readonly { tone: StateTone }[]): string {
+export function sessionsTitle(facts: readonly { tone: StateTone }[], needsYou = 0): string {
   let live = 0
   let dormant = 0
   for (const fact of facts) {
@@ -162,6 +162,9 @@ export function sessionsTitle(facts: readonly { tone: StateTone }[]): string {
     else live += 1
   }
   const parts = ['Sessions']
+  // M609. What needs you leads, the bell's order: the heading read "11 asleep"
+  // directly above three needs-you cards, and the cards were the point.
+  if (needsYou > 0) parts.push(`${needsYou} need${needsYou === 1 ? 's' : ''} you`)
   if (live > 0) parts.push(live === 1 ? '1 live' : `${live} live`)
   // The UX pass: "asleep", the state word every other surface says.
   if (dormant > 0) parts.push(dormant === 1 ? '1 asleep' : `${dormant} asleep`)

@@ -191,6 +191,18 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // M571 (lane O). Off by default: drafting a rule from lessons, and (M573)
+    // replaying a task to prove it, each run an agent and spend money. Not
+    // planWritable: an agent never turns on a door that runs agents.
+    id: 'learn.agents',
+    label: 'Lessons: let an agent draft and prove rules',
+    description: 'on the Lessons page, a press can ask an agent (with no tools) to draft a CLAUDE.md line or a skill from related lessons, and another can prove a draft by replaying the task in a scratch copy, where an agent can read and edit files but run no command; each press is one paid run, and nothing is written to your repository until you accept it',
+    keywords: ['lessons', 'learn', 'rules', 'claude.md', 'skill', 'propose', 'draft', 'harness'],
+    type: 'boolean',
+    default: false,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agents.budgetUsd',
     label: 'Budget for this canvas',
     description: 'stop this canvas\'s agents when their reported cost reaches this many dollars — a send past this is refused by name; 0 is no ceiling',
@@ -313,6 +325,17 @@ export const SETTINGS: readonly SettingDef[] = [
     default: 0,
     min: 0,
     max: 1000,
+    category: AGENT_CATEGORY
+  },
+  {
+    // M556 (lane K). Off by default: a snapshot writes objects and a hidden
+    // ref into the person's own repository, which is a write outside the app.
+    id: 'agents.turnSnapshots',
+    label: 'Snapshot each agent turn',
+    description: 'when an agent in a git repository finishes a turn, keep its files as a hidden snapshot (never a branch, never your index or stash), so Replay can branch a new worktree and conversation from that turn; the newest 50 per agent are kept, and closing the agent removes them',
+    keywords: ['fork', 'branch', 'turn', 'snapshot', 'replay', 'worktree', 'rewind', 'checkpoint', 'history'],
+    type: 'boolean',
+    default: false,
     category: AGENT_CATEGORY
   },
   {

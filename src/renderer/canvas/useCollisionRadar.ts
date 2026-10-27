@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RADAR_LANES_MAX, type RadarLane, type RadarReport } from '@shared/collision-radar'
 import type { PersistedWorkItem } from '@shared/work-items'
+import { isSettled } from '@shared/cloud-lane'
+import { useCloudLanes } from '@renderer/work/cloud-lanes-store'
 
 /**
  * M479. THE COLLISION RADAR, read for the board: every task with a lane, by
@@ -38,5 +40,24 @@ export function useCollisionRadar(
     void door(lanes.map(({ id, path }) => ({ id, path }))).then((r) => { if (live) setReport(r) }).catch(() => { /* keep the last answer */ })
     return () => { live = false }
   }, [key, siblings, version]) // eslint-disable-line react-hooks/exhaustive-deps
-  return report
+
+  // M545. A cloud lane's PR against every local lane, asked when either side
+  // moves: a local lane's version, or a cloud lane's new PR or new state (a
+  // push re-runs its checks, so `checks-running` is a new head to look at).
+  const cloud = useCloudLanes()
+  const cloudKey = cloud.filter((l) => l.pr !== undefined && !isSettled(l.state)).map((l) => `${l.id}:${l.pr}:${l.state}`).join(' ')
+  const [cloudReport, setCloudReport] = useState<RadarReport | null>(null)
+  useEffect(() => {
+    if (cloudKey === '' || lanes.length === 0) { setCloudReport(null); return }
+    const door = window.canvas?.cloud?.radar
+    if (typeof door !== 'function') return
+    let live = true
+    void door(lanes.map(({ id, path }) => ({ id, path }))).then((r) => { if (live) setCloudReport(r) }).catch(() => { /* keep the last answer */ })
+    return () => { live = false }
+  }, [key, cloudKey, version]) // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(() => {
+    if (cloudReport === null) return report
+    if (report === null) return cloudReport
+    return { at: Math.max(report.at, cloudReport.at), collisions: [...report.collisions, ...cloudReport.collisions], unread: [...report.unread, ...cloudReport.unread] }
+  }, [report, cloudReport])
 }

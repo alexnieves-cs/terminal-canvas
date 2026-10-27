@@ -410,14 +410,16 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
   const quiet = input.tasks.filter((t) => !loud.has(t.itemId)).length
   const blocked = groups.filter((g) => g.severity === 'blocked').length
   const parts: string[] = []
-  if (blocked > 0) parts.push(`${blocked} stopped on you`)
+  // M609. Plain words: "1 stopped on you — 1 other needs nothing" took a
+  // second read. What waits, then how many more tasks are fine.
+  if (blocked > 0) parts.push(`${blocked} waiting on you`)
   const failed = groups.filter((g) => g.severity === 'failed').length
-  if (failed > 0) parts.push(`${failed} with a failed check`)
+  if (failed > 0) parts.push(`${failed} failed a check`)
   const review = groups.filter((g) => g.severity === 'review').length
   if (review > 0) parts.push(`${review} to review`)
   const headline = groups.length === 0
     ? (quiet > 0 ? `Nothing needs you — ${quiet} task${quiet === 1 ? ' is' : 's are'} working or done.` : 'Nothing needs you.')
-    : `${parts.join(' · ')}${quiet > 0 ? ` — ${quiet} other${quiet === 1 ? ' needs' : 's need'} nothing` : ''}.`
+    : `${parts.join(' · ')}${quiet > 0 ? `. ${quiet} more working or done` : ''}.`
   const checks: Record<string, CheckTally> = {}
   const runs: Record<string, QueueCheckRun[]> = {}
   for (const t of input.tasks) {

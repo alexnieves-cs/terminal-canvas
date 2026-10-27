@@ -2370,6 +2370,15 @@ the feed (M125 cuts it) — could not have been. Unproven, by construction, at m
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
 
+- **A fork's conversation resuming in claude (lane K, M557) — NOT YET confirmed by hand.**
+  `main/turn-forks.ts` writes the cut copy of claude's JSONL to
+  `~/.claude/projects/<claudeProjectSlug(fork cwd)>/<new id>.jsonl`, betting on two facts of
+  another program: the folder rule (every non-alphanumeric of the cwd becomes `-`) and that
+  `--resume <id>` reads a file it did not write. `verify:fork` proves the cut and the path, never
+  the CLI. To confirm: turn on "Snapshot each agent turn", have a claude chat in a repository
+  answer two messages, Replay → Branch from here at message 1, and send the fork "what did I
+  ask you first?". A wrong rule shows as the fork's first send starting a new conversation with
+  M319's resume-lost line, never as a silent wrong answer.
 - **The real OS attention surfaces (M43)** — `new Notification(...).show()` and its click
   handler, `app.dock.setBadge`, and `shell.beep`, all wired in `main/bootstrap/stores.ts`. No suite reaches
   them: `verify:pty-manager` drives a FAKE `AttentionSink` and counts its calls. That a real
@@ -4096,6 +4105,22 @@ taken by any other tool carries and no more. The reachable mistake is the opposi
 adding a SECOND binary export later (a video, a PDF of the canvas) and assuming this
 precedent covers it. It does not — it covers the case where the bytes never were text.
 Grep finds a bypassing TEXT reader; nothing can grep for this, so it lives here.
+
+**The night film is the SECOND binary export, and it is gated because it is DRAWN, never
+captured (`shared/night-film.ts`, `renderer/film/`, `main/film-export.ts`, M561–M564).** The
+PNG's exception above does not cover it, so the film was built so that it is not needed: every
+word a frame can show (a panel's name, a ledger row's title, a command, a morning-queue line)
+passes `outward` in `nightFilmScript`, and the painter draws only the script and the frame
+model, never a terminal, a chat or anything read from the live canvas. The count travels on the
+save and comes back in the sentence, like `panelText`'s. Two things keep it that way, and both
+fail silently: a painter that grows a second source of words (a live pane's last line "for
+context") ships that line unscrubbed in pixels, which is why `verify:film film.wire.1` pins the
+painter's and encoder's imports; and a caption CLIPPED before it is scrubbed can cut a token
+below the length its pattern needs and let the head through, which is why the script scrubs
+first (`film.script.3`). Main writes only bytes of the muxer's own box shape
+(`film.door.2`), so the save door cannot be used to drop an arbitrary file. Do not "upgrade"
+the film to a screen recording of the canvas: that is the PNG's case, without the person having
+framed the shot.
 
 **Auto's counter is main's; the chip is a projection, and the snapshot keeps the resolved
 run (`agent-session.ts`'s `startAuto`, `shared/auto.ts`, M97).** The rule is M82's from the

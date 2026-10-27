@@ -77,7 +77,7 @@ export interface MemoryStore {
  * this subject is a user's path. The readable half stays first so the
  * directory can still be browsed by eye.
  */
-function slugOf(root: string): string {
+export function slugOf(root: string): string {
   const trimmed = root.replace(/\/+$/, '')
   const slug = trimmed.replace(/^\/+/, '').replace(/[^A-Za-z0-9._-]+/g, '-')
   const hash = createHash('sha256').update(trimmed).digest('hex').slice(0, 8)

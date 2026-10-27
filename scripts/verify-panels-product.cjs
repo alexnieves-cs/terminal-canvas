@@ -2603,6 +2603,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await settle()
         const seen = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('[data-launcher]'); if (!l) return false
           const presets = [...l.querySelectorAll('[data-launcher-preset] .launcher__verb-name')].map((n) => n.textContent)
+          // The preset list arrives over IPC after the launcher mounts; an object is truthy, so
+          // without this the wait could resolve on a launcher whose presets have not landed yet.
+          if (presets.length === 0) return false
           const codex = l.querySelector('[data-launcher-new-codex]')
           return { presets, codex: codex ? { disabled: codex.disabled, title: codex.title, hint: codex.querySelector('.launcher__verb-hint')?.textContent ?? '' } : null } })()`), 6000)
         ok(IDS[0], seen && seen.presets.length > 0 && seen.presets.every((t) => /^Start .+…$/.test(t)) &&
@@ -4621,8 +4624,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // arrangements. The aliases are NAMED here as well as counted, so the
             // next arrival reads as "a verb was added" rather than as "a number
             // moved" — a bare count says nothing about which one went missing.
+            // EIGHTH (M543, lane H): `cloud`, the card's door onto the cloud
+            // agents — a menu, so it is enabled even with no lane yet.
             card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) &&
-            card.verbs.map((v) => v[0]).join(',') === 'assign,resume,open-pr,review,show,focus,swarm,done' && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            card.verbs.map((v) => v[0]).join(',') === 'assign,resume,open-pr,review,show,focus,swarm,cloud,done' && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
             moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
           JSON.stringify({ pane, card, before, after, moved }))
       } catch (bdErr) {

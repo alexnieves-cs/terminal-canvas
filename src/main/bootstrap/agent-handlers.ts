@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { statSync, readFileSync } from 'node:fs'
 import { app, clipboard } from 'electron'
 import { expandTilde, resolveCwd } from '../pty-manager'
@@ -10,8 +11,11 @@ import { writeClipboardImage } from '../clipboard-file'
 import { importClaudeTranscript } from '../claude-transcript-import'
 import { resolveTranscript } from '../transcript-reader'
 import { RATE_LIMIT_NONE, windowUtilization } from '../../shared/rate-limit'
-import { parseAutoCheck } from '../../shared/auto'
+import { AUTO_CHECK_TIMEOUT_MS, autoCheckPassed, parseAutoCheck } from '../../shared/auto'
+import { runAutoCheck } from '../auto-check-runner'
 import { parseTonightBatch } from '../../shared/tonight'
+import { parseTournament } from '../../shared/tournament'
+import { createTournamentRunner, readEntrantDiff } from '../tournament-runner'
 import { BACKENDS, backendOf, type AgentBackend } from '../../shared/agent-backends'
 import { capSentence, type AgentCreateResult, type AutoStartResult, type AgentSessionSpec, type ChatAttachment, type SendAnswer, type SendResult } from '../../shared/agent-session'
 import type { AgentHandlers } from '../ipc'
@@ -71,7 +75,7 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     return answer
   }
 
-  return {
+  const handlers: AgentHandlers = {
     create: (spec: AgentSessionSpec): AgentCreateResult => {
       const manager = state.agents
       if (manager === null) return { kind: 'refused', reason: 'the agent runtime has not started yet' }
@@ -179,6 +183,10 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     terminate: (id) => state.agents?.terminate(id) ?? false,
     capsChanged: () => { state.agents?.capsChanged() },
     dispose: ({ id, drop }) => {
+      // M560 (lane K). A closed chat's turn snapshots go with it; the cwd is
+      // read BEFORE the dispose, which forgets it.
+      const cwd = state.agents?.get(id)?.cwd
+      if (drop && cwd !== undefined) void stores.turnForks.drop(id, expandTilde(cwd))
       state.agents?.dispose(id)
       // M120. The sandbox folder goes with the chat — on dispose, never on exit.
       if (drop) { agentTranscripts.drop(id); dropBaseline(id); disposeSandbox(app.getPath('userData'), id, realSandboxFs) }
@@ -260,6 +268,13 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     vmLanes: () => ({ lanes: state.vmLanes?.list() ?? [], egress: state.vmEgress?.list() ?? [] }),
     tonightStop: () => state.tonight?.stop() ?? false,
     tonightStatus: () => state.tonight?.status() ?? null,
+    // M556–M558 (lane K). The panel's cwd is main's own record of it, never
+    // one the renderer sends: a fork is built in the repository the agent ran in.
+    forkTurns: async (panelId) => {
+      const cwd = state.agents?.get(panelId)?.cwd
+      return cwd === undefined ? [] : stores.turnForks.list(panelId, expandTilde(cwd))
+    },
+    forkBranch: (req) => stores.turnForks.fork(req),
     importSession: ({ fromPanelId, toPanelId }) => {
       const sessionId = layoutStore.session(fromPanelId)
       if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }
@@ -274,5 +289,73 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
       agentTranscripts.appendMeta(toPanelId, imported.meta)
       return { kind: 'imported', sessionId, turns: imported.meta.turns }
     }
+  }
+
+  // M547. The tournament runner, built HERE because its entrants are created
+  // through the `create` arm above — the same door the renderer's
+  // `agent:create` takes, so the Places gate, the CLI probe, the brief and the
+  // baseline capture hold for an entrant exactly as for a chat a person made.
+  // Every manager call reads `state.agents` at use (this file's rule).
+  const { worktreeManager, gitRunner } = stores
+  state.tournament = createTournamentRunner({
+    lane: async (panelId, root) => {
+      // A fresh lane or none: ensureForPanel hands a known panel id its OLD
+      // worktree back, and an entrant must not start on earlier work.
+      if (layoutStore.worktreeForPanel(panelId, root) !== undefined) return { kind: 'refused', reason: `${panelId} already has a lane from earlier work` }
+      const outcome = await worktreeManager.ensureForPanel(panelId, root)
+      if (outcome.kind !== 'active') return { kind: 'refused', reason: outcome.reason }
+      const record = layoutStore.worktreeForPanel(panelId, outcome.root)
+      // The fork point, so the diff is measured from where this lane began.
+      const head = await gitRunner(['-C', outcome.path, 'rev-parse', 'HEAD'])
+      return { kind: 'lane', path: outcome.path, branch: outcome.branch, ...(record === undefined ? {} : { worktreeId: record.id }), ...(head.ok ? { head: head.stdout.trim() } : {}) }
+    },
+    create: (spec) => handlers.create(spec),
+    startAuto: (id, opts) => state.agents?.startAuto(id, opts) ?? { kind: 'refused', reason: 'the agent runtime is not available' },
+    stopAuto: (id) => state.agents?.stopAuto(id) ?? false,
+    subscribe: (cb) => state.agents?.subscribe(cb) ?? (() => {}),
+    spentOf: (id) => { const snap = state.agents?.get(id); return snap?.meter?.spentUsd ?? snap?.costUsd ?? 0 },
+    diffOf: (path, base) => readEntrantDiff(gitRunner, path, readTextOrNull, base),
+    // The same runner a gated auto run uses (M475), in the lane, with the app's environment.
+    recheck: async (path, check) => autoCheckPassed(await runAutoCheck({
+      command: check.command, cwd: path, env: state.loginEnv, timeoutMs: check.timeoutMs ?? AUTO_CHECK_TIMEOUT_MS, signal: new AbortController().signal
+    })),
+    // Every recorded lane of the same repository that is not an entrant: the
+    // collision radar's population, read the same read-only way.
+    otherLaneFiles: async (root, exclude, homeLane) => {
+      // The task's own lane is excluded too: an entrant touching the files
+      // the task's earlier attempt touched is doing the task, not colliding.
+      const lanes = layoutStore.worktrees().filter((w) => w.root === root && !exclude.includes(w.path) && w.id !== homeLane)
+      const reads = await Promise.all(lanes.map((w) => readEntrantDiff(gitRunner, w.path, () => null).catch(() => null)))
+      return [...new Set(reads.flatMap((r) => r?.files ?? []))]
+    },
+    mintSessionId: () => randomUUID(),
+    mintId: () => `tn-${randomUUID().slice(0, 8)}`,
+    now: Date.now,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
+  })
+  // M547. Parsed by name here, like Tonight's batch; the runner refuses a second tournament while one is live.
+  handlers.tournamentStart = async (raw) => {
+    const runner = state.tournament
+    if (runner === null) return { kind: 'refused', reason: 'tournaments are not available in this process' }
+    const parsed = parseTournament(raw)
+    if (parsed.kind === 'refused') return parsed
+    // The MAIN tree, whatever folder inside the repository was named: a
+    // lane's folder would fork every entrant from that lane's branch, and its
+    // diff would then count the lane's own commits as the entrant's.
+    const root = await stores.reviewEngine.commonRootOf(parsed.spec.root)
+    return runner.start({ ...parsed.spec, root })
+  }
+  handlers.tournamentStop = () => state.tournament?.stop() ?? false
+  handlers.tournamentStatus = () => state.tournament?.status() ?? null
+  return handlers
+}
+
+/** An untracked file's text for a line count; a file too big or unreadable counts no lines. */
+function readTextOrNull(path: string): string | null {
+  try {
+    return statSync(path).size > 2 * 1024 * 1024 ? null : readFileSync(path, 'utf8')
+  } catch {
+    return null
   }
 }

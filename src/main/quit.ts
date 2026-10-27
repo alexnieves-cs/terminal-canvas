@@ -29,6 +29,8 @@ export interface QuitDeps {
    * runner's own exit path rather than by the process dying.
    */
   tonight?: { dispose(): void }
+  /** M547. A live tournament, stopped before the agents are disposed for the same reason as Tonight. */
+  tournament?: { dispose(): void }
   /**
    * M552. Sandboxed lanes: every lane's VM stopped by name and its state
    * folder removed. AFTER the agents, whose kills already stop each live VM;
@@ -85,6 +87,11 @@ export function runQuit(deps: QuitDeps): void {
     deps.tonight?.dispose()
   } catch (error) {
     console.warn('[quit] tonight teardown failed', error)
+  }
+  try {
+    deps.tournament?.dispose()
+  } catch (error) {
+    console.warn('[quit] tournament teardown failed', error)
   }
   try {
     deps.agents?.disposeAll()

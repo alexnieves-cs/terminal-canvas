@@ -22,3 +22,25 @@ export function onReplay(listener: (r: ReplayRequest | null) => void): () => voi
   listeners.add(listener)
   return () => { listeners.delete(listener) }
 }
+
+/**
+ * M558 (lane K). "Branch from here" — the sheet's one door that ACTS. The
+ * verb lives on the canvas (canvas/useForkVerb.ts, which owns panels and
+ * placement) and registers itself here; the sheet stays a view that asks.
+ * Absent until the canvas has mounted, and then the button says so.
+ */
+export type BranchAnswer = { kind: 'forked'; panelId: string; sentence: string } | { kind: 'refused'; sentence: string }
+let brancher: ((panelId: string, turn: number) => Promise<BranchAnswer>) | null = null
+export function setBrancher(next: typeof brancher): void { brancher = next }
+export function branchFromHere(panelId: string, turn: number): Promise<BranchAnswer> {
+  return brancher === null ? Promise.resolve({ kind: 'refused', sentence: 'Could not branch: the canvas is not ready yet' }) : brancher(panelId, turn)
+}
+
+/**
+ * M559. Which chat is a fork of which, and at what turn — for the compare
+ * view's caption. Memory only: the fork's own title carries the same fact
+ * across a relaunch, so nothing is lost that a person cannot read.
+ */
+const forks = new Map<string, { from: string; turn: number }>()
+export function noteFork(panelId: string, from: string, turn: number): void { forks.set(panelId, { from, turn }) }
+export function forkOf(panelId: string): { from: string; turn: number } | undefined { return forks.get(panelId) }

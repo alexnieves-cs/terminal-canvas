@@ -11,6 +11,7 @@
  */
 
 import { answerTeamAsk as answerTeamAskInStore } from '@renderer/shell/useTeamAsks'
+import { writeTeamFlow } from '@renderer/team-flow/useTeamFlow'
 import { notifyRefused } from '../../shell/toast'
 import { normalisePreviewPath } from '@shared/preview'
 import { openReplay as openReplaySheet } from '@renderer/replay/replay-store'
@@ -70,6 +71,7 @@ export type PresetsActions = Pick<PaletteActions,
   | 'stopAuto'
   | 'answerApproval'
   | 'answerTeamAsk'
+  | 'teamFlow'
   | 'openAsChat'
   | 'openReplay'
   | 'openInTerminal'
@@ -651,6 +653,10 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     // refusal says why.
     answerTeamAsk: (workspaceId, askId, allow) => {
       void answerTeamAskInStore({ workspaceId, askId }, allow ? 'allow' : 'deny').then((reason) => { if (reason !== null) notifyRefused(reason) })
+    },
+    // M583. A handoff or review press from the palette: the Dock's own door.
+    teamFlow: (req) => {
+      void writeTeamFlow(req).then((reason) => { if (reason !== null) notifyRefused(reason) })
     },
     answerApproval: (id, requestId, allow, scope) => {
       if (isAnswered(id, requestId)) return

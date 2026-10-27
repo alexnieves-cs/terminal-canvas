@@ -1,4 +1,5 @@
 import type { PanelStatus } from '@renderer/session/panel-session'
+import type { CloudLaneState } from '@shared/cloud-lane'
 import type { AgentState } from '@shared/types'
 import { WORK_ITEM_STATES, type WorkItemState } from '@shared/work-items'
 
@@ -312,6 +313,25 @@ export function autoTone(state: 'running' | 'done' | 'stuck' | 'stopped'): Tone 
     case 'done': return 'done'
     case 'stuck': return 'needs-you'
     case 'stopped': return 'exited'
+  }
+}
+
+/**
+ * M543. A CLOUD LANE's state in this file's vocabulary (state.2): the word a
+ * work card says beside the lane and the tone it paints. Ready is `done` in
+ * tone — the agent's part is over and a check passed — but its word says
+ * ready, because the person's part (review, merge) has not happened yet.
+ */
+export function cloudLaneWord(state: CloudLaneState): PanelStateWord {
+  switch (state) {
+    case 'dispatched': return { word: 'sent', tone: 'starting' }
+    case 'working': return { word: 'working', tone: 'working' }
+    case 'checks-running': return { word: 'checking', tone: 'working' }
+    case 'ready': return { word: 'ready to review', tone: 'done' }
+    case 'failed': return { word: 'checks failed', tone: 'needs-you' }
+    case 'needs-you': return { word: 'needs you', tone: 'needs-you' }
+    case 'merged': return { word: 'merged', tone: 'done' }
+    case 'closed': return { word: 'closed', tone: 'exited' }
   }
 }
 
