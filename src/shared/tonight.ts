@@ -37,6 +37,12 @@ export interface TonightTask {
   budgetUsd?: number
   /** Turn limit per attempt; absent is the mode's. */
   limit?: number
+  /**
+   * M553 (lane J). Run this task in a throwaway VM with prompts off. Only
+   * ever `true` or absent, and only honoured while the `vm.lanes` setting is
+   * on — main refuses the batch by name otherwise, never runs it on the Mac.
+   */
+  sandboxed?: true
 }
 
 export interface TonightBatchSpec {
@@ -62,6 +68,8 @@ export interface TonightTaskStatus {
   /** Failed checks across attempts (M475). */
   checkFailures: number
   check?: string
+  /** M553. The task runs in a sandboxed lane — the label every surface shows beside it. */
+  sandboxed?: true
   startedAt?: number
   endedAt?: number
 }
@@ -125,6 +133,7 @@ export function parseTonightBatch(raw: unknown): { kind: 'ok'; batch: TonightBat
     if (o.mode !== undefined && !AUTO_MODE_IDS.includes(o.mode as AutoModeId)) return { kind: 'refused', reason: `${n} names an unknown mode` }
     if (o.budgetUsd !== undefined && (typeof o.budgetUsd !== 'number' || !Number.isFinite(o.budgetUsd) || o.budgetUsd < 0)) return { kind: 'refused', reason: `${n}'s budget is not a sum of money` }
     if (o.limit !== undefined && (typeof o.limit !== 'number' || !Number.isInteger(o.limit) || o.limit <= 0)) return { kind: 'refused', reason: `${n}'s turn limit is not a positive whole number` }
+    if (o.sandboxed !== undefined && o.sandboxed !== true && o.sandboxed !== false) return { kind: 'refused', reason: `${n}'s sandboxed is not true or false` }
     const check = parseAutoCheck(o.check)
     if (check.kind === 'refused') return { kind: 'refused', reason: `${n}: ${check.reason}` }
     ids.add(o.id)
@@ -133,7 +142,8 @@ export function parseTonightBatch(raw: unknown): { kind: 'ok'; batch: TonightBat
       ...(o.mode === undefined ? {} : { mode: o.mode as AutoModeId }),
       ...(check.check === undefined ? {} : { check: check.check }),
       ...(o.budgetUsd === undefined || o.budgetUsd === 0 ? {} : { budgetUsd: o.budgetUsd as number }),
-      ...(o.limit === undefined ? {} : { limit: o.limit as number })
+      ...(o.limit === undefined ? {} : { limit: o.limit as number }),
+      ...(o.sandboxed === true ? { sandboxed: true as const } : {})
     })
   }
   return { kind: 'ok', batch: { tasks, ...(r.notBefore === undefined ? {} : { notBefore: r.notBefore as number }) } }
@@ -153,7 +163,9 @@ export function parseTonightBatch(raw: unknown): { kind: 'ok'; batch: TonightBat
  */
 export function tonightBatchFrom(
   items: readonly PersistedWorkItem[],
-  chatOpen: (panelId: string) => boolean
+  chatOpen: (panelId: string) => boolean,
+  /** M553. `tonight sandboxed`: every task in a sandboxed lane. */
+  opts: { sandboxed?: boolean } = {}
 ): { tasks: TonightTask[]; skipped: { title: string; reason: string }[] } {
   const tasks: TonightTask[] = []
   const skipped: { title: string; reason: string }[] = []
@@ -167,14 +179,16 @@ export function tonightBatchFrom(
     const criteria = (item.criteria ?? []).filter((c) => c.trim() !== '')
     const task = [what === '' ? item.title : `${item.title}\n\n${what}`, ...(criteria.length === 0 ? [] : [`Done when:\n${criteria.map((c) => `- ${c}`).join('\n')}`])].join('\n\n')
     const checks = (item.recipeUsed?.definition.checks ?? []).map((c) => c.trim()).filter((c) => c !== '')
-    tasks.push({ id: item.id, panelId: item.panelId, title: item.title, task, ...(checks.length === 0 ? {} : { check: { command: checks.join(' && ') } }) })
+    tasks.push({ id: item.id, panelId: item.panelId, title: item.title, task, ...(checks.length === 0 ? {} : { check: { command: checks.join(' && ') } }), ...(opts.sandboxed === true ? { sandboxed: true as const } : {}) })
   }
   return { tasks, skipped }
 }
 
 /** The one line a door says after a start, a refusal or a stop. */
-export function tonightWords(r: { kind: 'started'; tasks: number; checked: number; skipped: number } | { kind: 'refused'; reason: string }): string {
+export function tonightWords(r: { kind: 'started'; tasks: number; checked: number; skipped: number; sandboxed?: number } | { kind: 'refused'; reason: string }): string {
   if (r.kind === 'refused') return r.reason
   const s = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`
-  return `${s(r.tasks, 'task')} queued for tonight, one at a time (${r.checked} gated by a check); the Mac stays awake while they run${r.skipped === 0 ? '' : ` · ${r.skipped} left out`}`
+  // M553. Said only when some are: a night with none is the night it always was.
+  const vm = r.sandboxed === undefined || r.sandboxed === 0 ? '' : `, ${r.sandboxed === r.tasks ? 'all' : r.sandboxed} sandboxed with prompts off`
+  return `${s(r.tasks, 'task')} queued for tonight, one at a time (${r.checked} gated by a check${vm}); the Mac stays awake while they run${r.skipped === 0 ? '' : ` · ${r.skipped} left out`}`
 }

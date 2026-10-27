@@ -45,3 +45,28 @@ export async function probeVmRuntimesLive(which: (name: string) => string | null
   }))
   return probeVmRuntimes({ ...facts, alive: (id) => alive.get(id) })
 }
+
+/**
+ * M554. Where the proxy listens and where a VM reaches it, per runtime:
+ * - Apple container: the host's side of the VM network (the `default`
+ *   network is 192.168.64.0/24, the Mac at .1), bound THERE and nowhere
+ *   else, so the LAN never sees it.
+ * - Docker and OrbStack: loopback, reached as `host.docker.internal`, which
+ *   both forward to the Mac's 127.0.0.1.
+ * Null when the Apple network is not up; the lane is then refused by name.
+ */
+export function vmProxyPlace(runtime: VmRuntimeId, interfaces: Record<string, Array<{ address: string; family: string | number }> | undefined>): { bind: string; reach: string } | null {
+  if (runtime !== 'apple') return { bind: '127.0.0.1', reach: 'host.docker.internal' }
+  // vmnet's host side is a `bridge<N>` interface at the subnet's .1. The
+  // documented default subnet is preferred; another bridge's .1 is the
+  // fallback for a person who moved the network (the Mac check confirms).
+  const found: string[] = []
+  for (const [name, list] of Object.entries(interfaces)) {
+    if (!/^bridge\d+$/.test(name)) continue
+    for (const a of list ?? []) {
+      if ((a.family === 'IPv4' || a.family === 4) && /^192\.168\.\d{1,3}\.1$/.test(a.address)) found.push(a.address)
+    }
+  }
+  const at = found.includes('192.168.64.1') ? '192.168.64.1' : found[0]
+  return at === undefined ? null : { bind: at, reach: at }
+}

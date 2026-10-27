@@ -1,10 +1,20 @@
-import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { execFile } from 'node:child_process'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { homedir, networkInterfaces } from 'node:os'
+import { connect as netConnect } from 'node:net'
+import { join } from 'node:path'
 import { AgentSessionManager } from '../agent-session'
 import { claudeCliRunner } from '../claude-cli-runner'
 import { runAutoCheck } from '../auto-check-runner'
 import { createTonightRunner } from '../tonight-runner'
-import { powerSaveBlocker } from 'electron'
+import { app, powerSaveBlocker } from 'electron'
+import { createVmLanes } from '../vm-lanes'
+import { probeVmRuntimesLive, vmProxyPlace } from '../vm-runtime'
+import { createEgressLog, createVmProxy } from '../vm-proxy'
+import { createVmDoors } from '../vm-doors'
+import { whichFromEnv } from '../shell-env'
+import { VM_DEFAULT_CPUS, VM_DEFAULT_IMAGE, VM_DEFAULT_MEMORY_MIB } from '../../shared/vm-lane'
 import { createPoolCaller } from '../pool-caller'
 import { createJobHandlers, type JobHandlers } from '../job-recovery'
 import type { RepoMark } from '../../shared/job-journal'
@@ -42,12 +52,54 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
   }
   const env = state.loginEnv
 
+  // M552 (lane J). Sandboxed lanes wrap the runner and the check runner: a
+  // panel marked sandboxed runs in a VM, every other spawn is untouched. No
+  // probe at launch: an app that never runs a sandboxed task never asks a VM
+  // runtime anything. The doors' `prepare` probes before every entry, and
+  // every environment report probes too (state.vmProbe).
+  // M554. One allowlisting proxy per place a runtime's VMs reach the Mac,
+  // started on the first sandboxed run and never before: an app that never
+  // runs one never listens. Every CONNECT lands in the egress log, in memory
+  // and appended to userData/vm-lanes/egress.jsonl.
+  const vmStateRoot = join(app.getPath('userData'), 'vm-lanes')
+  const egress = createEgressLog((line) => { mkdirSync(vmStateRoot, { recursive: true }); appendFileSync(join(vmStateRoot, 'egress.jsonl'), line) })
+  state.vmEgress = egress
+  const proxies = new Map<string, { reach: string; port: number }>()
+  const vmLanes = createVmLanes({
+    inner: claudeCliRunner,
+    runCheck: runAutoCheck,
+    exec: (binary, args, execEnv) => { execFile(whichFromEnv(binary, env) ?? binary, args, { env: execEnv, timeout: 30_000 }, () => { /* a VM already gone is the common case */ }) },
+    mkdir: (path) => mkdirSync(path, { recursive: true }),
+    rm: (path) => rmSync(path, { recursive: true, force: true }),
+    realpath: (path) => realpathSync(expandTilde(path)),
+    exists: (path) => existsSync(path),
+    home: realpathSync(homedir()),
+    stateRoot: vmStateRoot,
+    runtime: () => state.vmProbe?.chosen ?? null,
+    settings: () => ({
+      image: String(layoutStore.getSetting('vm.image') || VM_DEFAULT_IMAGE),
+      cpus: Number(layoutStore.getSetting('vm.cpus')) || VM_DEFAULT_CPUS,
+      memoryMiB: Number(layoutStore.getSetting('vm.memoryMiB')) || VM_DEFAULT_MEMORY_MIB,
+      allow: String(layoutStore.getSetting('vm.allowHosts') ?? '').split(',').map((h) => h.trim()).filter((h) => h !== '')
+    }),
+    proxy: (runtime) => {
+      const place = vmProxyPlace(runtime, networkInterfaces())
+      const live = place === null ? undefined : proxies.get(place.bind)
+      return live === undefined ? null : { host: live.reach, port: live.port }
+    },
+    newToken: () => randomBytes(24).toString('hex'),
+    loginEnv: env,
+    onChange: (lanes) => { state.window?.webContents.send(IPC_EVENTS.VM_LANES_CHANGED, lanes) }
+  })
+  state.vmLanes = vmLanes
+  const vmProxy = createVmProxy({ lanes: vmLanes, dial: (host, port) => netConnect(port, host), log: (e) => egress.add(e), now: Date.now })
+
   // The bare name is kept when the probe found nothing: the spawn then fails
   // with ENOENT and the session reads `exited` with the reason in its stderr
   // tail, which is a named failure. M72 disables the chat verb by name before
   // it gets that far.
   const agents = new AgentSessionManager({
-    runner: claudeCliRunner,
+    runner: vmLanes.runner,
     command: state.claudePath ?? 'claude',
     // M90. Present only when found: an absent codex makes a codex send
     // `refused-backend`, never a spawn of a bare name that ENOENTs.
@@ -85,7 +137,8 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     preAnswer: (id, toolName) => state.approvals?.granted(id, toolName) ?? false
     ,
     // M475. A gated auto run's check: the login shell, the session's folder.
-    runCheck: runAutoCheck,
+    // M552. A sandboxed lane's check runs in its own fresh VM instead.
+    runCheck: vmLanes.runCheck,
     // M102. Each headless session gets the door and its OWN panel id and token
     // — the same block PtyManager gives a terminal — so `tc api` from a chat
     // is that chat's, never a claim.
@@ -111,6 +164,36 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     spentOf: (id) => { const snap = agents.get(id); return snap?.meter?.spentUsd ?? snap?.costUsd ?? 0 },
     blocker: { start: () => powerSaveBlocker.start('prevent-app-suspension'), stop: (id) => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id) } },
     now: Date.now,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+    // M553. A finished batch releases the sandboxed lanes it held.
+    onStatus: (status) => state.vmDoors?.tonightStatus(status)
+  })
+
+  // M553 (lane J). The doors into a sandboxed lane. `prepare` re-probes and
+  // starts the proxy where the chosen runtime's VMs reach the Mac.
+  state.vmDoors = createVmDoors({
+    lanes: vmLanes,
+    agents,
+    enabled: () => layoutStore.getSetting('vm.lanes') === true,
+    prepare: async () => {
+      state.vmProbe = await probeVmRuntimesLive((name) => whichFromEnv(name, env), env)
+      const runtime = state.vmProbe.chosen
+      if (runtime === null) return { kind: 'refused', reason: 'no VM runtime is usable on this Mac — see Environment… for why' }
+      const place = vmProxyPlace(runtime, networkInterfaces())
+      if (place === null) return { kind: 'refused', reason: 'the VM network is not up — run `container system start`, then try again' }
+      if (!proxies.has(place.bind)) {
+        try {
+          // Each bind address gets its own server, so the proxy serves the Apple and docker networks at once.
+          const one = proxies.size === 0 ? vmProxy : createVmProxy({ lanes: vmLanes, dial: (host, port) => netConnect(port, host), log: (e) => egress.add(e), now: Date.now })
+          const port = await one.listen(place.bind)
+          proxies.set(place.bind, { reach: place.reach, port })
+        } catch (error) {
+          return { kind: 'refused', reason: `the sandbox network proxy could not listen on ${place.bind}: ${error instanceof Error ? error.message : String(error)}` }
+        }
+      }
+      return { kind: 'ok' }
+    },
     setTimer: (fn, ms) => setTimeout(fn, ms),
     clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
   })

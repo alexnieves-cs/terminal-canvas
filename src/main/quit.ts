@@ -32,6 +32,12 @@ export interface QuitDeps {
   /** M547. A live tournament, stopped before the agents are disposed for the same reason as Tonight. */
   tournament?: { dispose(): void }
   /**
+   * M552. Sandboxed lanes: every lane's VM stopped by name and its state
+   * folder removed. AFTER the agents, whose kills already stop each live VM;
+   * this catches a lane whose agent was not running, and cleans its folder.
+   */
+  vmLanes?: { disposeAll(): void }
+  /**
    * M84. Every watcher, disarmed and its run killed. A watcher's child is an
    * ordinary `child_process`, not a pty and not a tmux session, so nothing
    * else in this sequence reaches it: without this arm a quit mid-run leaves
@@ -91,6 +97,11 @@ export function runQuit(deps: QuitDeps): void {
     deps.agents?.disposeAll()
   } catch (error) {
     console.warn('[quit] agent session teardown failed', error)
+  }
+  try {
+    deps.vmLanes?.disposeAll()
+  } catch (error) {
+    console.warn('[quit] sandboxed lane teardown failed', error)
   }
   try {
     deps.watchers?.disposeAll()

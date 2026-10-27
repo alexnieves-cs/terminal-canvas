@@ -578,7 +578,8 @@ export interface PaletteActions {
   /** M409. `verb` opens the line prefilled with it, its grammar on the label. */
   beginRunVerb(verb?: string): void
   /** M97. Start a bounded auto run on a chat; refused by name when one is live. */
-  startAuto(id: string, mode: AutoModeId, task?: string): void
+  /** M553. `sandboxed` runs it in a VM with prompts off (lane J); main refuses it by name while the setting is off. */
+  startAuto(id: string, mode: AutoModeId, task?: string, opts?: { sandboxed?: boolean }): void
   stopAuto(id: string): void
   /** M100. Open the navigator on the Teammates pane. */
   openTeammates(): void
@@ -2655,6 +2656,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         group: 'canvas',
         searchText: `auto autonomous ${modeId} run bounded ${mode.label}`,
         run: () => actions.startAuto(ctx.capturedId!, modeId)
+      }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}) — stop it first` : undefined)))
+    }
+    // M553 (lane J). ONE more row, and only while Sandboxed lanes is on: the
+    // custom mode in a VM with prompts off. Absent otherwise — not disabled —
+    // so the auto rows a person sees by default are the four they always were.
+    if (ctx.settings.some((s) => s.id === 'vm.lanes' && s.value === true)) {
+      out.push(withReason({
+        id: 'panel.auto.sandboxed', ...hiddenAtRestIf(need !== undefined),
+        title: `Auto, sandboxed: ${AUTO_MODES.custom.label}`,
+        subtitle: 'in a throwaway VM with prompts off — only this chat\'s folder is shared, the network is an allowlist',
+        group: 'canvas',
+        searchText: 'auto sandboxed sandbox vm container prompts off yolo isolated custom',
+        run: () => actions.startAuto(ctx.capturedId!, 'custom', undefined, { sandboxed: true })
       }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}) — stop it first` : undefined)))
     }
     out.push(withReason({

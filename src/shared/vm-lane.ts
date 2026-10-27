@@ -73,6 +73,9 @@ export const VM_DEFAULT_ALLOW: readonly string[] = ['api.anthropic.com', 'statsi
  */
 export const VM_AUTH_ENV_KEYS: readonly string[] = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']
 
+/** M552 (critic). What is re-mounted read-only when present in the worktree; see `VmLaneSpec.readOnly`. */
+export const VM_READ_ONLY_NAMES: readonly string[] = ['.git', '.claude', '.mcp.json', '.gitmodules']
+
 export const VM_DEFAULT_IMAGE = 'terminal-canvas/lane:1'
 export const VM_DEFAULT_CPUS = 4
 export const VM_DEFAULT_MEMORY_MIB = 4096
@@ -90,10 +93,23 @@ export interface VmLaneSpec {
   image: string
   cpus: number
   memoryMiB: number
+  /**
+   * Names under the worktree mounted again READ-ONLY over the read-write one
+   * (only those that exist): `.git` and the agent configs. Written from the
+   * VM, they run code on the Mac later — `core.fsmonitor` at the app's next
+   * `git status`, a hook at a commit, a `.claude/settings.json` hook at the
+   * Mac's next turn. Optional: absent is none (a fixture).
+   */
+  readOnly?: string[]
   /** Hosts the proxy lets through (M554). Never empty: the model's API is always one. */
   allow: string[]
-  /** Where the VM reaches the app's proxy. */
-  proxy: { host: string; port: number }
+  /**
+   * Where the VM reaches the app's proxy, and the lane's own secret for it
+   * (M554). The proxy reads the lane from the credentials, so one proxy
+   * serves every lane with each lane's own allowlist, and nothing else on
+   * the network can borrow it.
+   */
+  proxy: { host: string; port: number; token: string }
   /** Names from `VM_AUTH_ENV_KEYS` present in the login env. */
   authKeys: string[]
 }
@@ -103,14 +119,29 @@ const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9
 /** An image reference: registry/name:tag or name@sha256:…, no spaces, no leading dash (it would read as a flag). */
 const IMAGE = /^[a-z0-9][a-z0-9._/:@-]*$/i
 
+/**
+ * Absolute and already NORMAL: no `.` or `..` segment, no `//`, no trailing
+ * slash — `/Users/me/.` and `/Users//me` ARE the home folder and must not
+ * slip past `covers` (the critic's finding). And no `,` `"` `=` or control
+ * character: the path is spliced into `--mount type=bind,source=…`, a CSV
+ * whose LAST `source=` wins, so `/x,source=/Users/me` would mount home.
+ */
 function isAbsoluteClean(p: string): boolean {
-  return p.startsWith('/') && !p.split('/').includes('..') && !p.includes('\0')
+  if (!p.startsWith('/') || p.length > 1024) return false
+  if (/[,"=\u0000-\u001f\u007f]/.test(p)) return false
+  if (p === '/') return true
+  const segs = p.split('/').slice(1)
+  return segs.every((s) => s !== '' && s !== '.' && s !== '..')
 }
 
-/** True when `a` is `b` or a folder above it. */
+/**
+ * True when `a` is `b` or a folder above it. Case-folded: APFS ignores
+ * case, so `/users/me` is the home folder too. A caller resolves symlinks
+ * first (`realpath`); this compares what it is given.
+ */
 function covers(a: string, b: string): boolean {
-  const x = a.replace(/\/+$/, '') || '/'
-  const y = b.replace(/\/+$/, '') || '/'
+  const x = (a.replace(/\/+$/, '') || '/').toLowerCase()
+  const y = (b.replace(/\/+$/, '') || '/').toLowerCase()
   return x === y || x === '/' || y.startsWith(x + '/')
 }
 
@@ -127,7 +158,7 @@ export function parseVmLaneSpec(raw: unknown, home: string): { kind: 'ok'; spec:
   if (typeof r.laneId !== 'string' || !SEGMENT.test(r.laneId)) return { kind: 'refused', reason: `a lane id must be a plain name — ${JSON.stringify(r.laneId)} is not` }
   for (const key of ['worktree', 'stateDir'] as const) {
     const p = r[key]
-    if (typeof p !== 'string' || !isAbsoluteClean(p)) return { kind: 'refused', reason: `the ${key === 'worktree' ? 'worktree' : 'state folder'} must be an absolute path with no ..` }
+    if (typeof p !== 'string' || !isAbsoluteClean(p)) return { kind: 'refused', reason: `the ${key === 'worktree' ? 'worktree' : 'state folder'} must be a plain absolute path — no . or .. segments, no //, and no comma, quote or =` }
     if (covers(p, home)) return { kind: 'refused', reason: `${p} is your home folder or above it — a sandboxed lane mounts only its own worktree` }
   }
   const worktree = r.worktree as string
@@ -145,7 +176,8 @@ export function parseVmLaneSpec(raw: unknown, home: string): { kind: 'ok'; spec:
   if (!allow.includes('api.anthropic.com')) return { kind: 'refused', reason: 'the allowlist must hold api.anthropic.com, or the agent cannot reach its model' }
   const proxy = r.proxy as Record<string, unknown> | null | undefined
   if (typeof proxy !== 'object' || proxy === null || typeof proxy.host !== 'string' || proxy.host === '' || /[\s/@]/.test(proxy.host) ||
-    typeof proxy.port !== 'number' || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535) {
+    typeof proxy.port !== 'number' || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535 ||
+    typeof proxy.token !== 'string' || !/^[A-Za-z0-9]{16,128}$/.test(proxy.token)) {
     return { kind: 'refused', reason: 'a sandboxed lane has no network but its proxy, and the proxy is not named' }
   }
   if (!Array.isArray(r.authKeys) || r.authKeys.some((k) => !VM_AUTH_ENV_KEYS.includes(k as string))) {
@@ -156,8 +188,9 @@ export function parseVmLaneSpec(raw: unknown, home: string): { kind: 'ok'; spec:
     kind: 'ok',
     spec: {
       runtime: r.runtime as VmRuntimeId, laneId: r.laneId, worktree, stateDir, image: r.image,
-      cpus: r.cpus, memoryMiB: r.memoryMiB, allow, proxy: { host: proxy.host, port: proxy.port },
-      authKeys: [...new Set(r.authKeys as string[])]
+      cpus: r.cpus, memoryMiB: r.memoryMiB, allow, proxy: { host: proxy.host, port: proxy.port, token: proxy.token },
+      authKeys: [...new Set(r.authKeys as string[])],
+      ...(Array.isArray(r.readOnly) ? { readOnly: (r.readOnly as unknown[]).filter((n): n is string => typeof n === 'string' && VM_READ_ONLY_NAMES.includes(n)) } : {})
     }
   }
 }
@@ -183,6 +216,21 @@ export interface VmEgressEntry {
   host: string
   port: number
   allowed: boolean
+}
+
+/** M552. One sandboxed lane, as main reports it to every surface. */
+export interface VmLaneInfo {
+  panelId: string
+  laneId: string
+  runtime: VmRuntimeId
+  /** True while the agent's VM process is live. */
+  running: boolean
+}
+
+/** M553. `vm:lanes`'s answer: the lanes now, and the egress log's newest entries (the deep-detail layer). */
+export interface VmLanesView {
+  lanes: VmLaneInfo[]
+  egress: VmEgressEntry[]
 }
 
 /** The label a sandboxed lane wears everywhere it shows (chip, morning queue, Tonight row). */

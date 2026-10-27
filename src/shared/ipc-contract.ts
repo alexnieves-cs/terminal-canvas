@@ -936,6 +936,11 @@ export const IPC = {
   TONIGHT_STOP: 'tonight:stop',
   TONIGHT_STATUS: 'tonight:status',
   /**
+   * M553 (lane J). The sandboxed lanes now and the egress log's newest
+   * entries, read on load; changes are pushed on VM_LANES_CHANGED.
+   */
+  VM_LANES: 'vm:lanes',
+  /**
    * M556–M558 (lane K). A chat's turn snapshots (hidden refs under
    * refs/tc/turns/<panel>/) and a fork from one: main makes the worktree at
    * the snapshot and writes the conversation cut at that turn under the
@@ -1340,6 +1345,8 @@ export const IPC_EVENTS = {
   WORLD_EVENTS: 'world:events',
   /** The feed's connection (shared/world-events.ts `WorldConnection`), pushed when it changes — the view shows "lost" and a retry. */
   WORLD_CONNECTION: 'world:connection',
+  /** M553. The sandboxed lanes (shared/vm-lane.ts `VmLaneInfo[]`), pushed as one enters, starts, stops or leaves. */
+  VM_LANES_CHANGED: 'vm:lanes-changed',
   /** M84. One watcher's state, sent as it changes (the tail is batched by the runner's own flush). */
   WATCHER_STATE: 'watcher:state',
   /** M85. Something under the vault root changed (debounced in main); the renderer re-reads. */
@@ -2175,6 +2182,11 @@ export interface CanvasBridge {
     merge(req: LaneMergeRequest): Promise<LaneMergeResult>
     /** M479. See LANE_RADAR. */
     radar(lanes: RadarLane[]): Promise<RadarReport>
+  }
+  /** M553. See VM_LANES. */
+  vm: {
+    lanes(): Promise<import('./vm-lane').VmLanesView>
+    onChanged(listener: (lanes: import('./vm-lane').VmLaneInfo[]) => void): () => void
   }
   /** M543. See CLOUD_LIST. */
   cloud: {

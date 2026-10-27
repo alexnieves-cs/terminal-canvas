@@ -5692,3 +5692,32 @@ offers "Try again" (a remount, a new context). Its listeners and timer go in the
 fiber runs before its own teardown force-loses the context, and the stage acts only while the world
 is on — so leaving the world is never reported as a loss. `verify:world world.quality.probe.1`,
 `world.quality.lost.1`, `world.quality.settle.1`, `world.quality.session-dpr.1`.
+
+**A sandboxed lane is a VM around the RUNNER, keyed on `TC_PANEL_ID`; its check runs in a VM too; its network is the app's proxy or nothing (`vm-lanes.ts`, `vm-sandbox.ts`, `vm-proxy.ts`, `vm-doors.ts`, M550–M555, lane J).**
+`vm-lanes.ts` wraps the agent manager's runner and check runner rather than the manager: a spawn
+whose env carries a lane's `TC_PANEL_ID` (stamped by `envFor`, M102) becomes `container run …` (or
+docker) through the SAME real runner, so the stream-json wire and the identity guard are M71's. A
+lane's check runs in its own `…-check` VM, never on the Mac: it is code the agent may have written
+with prompts off. The VM client's env is PATH, HOME, the model token and the proxy URL, never the
+app's socket or a panel token; the token and the proxy secret go as `-e NAME`, never on an argv. A
+first spawn's `--resume` becomes `--session-id` (the Mac's transcript is not in the VM), `--settings`
+is dropped (its hooks call `tc` over an unmounted socket), and prompts off is ONE `--permission-mode
+bypassPermissions`. Entering kills the chat's Mac process and WAITS for its exit, or a send could land
+on the Mac's claude with prompts on. A Tonight batch holds its lanes until the batch ends, because a
+task paused by a usage limit resumes as a new auto run that must start in the same VM. The proxy
+(`vm-proxy.ts`) reads the lane from Basic proxy credentials, tunnels only CONNECT to 443 on that
+lane's list, refuses plain HTTP, and logs every CONNECT before answering. The worktree mount is
+read-write but its `.git`, `.claude`, `.mcp.json` and `.gitmodules` are re-mounted READ-ONLY: written
+from a VM with prompts off they run code on the Mac later (`core.fsmonitor` at the app's next git
+call). Paths are `realpath`ed, then refused when they hold `,` `"` or `=` — `--mount` is a CSV whose
+last `source=` wins. `verify:vm` vm.run.*, vm.doors.*, vm.proxy.*, vm.spec.5–6.
+
+**Manual-only, added by lane J (M555).** None of these is covered by `verify:vm`, whose runtime is a
+fake; each is a box in `docs/streams/vm-lane/MAC-CHECK.md`, unconfirmed until ticked there:
+that Apple's `container` accepts the run argv as built (`--mount type=bind,source=,target=`, `--cpus`,
+`--memory 4096M`, `--cap-add NET_ADMIN`, `--label`); that `iptables` works in its VM kernel and the
+entry script's lock leaves only the proxy reachable; that a VM reaches the Mac at the vmnet bridge's
+`.1` (and Docker/OrbStack at `host.docker.internal` forwarding to loopback); that signalling the
+`container run` client and then `container stop` by name leaves no VM; that a uid-501 `agent` writes
+files the Mac user owns through the bind mount; that claude in the image honours `HTTPS_PROXY` with
+Basic credentials; and that `CLAUDE_CODE_OAUTH_TOKEN` signs it in with no Keychain.

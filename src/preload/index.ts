@@ -5,6 +5,7 @@ import type { WatcherStateEvent, RelayData, RelayView, CloudLaneView } from '@sh
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PresenceRoster } from '../shared/presence'
 import type { WorldConnection } from '../shared/world-events'
+import type { VmLaneInfo } from '../shared/vm-lane'
 import type { TeamObserved } from '../shared/team'
 import type { TeamAskRow } from '../shared/team-asks'
 import type { TeamFlowSnapshot } from '../shared/team-flow'
@@ -254,6 +255,10 @@ const bridge: CanvasBridge = {
   lane: {
     merge: (req: unknown) => ipcRenderer.invoke(IPC.LANE_MERGE, req),
     radar: (lanes: unknown) => ipcRenderer.invoke(IPC.LANE_RADAR, lanes)
+  },
+  vm: {
+    lanes: () => ipcRenderer.invoke(IPC.VM_LANES),
+    onChanged: (listener) => subscribe<VmLaneInfo[]>(IPC_EVENTS.VM_LANES_CHANGED, listener)
   },
   cloud: {
     list: () => ipcRenderer.invoke(IPC.CLOUD_LIST),

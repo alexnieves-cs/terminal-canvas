@@ -231,10 +231,12 @@ export interface AgentHandlers {
   /** M74. */
   importSession(req: AgentImportRequest): AgentImportResult
   /** M97. */
-  autoStart(req: AutoStartRequest): AutoStartResult
+  autoStart(req: AutoStartRequest): AutoStartResult | Promise<AutoStartResult>
   autoStop(id: string): boolean
   /** M480. Tonight's doors (main/tonight-runner.ts). Optional, so a harness mirror without them answers by name. */
-  tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }
+  tonightStart?(raw: unknown): { kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string } | Promise<{ kind: 'started'; status: TonightStatus } | { kind: 'refused'; reason: string }>
+  /** M553. See VM_LANES. Optional, like Tonight's: a harness mirror without it answers empty. */
+  vmLanes?(): import('../shared/vm-lane').VmLanesView
   tonightStop?(): boolean
   tonightStatus?(): TonightStatus | null
   /** M556–M558 (lane K). Optional, like tonight's: a harness without them answers empty / refused. */
@@ -1026,6 +1028,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TONIGHT_START, (_event, raw: unknown) => agents.tonightStart?.(raw) ?? { kind: 'refused', reason: 'tonight is not available in this process' })
   ipcMain.handle(IPC.TONIGHT_STOP, () => agents.tonightStop?.() ?? false)
   ipcMain.handle(IPC.TONIGHT_STATUS, () => agents.tonightStatus?.() ?? null)
+  ipcMain.handle(IPC.VM_LANES, () => agents.vmLanes?.() ?? { lanes: [], egress: [] })
   ipcMain.handle(IPC.FORK_TURNS, (_event, panelId: unknown) => (typeof panelId === 'string' ? agents.forkTurns?.(panelId) ?? [] : []))
   ipcMain.handle(IPC.FORK_BRANCH, (_event, req: unknown) => {
     const r = req as Partial<ForkRequest> | null

@@ -625,9 +625,9 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     markPresetRead: (id) => markPresetReadNow(id),
     // M97. The Auto verbs: main starts and stops; the refusal comes back by
     // name and is shown on the palette's line rather than swallowed.
-    startAuto: (id, mode, task) => {
+    startAuto: (id, mode, task, opts) => {
       const begin = (t?: string): void => {
-        void window.canvas.agentSession.autoStart({ id, mode, ...(t === undefined ? {} : { task: t }) }).then((r) => {
+        void window.canvas.agentSession.autoStart({ id, mode, ...(t === undefined ? {} : { task: t }), ...(opts?.sandboxed === true ? { sandboxed: true } : {}) }).then((r) => {
           if (r.kind === 'refused') { setInputMode({ kind: 'text', label: `auto refused — ${r.reason}`, initial: '', feedback: true, submit: () => {} }); palette.openPalette() }
         })
       }

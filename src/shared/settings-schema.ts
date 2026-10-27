@@ -214,6 +214,60 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // M553 (lane J). Off unless a person turns it on, and never
+    // `planWritable`: a plan that could set this would be an agent choosing to
+    // run itself with prompts off. On, Tonight and auto mode OFFER a
+    // sandboxed run per task; nothing becomes sandboxed by this switch alone.
+    id: 'vm.lanes',
+    label: 'Sandboxed lanes',
+    description: 'let Tonight and auto mode run a task in a throwaway Linux VM with prompts off — only its folder is shared, and the network is an allowlist',
+    keywords: ['sandbox', 'sandboxed', 'vm', 'virtual machine', 'container', 'docker', 'orbstack', 'yolo', 'prompts off', 'isolation'],
+    type: 'boolean',
+    default: false,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'vm.cpus',
+    label: 'Sandboxed lane CPUs',
+    description: 'how many CPU cores one sandboxed lane\'s VM may use',
+    keywords: ['sandbox', 'vm', 'cpu', 'cores', 'cap'],
+    type: 'number',
+    default: 4,
+    min: 1,
+    max: 64,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'vm.memoryMiB',
+    label: 'Sandboxed lane memory (MiB)',
+    description: 'how much memory one sandboxed lane\'s VM may use, in MiB',
+    keywords: ['sandbox', 'vm', 'memory', 'ram', 'cap'],
+    type: 'number',
+    default: 4096,
+    min: 256,
+    max: 262144,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'vm.image',
+    label: 'Sandboxed lane image',
+    description: 'the image a sandboxed lane boots — build it from docs/streams/vm-lane/ (it carries claude and the network lock)',
+    keywords: ['sandbox', 'vm', 'image', 'container', 'docker'],
+    type: 'text',
+    default: 'terminal-canvas/lane:1',
+    category: AGENT_CATEGORY
+  },
+  {
+    // Comma-separated, beyond the model's own hosts, which are always allowed.
+    id: 'vm.allowHosts',
+    label: 'Sandboxed lane network allowlist',
+    description: 'hosts a sandboxed lane may reach besides Claude\'s own, comma-separated (a leading *. allows subdomains) — e.g. registry.npmjs.org; every host here is a way out for what the agent reads, so avoid wide wildcards like *.amazonaws.com',
+    keywords: ['sandbox', 'vm', 'network', 'allowlist', 'egress', 'hosts', 'proxy', 'firewall'],
+    type: 'text',
+    default: '',
+    category: AGENT_CATEGORY
+  },
+  {
     // Subscriber arm of the same stop path as budgetUsd: utilization comes
     // from rate_limit_event (max of the 5-hour and weekly windows).
     id: 'agents.budgetWindowPercent',

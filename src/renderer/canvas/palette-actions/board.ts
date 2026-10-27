@@ -120,12 +120,13 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       const door = window.canvas?.tonight
       if (door === undefined) return { kind: 'refused', reason: 'tonight is not available in this window' }
       if (op === 'stop') return (await door.stop()) ? { kind: 'ran', note: 'tonight\'s batch stopped — the Mac may sleep again' } : { kind: 'refused', reason: 'no batch is running tonight' }
-      if (op !== undefined && op !== '') return { kind: 'refused', reason: `tonight takes no argument, or \`stop\` — not ${op}` }
-      const { tasks, skipped } = tonightBatchFrom(workItemsRef.current ?? [], (id) => panelsRef.current.some((p) => p.rect.id === id && isChatPanel(p)))
+      // M553. `sandboxed` runs every task in its own VM with prompts off; main refuses it by name while the setting is off.
+      if (op !== undefined && op !== '' && op !== 'sandboxed') return { kind: 'refused', reason: `tonight takes no argument, \`sandboxed\` or \`stop\` — not ${op}` }
+      const { tasks, skipped } = tonightBatchFrom(workItemsRef.current ?? [], (id) => panelsRef.current.some((p) => p.rect.id === id && isChatPanel(p)), { sandboxed: op === 'sandboxed' })
       if (tasks.length === 0) return { kind: 'refused', reason: skipped.length === 0 ? 'no open tasks on the board to run tonight' : `nothing to run tonight — ${skipped.slice(0, 3).map((s) => `${s.title}: ${s.reason}`).join('; ')}` }
       const r = await door.start({ tasks })
       if (r.kind === 'refused') return r
-      return { kind: 'ran', note: tonightWords({ kind: 'started', tasks: tasks.length, checked: tasks.filter((t) => t.check !== undefined).length, skipped: skipped.length }) }
+      return { kind: 'ran', note: tonightWords({ kind: 'started', tasks: tasks.length, checked: tasks.filter((t) => t.check !== undefined).length, skipped: skipped.length, sandboxed: tasks.filter((t) => t.sandboxed === true).length }) }
     },
     // M548. The tournament reads the board, the panels and the worktree lanes — Canvas's, the same delegation.
     runTournament: async (op, value) => boardVerbsRef.current?.tournament?.(op, value) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },

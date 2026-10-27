@@ -360,7 +360,9 @@ app.whenReady().then(() => {
   // snapshots, and a worktree and conversation forked from one.
   // +2: team:flow / team:flow-write (M582, lane P) — the multiplayer canvas's
   // handoffs and shared review queue, read and written in the person's name.
-  const EXPECTED_CHANNELS = 234
+  // +1: vm:lanes (M553, lane J) — the sandboxed lanes and the egress log, read
+  // on load (their push, vm:lanes-changed, is an event and not counted here).
+  const EXPECTED_CHANNELS = 235
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
