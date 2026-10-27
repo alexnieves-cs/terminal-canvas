@@ -521,9 +521,24 @@ function connect(port, tok, opts = {}) {
     // while the other viewer is stalled, is.
     ok('relay.bp.1 a stalled viewer does not hold up the others: the reading client got every byte, in order, with no resync',
       fast.bytes().equals(stream) && fast.json('resync').length === 0 && count(slow) === 0)
+    // The stream offset a client's screen has reached: its last resync's offset
+    // plus every byte since, or (no resync after fromIndex) the bytes on top of
+    // the first pump. Counting only, so it is cheap enough to poll.
+    const received = (c, fromIndex) => {
+      let n = 0
+      for (let i = c.log.length - 1; i >= fromIndex; i--) {
+        const e = c.log[i]
+        if (e.m && e.m.t === 'resync') return n + e.m.offset
+        if (e.b) n += e.b.length
+      }
+      return n + stream.length
+    }
     slow.ws._socket.resume()
     await until(() => slow.json('resync').length > 0 && count(slow) > 0, 5000 * Math.ceil(n / 320))
-    await sleep(300)
+    // Wait for the drain itself, not a fixed window: a slow runner can still be
+    // delivering the ring (or send a second resync) after 300 ms, and bytes that
+    // land after bp.4 takes its mark corrupt that check too.
+    await until(() => received(slow, slow.log.findLastIndex((e) => e.m && e.m.t === 'resync')) === stream.length, 5000 * Math.ceil(n / 320))
     const lastResync = slow.log.findLastIndex((e) => e.m && e.m.t === 'resync')
     const after = Buffer.concat(slow.log.slice(lastResync + 1).filter((e) => e.b).map((e) => e.b))
     const from = lastResync >= 0 ? slow.log[lastResync].m.offset : -1
@@ -568,15 +583,6 @@ function connect(port, tok, opts = {}) {
     // MB. Doing it every 5 ms starves the very event loop that has to deliver
     // the tail, so the bytes are only assembled once their count says they are
     // all there, and the window is sized for a slow runner.
-    const received = (c, fromIndex) => {
-      let n = 0
-      for (let i = c.log.length - 1; i >= fromIndex; i--) {
-        const e = c.log[i]
-        if (e.m && e.m.t === 'resync') return n + e.m.offset
-        if (e.b) n += e.b.length
-      }
-      return n + stream.length
-    }
     await until(() => received(fast, fastMark) === total && received(slow, slowMark) === total &&
       matches(screen(fast, fastMark, stream.length)) && matches(screen(slow, slowMark, stream.length)), 60000)
     ok('relay.bp.4 …resumed once they drain; each client ends on exactly the stream\'s tail (the gap, or a resync from the ring)',
