@@ -100,16 +100,18 @@ jobs:
         run: npm run verify
 
   # M462. The visual suite (scripts/verify-visual.cjs): every shot scene painted
-  # and compared with its committed golden. NON-BLOCKING until Stream B has
-  # written goldens a person looked at (and captured where this job paints, or
-  # every scene differs by the machine, not the app); it then joins the blocking
-  # job and HAND_RUN in verify-all.cjs loses it. Every scene's PNG is uploaded,
-  # with a diff and the fresh half-size capture beside each one that failed, so
-  # the run is something a person can look at, not only a count.
+  # and compared with its committed golden. BLOCKING since M463: the scenes
+  # that painted one of two pictures from run to run were steadied in the shot
+  # harness (four paints apiece, on both hosted runner images, before this
+  # line changed), and the goldens are captured where this job paints. It
+  # stays a job of its own, beside `verify` rather than inside it, so the two
+  # run in parallel and HAND_RUN in verify-all.cjs keeps it out of the chain.
+  # A scene that turns flaky is steadied, never moved back out of the gate.
+  # Every scene's PNG is uploaded, with a diff and the fresh half-size capture
+  # beside each one that failed, so a red run is something a person can look at.
   verify-visual:
-    name: verify:visual (non-blocking)
+    name: verify:visual
     runs-on: macos-latest
-    continue-on-error: true
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
