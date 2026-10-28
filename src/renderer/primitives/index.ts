@@ -58,3 +58,6 @@ export { SegmentedControl } from './SegmentedControl'
 export type { SegmentedControlProps, SegmentedOption } from './SegmentedControl'
 export { Tabs } from './Tabs'
 export type { TabsProps, TabOption } from './Tabs'
+
+// M600. The keyboard half of a modal, for the overlays that cannot be a Radix Dialog.
+export { useModalFocus, focusablesIn } from './useModalFocus'

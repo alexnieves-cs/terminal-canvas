@@ -21,6 +21,8 @@
   "include": [
     "electron.vite.config.ts",
     "vite.web.config.ts",
+    "vite.host.config.ts",
+    "src/host/**/*",
     "src/main/**/*",
     "src/cli/**/*",
     "src/preload/**/*",

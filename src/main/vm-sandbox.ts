@@ -60,6 +60,9 @@ export function vmAliveArgs(id: VmRuntimeId): string[] {
 /** The VM's name: one per lane, so a stale one is found and removed by name. */
 export const vmName = (laneId: string): string => `tc-lane-${laneId}`
 
+/** The image's network lock (docs/streams/vm-lane/tc-vm-entry.sh). */
+export const VM_ENTRY = '/usr/local/bin/tc-vm-entry'
+
 /** Inside the VM: where the worktree lands, and the agent's home. */
 export const VM_WORK = '/work'
 export const VM_HOME = '/home/agent'
@@ -74,13 +77,23 @@ export const VM_HOME = '/home/agent'
  * the agent runs. Auth keys are `-e NAME`: the runtime inherits the value
  * from the spawn's env, so it never sits on an argv.
  */
-export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: readonly string[] }): { binary: string; args: string[] } {
-  const proxy = `http://${spec.proxy.host}:${spec.proxy.port}`
-  const mount = (source: string, target: string): string[] => ['--mount', `type=bind,source=${source},target=${target}`]
+/** The proxy variables, both spellings: curl reads only the lower-case http_proxy, node's agents the upper. */
+export const VM_PROXY_KEYS: readonly string[] = ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']
+
+/**
+ * `env` is what the runtime's CLIENT process must hold for the `-e NAME`
+ * entries to inherit: the proxy URL with the lane's secret. The caller adds
+ * it to the client's env; it never appears on the argv.
+ */
+export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: readonly string[] }, role: 'agent' | 'check' = 'agent'): { binary: string; args: string[]; env: Record<string, string> } {
+  const proxy = `http://${spec.laneId}:${spec.proxy.token}@${spec.proxy.host}:${spec.proxy.port}`
+  const mount = (source: string, target: string, readonly = false): string[] => ['--mount', `type=bind,source=${source},target=${target}${readonly ? ',readonly' : ''}`]
   const args = [
     ...(spec.runtime === 'orbstack' ? ['--context', 'orbstack'] : []),
     'run', '--rm', '-i',
-    '--name', vmName(spec.laneId),
+    // A lane's check runs in a second, fresh VM beside the agent's (whose
+    // stream-json process lives between turns), so the two never share a name.
+    '--name', role === 'agent' ? vmName(spec.laneId) : `${vmName(spec.laneId)}-check`,
     // Apple's CLI spells it `-l, --label`; docker takes `--label`. Both take the long form.
     '--label', `tc.lane=${spec.laneId}`,
     '--cpus', String(spec.cpus),
@@ -88,11 +101,17 @@ export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: read
     '--cap-add', 'NET_ADMIN',
     ...mount(spec.worktree, VM_WORK),
     ...mount(spec.stateDir, `${VM_HOME}/.claude`),
+    // Over the read-write worktree, later mounts win for their path.
+    ...(spec.readOnly ?? []).flatMap((name) => mount(`${spec.worktree}/${name}`, `${VM_WORK}/${name}`, true)),
+    // The lock is the image's entry script, named here rather than trusted
+    // to the image's own ENTRYPOINT: an image without it fails to start,
+    // never runs an agent with no firewall.
+    '--entrypoint', VM_ENTRY,
     '--workdir', VM_WORK,
     '-e', `TC_VM_LANE=${spec.laneId}`,
     '-e', `TC_VM_PROXY=${spec.proxy.host}:${spec.proxy.port}`,
-    '-e', `HTTPS_PROXY=${proxy}`, '-e', `HTTP_PROXY=${proxy}`,
-    '-e', `https_proxy=${proxy}`, '-e', `http_proxy=${proxy}`,
+    // By name, like the token: the lane's proxy secret is in the URL.
+    ...VM_PROXY_KEYS.flatMap((k) => ['-e', k]),
     '-e', 'NO_PROXY=', '-e', 'no_proxy=',
     // claude refuses bypassPermissions as root unless told it is sandboxed;
     // the entry script runs it as `agent`, and this says what the box is.
@@ -101,13 +120,13 @@ export function vmRunArgs(spec: VmLaneSpec, inner: { command: string; args: read
     spec.image,
     inner.command, ...inner.args
   ]
-  return { binary: VM_RUNTIME_BINARY[spec.runtime], args }
+  return { binary: VM_RUNTIME_BINARY[spec.runtime], args, env: Object.fromEntries(VM_PROXY_KEYS.map((k) => [k, proxy])) }
 }
 
 /** Stop then remove, by name. Both are safe on a VM that is already gone; the caller ignores their exit codes. */
-export function vmStopArgs(runtime: VmRuntimeId, laneId: string): string[][] {
+export function vmStopArgs(runtime: VmRuntimeId, laneId: string, role: 'agent' | 'check' = 'agent'): string[][] {
   const ctx = runtime === 'orbstack' ? ['--context', 'orbstack'] : []
-  const name = vmName(laneId)
+  const name = role === 'agent' ? vmName(laneId) : `${vmName(laneId)}-check`
   return runtime === 'apple'
     ? [['stop', '--time', '5', name], ['delete', '--force', name]]
     : [[...ctx, 'stop', '--time', '5', name], [...ctx, 'rm', '--force', name]]
@@ -138,4 +157,9 @@ export function vmAgentArgv(command: string, args: readonly string[], firstSpawn
   }
   out.push('--permission-mode', 'bypassPermissions')
   return { kind: 'ok', command: 'claude', args: out }
+}
+
+/** One POSIX single-quoted word: the check's command line reaches the VM's `sh -c` as exactly the text the person wrote. */
+export function shellQuote(word: string): string {
+  return `'${word.replace(/'/g, `'\\''`)}'`
 }

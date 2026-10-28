@@ -52,8 +52,10 @@ import type { EnvReport } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
 import { needsYouCount } from '@shared/attention-words'
 import { useTeamAsks } from '@renderer/shell/useTeamAsks'
+import { useTeamFlow } from '@renderer/team-flow/useTeamFlow'
 import { withoutHiddenLabs } from '@shared/labs'
 import { useLabsOff } from '@renderer/labs/useLabs'
+import { useModalFocus } from '@renderer/primitives'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -246,6 +248,10 @@ export function Palette(props: PaletteProps): JSX.Element {
   const scope = controller.scope
   const setScope = controller.setScope
   const inputRef = useRef<HTMLInputElement>(null)
+  // M600. The palette and the sheets inside it own the window while open:
+  // Tab wraps inside, and focus goes back where it was when it closes.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useModalFocus(rootRef)
   const selectedRef = useRef<HTMLLIElement>(null)
   // The last position a REAL mouse move reported. Blink re-dispatches a
   // mousemove at the UNCHANGED cursor position after a scroll, to refresh
@@ -263,6 +269,8 @@ export function Palette(props: PaletteProps): JSX.Element {
 
   // M379. The team's asks, from the one store the Dock reads too.
   const teamAsks = useTeamAsks()
+  // M583. The handoffs and review queue, from the store the Dock reads too.
+  const teamFlow = useTeamFlow()
   // The UX pass. Routines and saved recipes as rows: read when the palette
   // opens, so a row never names one that was deleted since the last open.
   const [library, setLibrary] = useState<{ routines: { id: string; name: string }[]; savedRecipes: { id: string; name: string }[] }>({ routines: [], savedRecipes: [] })
@@ -309,6 +317,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         ...(props.teammateCount === undefined ? {} : { teammateCount: props.teammateCount }),
         approvals: props.approvals,
         teamAsks,
+        teamFlow,
         routines: library.routines,
         savedRecipes: library.savedRecipes,
         capturedId: controller.capturedId,
@@ -332,7 +341,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail, props.canUndo, props.canRedo, controller.capturedDraft, props.canvasCovered,
-     props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, teamAsks, library, props.templates, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, teamAsks, teamFlow, library, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]
   )
@@ -713,9 +722,11 @@ export function Palette(props: PaletteProps): JSX.Element {
 
   return (
     <div
+      ref={rootRef}
       className="palette"
       data-screen-control=""
       role="dialog"
+      aria-modal="true"
       aria-label="Command palette"
       // The palette mounts INSIDE .canvas, whose onMouseDown is the background
       // handler — so without this every mousedown in here (a row pick, a click

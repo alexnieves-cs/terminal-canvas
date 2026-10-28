@@ -201,11 +201,14 @@
      fill in the frame before xterm paints. */
   --well: #ffffff;
 
-  /* Text ramp. --fg-4 is DISABLED ONLY. */
+  /* Text ramp. --fg-4 was meant for disabled text only, but it carries
+     captions, hints and inspector lines in well over a hundred rules, so
+     M600 holds it to the 4.5:1 that small text needs on every ground
+     (verify:styles 11). It now sits one small step under --fg-3. */
   --fg:   #1b1e26;
   --fg-2: #3f4552;
   --fg-3: #5b6271;
-  --fg-4: #737b8b;
+  --fg-4: #5f6676;
 
   /* Hairlines. Every surface has one. */
   --line:        #d3d7de;
@@ -421,11 +424,14 @@
      still measures at 4.5. The concept's faint #5B6375 is 2.66:1 on --s-4,
      under the 3:1 floor for disabled text, so --fg-4 is #677084 — the same
      cool bias, the first value that clears 3:1 on every measured ground.
-     --fg-3 is the concept's muted, and it is also --state-idle. */
+     --fg-3 is the concept's muted, and it is also --state-idle.
+     M600: --fg-4 carries captions and hints, not only disabled text, so it
+     is held to 4.5:1 on every ground; #808a9c is the first value of the
+     same cool bias that clears it on --s-4. */
   --fg:   #e7eaf0;
   --fg-2: #a8b0be;
   --fg-3: #8c94a5;
-  --fg-4: #677084;
+  --fg-4: #808a9c;
 
   /* Hairlines. White at the concept's two alphas, so a line is light on the
      ink rather than a second grey. */
@@ -13446,12 +13452,58 @@ tr[data-session-row]:focus-within .sessions-world,
 /* ── /st:H ── */
 
 /* ── st:I ── */
+/* M548. The tournament bracket: screen space, top centre, under the HUD.
+   Columns side by side; the state edge is the entrant's tone, drawn through
+   [data-tone] like every frame, never a colour of its own. */
+.tn-bracket {
+  position: absolute; top: calc(var(--sp-6) * 2); left: 50%; transform: translateX(-50%); z-index: 40;
+  max-width: min(1100px, calc(100% - var(--sp-6) * 2)); padding: var(--sp-3);
+  background: var(--panel-bg); border: 1px solid var(--line); border-radius: var(--r-md);
+  font: var(--t-sm) / 1.4 var(--font-ui); color: var(--fg);
+}
+.tn-bracket__head { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.tn-bracket__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-bracket__check { font: var(--t-xs) / 1.4 var(--font-mono); color: var(--fg-3); }
+.tn-bracket__summary { color: var(--fg-2); flex: 1; }
+.tn-bracket__field { display: flex; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; overflow-x: auto; }
+.tn-bracket__entrant {
+  flex: 1 1 0; min-width: 180px; display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-2); border: 1px solid var(--line); border-left: 3px solid var(--tone); border-radius: var(--r-sm);
+}
+.tn-bracket__entrant[data-winner] { border-color: var(--tone); box-shadow: 0 0 0 1px var(--tone-dim); }
+.tn-bracket__label { font-weight: 600; }
+.tn-bracket__state { color: var(--tone); }
+.tn-bracket__facts { font: var(--t-xs) / 1.4 var(--font-mono); color: var(--fg-2); }
+.tn-bracket__why { font-size: var(--t-xs); color: var(--fg-3); }
+.tn-bracket__entrant .pf__verb { align-self: flex-start; }
 /* ── /st:I ── */
 
 /* ── st:J ── */
+/* M553. The sandboxed label: a kind word like the engine's, never a state
+   colour — being in a VM is what the panel IS, not how it is doing. */
+.chat__vm {
+  border: 1px dashed currentColor;
+  border-radius: var(--r-sm);
+  padding: 0 var(--sp-2);
+}
 /* ── /st:J ── */
 
 /* ── st:K ── */
+/* M558 (lane K). Replay's "Branch from here": the button, and what a fork at this moment would get, said before the click. */
+.replay__branch { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
+.replay__branch-go { font: inherit; font-size: var(--t-sm); color: var(--fg); background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); cursor: pointer; }
+.replay__branch-go:hover:not(:disabled) { background: var(--s-3); }
+.replay__branch-go:disabled { cursor: default; color: var(--fg-4); }
+.replay__branch-why { font-size: var(--t-xs); color: var(--fg-3); min-width: 0; }
+/* M559. A fork's caption in the compare view. */
+.replay__forked { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+/* M558. "fork from here" on an answer: contextual, like `remember` beside it — shown on the row's hover or focus. */
+/* Beside "remember" on one line, never a line of its own: an extra row, even at
+   opacity 0, pushes every answer below it down and moves the chat scenes. */
+.chat__verbs { display: flex; gap: var(--sp-2); align-self: flex-start; }
+.chat__fork { width: auto; margin-top: var(--sp-1); opacity: 0; transition: opacity var(--dur-1); }
+.chat__row--assistant:hover .chat__fork, .chat__fork:focus-visible { opacity: 1; }
+.chat__fork-said { font-size: var(--t-xs); color: var(--fg-3); margin-top: var(--sp-1); }
 /* ── /st:K ── */
 
 /* ── st:L ── */
@@ -13461,4 +13513,138 @@ tr[data-session-row]:focus-within .sessions-world,
 /* ── /st:N ── */
 
 /* ── st:O ── */
+/* M570 (lane O). The Lessons page: the Team page's frame, a list per repository. */
+.learn {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+  padding: var(--sp-7); gap: var(--sp-6); overflow: auto; background: var(--bg);
+  font-family: var(--font-ui);
+}
+.learn__head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; min-width: 0; }
+.learn__title { margin: 0; font: 600 var(--t-lg)/1.2 var(--font-ui); color: var(--fg); }
+.learn__note { font-size: var(--t-sm); color: var(--fg-3); }
+.learn__empty { margin: var(--sp-8) auto; max-width: 46ch; text-align: center; color: var(--fg-3); font-size: var(--t-md); }
+.learn__repo { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.learn__repo-name { margin: 0; display: flex; align-items: baseline; gap: var(--sp-3); font: 600 var(--t-md)/1.3 var(--font-ui); color: var(--fg-2); }
+.learn__count { font-weight: 400; font-size: var(--t-sm); color: var(--fg-3); }
+.learn__list { display: flex; flex-direction: column; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.learn-lesson {
+  display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0;
+  padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1);
+}
+.learn-lesson__place { font: 500 var(--t-sm)/1.3 var(--font-mono, monospace); color: var(--fg-2); overflow-wrap: anywhere; }
+.learn-lesson__what { margin: 0; color: var(--fg); font-size: var(--t-md); }
+.learn-lesson__excerpt {
+  margin: 0; max-height: 12em; overflow: auto; padding: var(--sp-3);
+  background: var(--bg); border-radius: var(--r-sm); color: var(--fg-2);
+  font: var(--t-sm)/1.4 var(--font-mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.learn-lesson__meta { display: flex; gap: var(--sp-3); flex-wrap: wrap; font-size: var(--t-sm); color: var(--fg-3); }
+/* M571–M572. A group of lessons with its one press, and a drafted rule. */
+.learn-cluster { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.learn-cluster__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); min-width: 0; }
+.learn-cluster__title { font-size: var(--t-sm); color: var(--fg-2); overflow-wrap: anywhere; }
+.learn-draft {
+  display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0;
+  padding: var(--sp-4); border: 1px dashed var(--line); border-radius: var(--r-md); background: var(--s-1);
+}
+.learn-draft__label { font-size: var(--t-sm); color: var(--fg-3); }
+.learn-draft__text {
+  margin: 0; color: var(--fg); font: var(--t-md)/1.45 var(--font-ui);
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18em; overflow: auto;
+}
+.learn-draft__why { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+.learn-draft__verbs { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+/* M573. The proof: its verdict line, its evidence, and the form a replay starts from. */
+.learn-draft__proof { display: flex; flex-direction: column; gap: var(--sp-2); }
+.learn-draft__proof > p { margin: 0; }
+.learn-draft__evidence > summary { cursor: pointer; font-size: var(--t-sm); color: var(--fg-3); }
+.learn-prove { display: flex; flex-direction: column; gap: var(--sp-3); padding-top: var(--sp-2); }
+.learn-prove__field { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--t-sm); color: var(--fg-2); }
+.learn-prove__input {
+  font: var(--t-sm)/1.4 var(--font-ui); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3); resize: vertical;
+}
+/* M576. An accepted rule is solid where a draft is dashed; a retired one keeps its row, struck through. */
+.learn-rule {
+  display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0;
+  padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1);
+}
+.learn-rule[data-learn-rule="retired"] { color: var(--fg-3); }
+.learn-rule[data-learn-rule="retired"] .learn-draft__text { text-decoration: line-through; color: var(--fg-3); }
 /* ── /st:O ── */
+
+/* ── st:P ── */
+/* M583. The multiplayer canvas's rows in Needs you (team-flow/TeamFlowSection):
+   the team asks' shape (M378), so a handoff and a review read as the same
+   kind of fact — each part on its own line, the note as the person wrote it. */
+.team-flow__note { margin: 0; font: var(--t-xs) var(--font-ui); color: var(--fg-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+.team-flow__title { margin: 0; font: var(--t-xs) var(--font-ui); color: var(--fg); overflow-wrap: anywhere; }
+.team-flow__verbs { margin-top: 0; padding: 0 var(--sp-3) var(--sp-2) calc(var(--sp-3) + 14px); }
+.team-flow .rail-row__main, .team-flow .inbox__why, .team-flow .inbox__meta, .team-flow .team-flow__verbs { flex: 1 1 100%; }
+/* ── /st:P ── */
+
+/* ── st:U ── */
+/* M600–M609 (lane U, the UI gaps audit). */
+/* M600. Settings' way out, first in its nav. */
+.rd-settings__nav .rd-settings__back { margin: 0 0 var(--sp-2); padding: var(--sp-2) var(--sp-3); color: var(--fg-2); font-size: var(--t-sm); }
+.rd-settings__nav .rd-settings__back:hover { color: var(--fg); background: var(--s-4); }
+/* M600. A reason the Prove button is off, beside it. */
+.learn-draft__verbs { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+/* M601. The top bar in one flow. The page switch was centred ABSOLUTELY over
+   a flex row that never left room for it, and three rounds of max-width math
+   (rd:F3, M511) still let the session count and the search slide under it —
+   the search-empty and approval goldens show the field reduced to its ⌘K at
+   1024, rd-empty to its icon at 1600. Now the switch is a flex item between
+   the location and the right cluster, centred by its own auto margins in the
+   free space, so it can never overlap either side. Order, not DOM: the
+   switch is authored second (the harnesses address it where it is). */
+.shell__top > * { order: 2; }
+.shell__top > .shell__mark, .shell__top > .shell__workspace { order: 0; }
+.shell__top .shell__center-toggle {
+  position: static;
+  transform: none;
+  order: 1;
+  flex: none;
+  margin-inline: auto;
+}
+.shell__top .shell__workspace { min-width: 0; flex: 0 1 auto; }
+.shell__top .shell__sessions { margin-left: 0; }
+.shell__top .shell__search { flex: 0 1 260px; min-width: 36px; max-width: 320px; margin-inline: 0; }
+/* Under 1280px the right cluster gives way first: the count goes (the bell and
+   Sessions' badge still say what needs you) and the field folds to its icon,
+   which still opens search and says ⌘K in its title. */
+@media (max-width: 1280px) {
+  .shell__top .shell__sessions { display: none; }
+  .shell__top .shell__search { flex: none; width: 36px; padding: 0; justify-content: center; }
+  .shell__top .shell__search > span, .shell__top .shell__search kbd { display: none; }
+}
+/* M602. The flowchart gesture as one more hint, not a dashed drop zone. */
+.rd-empty__hints .rd-empty__ghost { margin: 0; padding: 0; border: 0; border-radius: 0; text-align: left; color: inherit; }
+.rd-empty__more {
+  align-self: flex-start; background: transparent; border: 0; padding: 0;
+  color: var(--fg-2); font: inherit; font-size: var(--t-sm); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong);
+}
+.rd-empty__more:hover { color: var(--fg); }
+/* M603. An empty canvas has nothing to zoom to: the zoom readout, its fits
+   and the tiers wait until something is placed, and so does the "Nothing
+   placed yet" note that stood beside them. The Create door and any notice
+   in the HUD stay. */
+.shell:has(.rd-empty, [data-launcher]) .canvas-hud__zoom,
+.shell:has(.rd-empty, [data-launcher]) .canvas-hud__tiers,
+.rd-empty__minimap { display: none; }
+/* M609. A crowded header gives up its path first, its name last. The path
+   and branch shrink a hundred times faster than the title — "Claude — L…"
+   lost the one fact the header exists for while the path still showed in
+   full. No min-width on the title: a floor pushed a narrow chat's auto chip
+   and its dismiss out of the frame (shot inspector-caps hit-tests that).
+   Not a terminal's: its name strip stands proud of the frame and is laid
+   out around the north port (M397 A4); shrinking its path slid the state
+   badge over the port an edge ends on (verify:panels edge.paint.1). */
+.pf:not(.pf--kind-terminal) .pf__chrome :is(.pf__path, .pf__branch) { flex: 0 100 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* M609. The palette's band label ("COMMANDS") sat 8px left of the section
+   headers under it. Same inset as .palette__section, with a hairline above
+   so it reads as the bigger grouping rather than a misaligned header. */
+.palette__band { padding: var(--sp-4) var(--sp-6) var(--sp-1); font-weight: 600; border-top: 1px solid var(--line); }
+.palette__list > .palette__band:first-child { border-top: 0; }
+/* ── /st:U ── */

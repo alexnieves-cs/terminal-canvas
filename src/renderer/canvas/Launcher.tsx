@@ -300,7 +300,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
     <div className="launcher pf" data-launcher data-screen-control="" data-tone="none" data-launcher-dropping={dropping ? '' : undefined} role="region" aria-label="Get started" {...dropHandlers}>
       <div className="launcher__well">
       <div className="launcher__hero" aria-hidden="true">
-        <span className="launcher__wordmark">terminal canvas</span>
+        <span className="launcher__wordmark">Terminal Canvas</span>
         <span className="launcher__tagline">Hand a coding task to an agent, steer it, and review what comes back</span>
       </div>
       <div className="launcher__onboarding launcher__intent" data-onboarding role="form" aria-label="Start work" onKeyDown={onKey}>

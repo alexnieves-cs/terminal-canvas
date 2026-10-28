@@ -9,6 +9,7 @@
  * so there is no runtime cycle.
  */
 import type { TeamAskRow } from '@shared/team-asks'
+import type { TeamFlowSnapshot } from '@shared/team-flow'
 import type { PaletteActions } from '../commands'
 import type { PresetRow, PromptRow, PanelRow } from './row-types'
 import type { ApprovalRow } from './approval-row'
@@ -126,6 +127,8 @@ export interface PaletteContext {
    * so every older fixture builds; absent is none.
    */
   teamAsks?: readonly TeamAskRow[]
+  /** M583. The team's handoffs and review queue for this person (team-flow/useTeamFlow). Optional; absent is none. */
+  teamFlow?: TeamFlowSnapshot
   /**
    * focusedId as it was when the palette OPENED, not now. Opening moves DOM
    * focus to the input; the app-level focus is deliberately left alone, and

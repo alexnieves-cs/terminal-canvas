@@ -46,6 +46,8 @@ const ACCEPTED = [
     why: "xterm sets inline styles on its layers; script-src stays 'self' and nothing loads remotely" },
   { check: 'CSP_GLOBAL_CHECK', file: 'src/web/index.html', sample: "content=\"default-src 'self'",
     why: "lane N's browser demo: the renderer's own CSP, unchanged, for the same xterm reason; the page is static and has no preload or Node" },
+  { check: 'CSP_GLOBAL_CHECK', file: 'src/host-web/index.html', sample: "content=\"default-src 'self'",
+    why: "lane Q's hosted page: the renderer's own CSP, unchanged; the WebSocket and /host-info.js are same-origin, so 'self' covers both" },
   { check: 'SANDBOX_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: 'sandbox: false,',
     why: "the preload needs require('electron') for contextBridge; node-pty stays in main" },
   { check: 'PRELOAD_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: "preload: join(__dirname, '../preload/index.js'),",

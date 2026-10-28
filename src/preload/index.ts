@@ -1,12 +1,14 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { homedir } from 'os'
 import { hookupIpc } from '@sentry/electron/preload-namespaced'
-import type { WatcherStateEvent, RelayData, RelayView } from '@shared/ipc-contract'
+import type { WatcherStateEvent, RelayData, RelayView, CloudLaneView } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PresenceRoster } from '../shared/presence'
 import type { WorldConnection } from '../shared/world-events'
+import type { VmLaneInfo } from '../shared/vm-lane'
 import type { TeamObserved } from '../shared/team'
 import type { TeamAskRow } from '../shared/team-asks'
+import type { TeamFlowSnapshot } from '../shared/team-flow'
 import type { AccountSessionMeta } from '../shared/account'
 import type { CanvasSharedView, SharedSaveMeta, SharedTextPush } from '../shared/canvas-ops'
 import type { PersistedRoutine } from '../shared/routines'
@@ -254,10 +256,40 @@ const bridge: CanvasBridge = {
     merge: (req: unknown) => ipcRenderer.invoke(IPC.LANE_MERGE, req),
     radar: (lanes: unknown) => ipcRenderer.invoke(IPC.LANE_RADAR, lanes)
   },
+  vm: {
+    lanes: () => ipcRenderer.invoke(IPC.VM_LANES),
+    onChanged: (listener) => subscribe<VmLaneInfo[]>(IPC_EVENTS.VM_LANES_CHANGED, listener)
+  },
+  cloud: {
+    list: () => ipcRenderer.invoke(IPC.CLOUD_LIST),
+    dispatch: (req: unknown) => ipcRenderer.invoke(IPC.CLOUD_DISPATCH, req),
+    refresh: (id: string) => ipcRenderer.invoke(IPC.CLOUD_REFRESH, id),
+    forget: (id: string) => ipcRenderer.invoke(IPC.CLOUD_FORGET, id),
+    merge: (id: string) => ipcRenderer.invoke(IPC.CLOUD_MERGE, id),
+    radar: (lanes: unknown) => ipcRenderer.invoke(IPC.CLOUD_RADAR, lanes),
+    onChanged: (listener) => subscribe<CloudLaneView>(IPC_EVENTS.CLOUD_CHANGED, listener)
+  },
+  // M570 (lane O). The lessons a review taught.
+  learn: {
+    read: (roots: unknown) => ipcRenderer.invoke(IPC.LEARN_READ, roots),
+    record: (facts: unknown) => ipcRenderer.invoke(IPC.LEARN_RECORD, facts),
+    propose: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_PROPOSE, req),
+    decide: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_DECIDE, req),
+    prove: (req: unknown) => ipcRenderer.invoke(IPC.LEARN_PROVE, req)
+  },
   tonight: {
     start: (batch: unknown) => ipcRenderer.invoke(IPC.TONIGHT_START, batch),
     stop: () => ipcRenderer.invoke(IPC.TONIGHT_STOP),
     status: () => ipcRenderer.invoke(IPC.TONIGHT_STATUS)
+  },
+  fork: {
+    turns: (panelId: string) => ipcRenderer.invoke(IPC.FORK_TURNS, panelId),
+    branch: (req: unknown) => ipcRenderer.invoke(IPC.FORK_BRANCH, req)
+  },
+  tournament: {
+    start: (spec: unknown) => ipcRenderer.invoke(IPC.TOURNAMENT_START, spec),
+    stop: () => ipcRenderer.invoke(IPC.TOURNAMENT_STOP),
+    status: () => ipcRenderer.invoke(IPC.TOURNAMENT_STATUS)
   },
   setup: {
     read: (cwd: string) => ipcRenderer.invoke(IPC.SETUP_READ, cwd),
@@ -339,7 +371,11 @@ const bridge: CanvasBridge = {
     canvasPng: () => ipcRenderer.invoke(IPC.EXPORT_CANVAS_PNG),
     deckPptx: (req: { path: string }) => ipcRenderer.invoke(IPC.DECK_EXPORT_PPTX, req),
     deckPdf: (req) => ipcRenderer.invoke(IPC.EXPORT_DECK_PDF, req),
-    flowchart: (req) => ipcRenderer.invoke(IPC.EXPORT_FLOWCHART, req)
+    flowchart: (req) => ipcRenderer.invoke(IPC.EXPORT_FLOWCHART, req),
+    nightFilm: (req) => ipcRenderer.invoke(IPC.EXPORT_NIGHT_FILM, req)
+  },
+  film: {
+    night: (req) => ipcRenderer.invoke(IPC.FILM_NIGHT, req)
   },
   tool: {
     generate: (req: { description: string; folder: string }) => ipcRenderer.invoke(IPC.TOOL_GENERATE, req)
@@ -472,7 +508,10 @@ const bridge: CanvasBridge = {
     onObserved: (listener) => subscribe<TeamObserved>(IPC_EVENTS.TEAM_OBSERVED, listener),
     asks: () => ipcRenderer.invoke(IPC.TEAM_ASKS),
     answerAsk: (req) => ipcRenderer.invoke(IPC.TEAM_ASK_ANSWER, req),
-    onAsks: (listener) => subscribe<TeamAskRow[]>(IPC_EVENTS.TEAM_ASKS_CHANGED, listener)
+    onAsks: (listener) => subscribe<TeamAskRow[]>(IPC_EVENTS.TEAM_ASKS_CHANGED, listener),
+    flow: () => ipcRenderer.invoke(IPC.TEAM_FLOW),
+    writeFlow: (req) => ipcRenderer.invoke(IPC.TEAM_FLOW_WRITE, req),
+    onFlow: (listener) => subscribe<TeamFlowSnapshot>(IPC_EVENTS.TEAM_FLOW_CHANGED, listener)
   },
   broker: {
     audit: (limit, service) => ipcRenderer.invoke(IPC.BROKER_AUDIT, limit, service)
@@ -563,6 +602,9 @@ const bridge: CanvasBridge = {
   // M407 follow-up. A FIELD like `platform`: the folder main's expandTilde
   // reads, so a terminal's name can fold `/Users/<me>/x` and `~/x` into one place.
   home: homedir(),
+  // M610. A FIELD like `platform`: the hosted page stamps `--tc-hosted=1`
+  // (src/host-web/install.ts); the desktop app never does.
+  hosted: process.argv.includes('--tc-hosted=1'),
   boot: {
     onProgress: (listener) => {
       bootListener = listener

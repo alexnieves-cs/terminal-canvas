@@ -47,14 +47,15 @@
 import * as Y from 'yjs'
 import { redactSecrets } from '../../shared/redact'
 import {
-  applyCanvasOp, diffLocal, docKey, groupToLocal, inspectUpdate, localIdOf, opContext, panelToLocal, readSharedAsks, readSharedGroups, readSharedPanels,
+  applyCanvasOp, diffLocal, docKey, groupToLocal, inspectUpdate, localIdOf, opContext, panelSteward, panelToLocal, readSharedAsks, readSharedGroups, readSharedHandoffs, readSharedPanels, readSharedReviews,
   CANVAS_FILES, CANVAS_GROUPS, CANVAS_PANELS, type LocalGroupLike, type LocalPanelLike
 } from '../../shared/canvas-doc'
 import {
-  authorizeCanvasOp, CANVAS_ASKS, RECT_FIELDS,
+  authorizeCanvasOp, CANVAS_ASKS, CANVAS_HANDOFFS, CANVAS_REVIEWS, HANDOFF_NOTE_MAX, RECT_FIELDS, REVIEW_SUMMARY_MAX, REVIEW_TITLE_MAX,
   type CanvasOp, type CanvasSharedView, type SharedGroup, type SharedTextOpen, type SharedTextPush, type Verdict, type WorkspaceRole
 } from '../../shared/canvas-ops'
 import { teammateAskRows, type TeamAskRow } from '../../shared/team-asks'
+import { handoffRows, mineRows, reviewDecision, reviewRows, type FlowRequest, type TeamFlowSnapshot } from '../../shared/team-flow'
 
 export interface WorkspaceShareRecord { id: string; orgId: string; role: WorkspaceRole }
 
@@ -80,6 +81,10 @@ export interface CanvasSyncDeps {
   emitText?: (push: SharedTextPush) => void
   /** M376. A workspace's team asks changed by anything but this machine's own write (a peer's answer, the doc loaded). */
   onAsks?: (workspaceId: string) => void
+  /** M582. A workspace's handoffs or review queue changed by anything but this machine's own write. */
+  onFlow?: (workspaceId: string) => void
+  /** M582. The clock a handoff or review is stamped with (display only — the chain is ordered by `n`). */
+  now?: () => number
   /** M392. Main's log, for a content field left unwritten (past its cap). Default console.warn. */
   log?: (message: string) => void
 }
@@ -113,6 +118,14 @@ export interface CanvasSync {
    * them), each open ask of someone else's they have not answered.
    */
   teammateAsks(nameOf: (workspaceId: string, userId: string) => string | null): TeamAskRow[]
+  /**
+   * M582. The multiplayer canvas's queue for this person: offers they may
+   * take, reviews they may give, their own open offers and reviews, and who
+   * holds each handed agent. Viewers are offered nothing they cannot answer.
+   */
+  teamFlow(nameOf: (workspaceId: string, userId: string) => string | null): TeamFlowSnapshot
+  /** M582. One handoff or review write, as this person: ids, chain number, time and scrub are made here. */
+  writeFlow(req: FlowRequest): Verdict
 }
 
 /** Writes this machine made — everything else observed on the doc is a peer's. */
@@ -324,10 +337,22 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
         if (tr.origin !== PERSIST_ORIGIN && tr.origin !== RENDERER_ORIGIN) persist(b)
         deps.onAsks?.(workspaceId)
       }
+      // M582. Handoffs and reviews touch no panel either: the asks' rule.
+      // A decided review is NOT closed here on its own: an automatic close one
+      // tick after the first verdict would refuse a second reviewer's verdict
+      // in flight (and the server closes that reviewer's connection). Its
+      // poster closes it by pressing Done; the queue hides it meanwhile.
+      const flowMaps = [doc.getMap(CANVAS_HANDOFFS), doc.getMap(CANVAS_REVIEWS)]
+      const onFlow = (_events: Array<Y.YEvent<Y.AbstractType<unknown>>>, tr: Y.Transaction): void => {
+        if (bindings.get(workspaceId) !== b || tr.origin === LOCAL_ORIGIN) return
+        if (tr.origin !== PERSIST_ORIGIN && tr.origin !== RENDERER_ORIGIN) persist(b)
+        deps.onFlow?.(workspaceId)
+      }
       doc.on('update', onUpdate)
       files.observeDeep(onFiles)
       asks.observeDeep(onAsks)
-      b.off = () => { panels.unobserveDeep(onPanels); groups.unobserveDeep(onPanels); files.unobserveDeep(onFiles); asks.unobserveDeep(onAsks); doc.off('update', onUpdate) }
+      for (const m of flowMaps) m.observeDeep(onFlow)
+      b.off = () => { panels.unobserveDeep(onPanels); groups.unobserveDeep(onPanels); files.unobserveDeep(onFiles); asks.unobserveDeep(onAsks); for (const m of flowMaps) m.unobserveDeep(onFlow); doc.off('update', onUpdate) }
       // A replica opened on the doc this one replaces holds the wrong history.
       if (textOpen.has(workspaceId)) deps.emitText?.({ workspaceId, kind: 'reset' })
 
@@ -384,6 +409,84 @@ export function createCanvasSync(deps: CanvasSyncDeps): CanvasSync {
         out.push(...teammateAskRows(b.workspaceId, readSharedAsks(b.doc), readSharedPanels(b.doc).live, me, (u) => nameOf(b.workspaceId, u)))
       }
       return out.sort((a, b) => a.at - b.at)
+    },
+
+    teamFlow(nameOf) {
+      const me = deps.userId()
+      const out: TeamFlowSnapshot = { handoffs: [], reviews: [], mine: [], stewards: [], held: [], teammates: [] }
+      if (me === null) return out
+      const host = deps.host()
+      // A row's panel in the RENDERER's terms: this machine's own panel by its
+      // local id (a handoff can come back to its owner), anyone else's by its doc key.
+      const toRenderer = (key: string): string => localIdOf(host, key) ?? key
+      for (const b of bindings.values()) {
+        const role = deps.share(b.workspaceId)?.role
+        if (role === undefined) continue
+        const ws = b.workspaceId
+        const handoffs = readSharedHandoffs(b.doc), reviews = readSharedReviews(b.doc), live = readSharedPanels(b.doc).live
+        const names = (u: string): string | null => nameOf(ws, u)
+        if (role === 'owner' || role === 'editor') {
+          out.handoffs.push(...handoffRows(ws, handoffs, live, me, names).map((r) => ({ ...r, panelId: toRenderer(r.panelId) })))
+          out.reviews.push(...reviewRows(ws, reviews, live, me, names).map((r) => ({ ...r, panelId: toRenderer(r.panelId) })))
+          out.mine.push(...mineRows(ws, handoffs, reviews, live, me, names).map((r) => ({ ...r, panelId: toRenderer(r.panelId) })))
+        }
+        for (const p of live) {
+          const s = panelSteward(b.doc, p.id)
+          if (s === null) continue
+          if (s.steward === me && s.open === null && (role === 'owner' || role === 'editor')) out.held.push({ workspaceId: ws, panelId: toRenderer(p.id), title: p.title })
+          if (s.steward === p.owner) continue
+          out.stewards.push({ workspaceId: ws, panelId: toRenderer(p.id), name: s.steward === me ? 'you' : nameOf(ws, s.steward) ?? 'a teammate', you: s.steward === me })
+        }
+      }
+      out.handoffs.sort((a, b) => Number(b.named) - Number(a.named) || a.at - b.at)
+      out.reviews.sort((a, b) => Number(a.lookers.length > 0) - Number(b.lookers.length > 0) || a.at - b.at)
+      return out
+    },
+
+    writeFlow(req) {
+      const b = bindings.get(req.workspaceId)
+      if (b === undefined || deps.share(req.workspaceId) === undefined) return { ok: false, reason: 'this workspace is not shared' }
+      const me = deps.userId()
+      if (me === null) return { ok: false, reason: 'sign in to work with your team' }
+      const host = deps.host()
+      const local = new Set((deps.local(req.workspaceId)?.panels ?? []).map((p) => p.id))
+      const keyOf = (id: string): string => (local.has(id) ? docKey(host, id) : id)
+      const mint = (prefix: string): string => docKey(host, `${prefix}${(deps.now?.() ?? Date.now()).toString(36)}${Math.random().toString(36).slice(2, 8)}`)
+      const at = deps.now?.() ?? Date.now()
+      // Words leave this machine for a server: scrubbed here, counted, and cut
+      // to the doc's caps AFTER the scrub so a placeholder never splits a secret.
+      const scrub = (text: string, max: number): { text: string; count: number } => {
+        const r = redactSecrets(text)
+        return { text: r.text.slice(0, max), count: r.count }
+      }
+      switch (req.kind) {
+        case 'hand-off': {
+          const panel = keyOf(req.panelId)
+          const chain = panelSteward(b.doc, panel)
+          const note = scrub(req.note.trim(), HANDOFF_NOTE_MAX)
+          return write(b, { kind: 'handoff-open', handoff: { id: mint('h'), panel, from: me, to: req.to, note: note.text, scrubbed: note.count, at, n: (chain?.handed ?? 0) + 1 } })
+        }
+        case 'take': case 'decline':
+          return write(b, { kind: 'handoff-reply', handoffId: req.handoffId, by: me, reply: req.kind === 'take' ? 'accept' : 'decline' })
+        case 'withdraw':
+          return write(b, { kind: 'handoff-withdraw', handoffId: req.handoffId })
+        case 'ask-review': {
+          const title = scrub(req.title.trim(), REVIEW_TITLE_MAX), summary = scrub(req.summary.trim(), REVIEW_SUMMARY_MAX)
+          return write(b, { kind: 'review-open', review: { id: mint('r'), panel: keyOf(req.panelId), owner: me, title: title.text, summary: summary.text, scrubbed: title.count + summary.count, at } })
+        }
+        case 'look':
+          return write(b, { kind: 'review-claim', reviewId: req.reviewId, by: me })
+        case 'approve': case 'request-changes':
+          return write(b, { kind: 'review-verdict', reviewId: req.reviewId, by: me, verdict: req.kind === 'approve' ? 'approve' : 'changes' })
+        case 'withdraw-review':
+          return write(b, { kind: 'review-close', reviewId: req.reviewId, outcome: 'withdrawn' })
+        case 'settle-review': {
+          const q = readSharedReviews(b.doc).find((r) => r.review.id === req.reviewId)
+          const d = q === undefined ? 'open' : reviewDecision(q.verdicts)
+          if (d === 'open') return { ok: false, reason: 'nobody has judged that review yet' }
+          return write(b, { kind: 'review-close', reviewId: req.reviewId, outcome: d })
+        }
+      }
     },
 
     writeAsk(workspaceId, op) {

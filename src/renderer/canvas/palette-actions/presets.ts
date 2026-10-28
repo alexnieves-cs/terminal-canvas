@@ -11,6 +11,7 @@
  */
 
 import { answerTeamAsk as answerTeamAskInStore } from '@renderer/shell/useTeamAsks'
+import { writeTeamFlow } from '@renderer/team-flow/useTeamFlow'
 import { notifyRefused } from '../../shell/toast'
 import { normalisePreviewPath } from '@shared/preview'
 import { openReplay as openReplaySheet } from '@renderer/replay/replay-store'
@@ -70,6 +71,7 @@ export type PresetsActions = Pick<PaletteActions,
   | 'stopAuto'
   | 'answerApproval'
   | 'answerTeamAsk'
+  | 'teamFlow'
   | 'openAsChat'
   | 'openReplay'
   | 'openInTerminal'
@@ -623,9 +625,9 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     markPresetRead: (id) => markPresetReadNow(id),
     // M97. The Auto verbs: main starts and stops; the refusal comes back by
     // name and is shown on the palette's line rather than swallowed.
-    startAuto: (id, mode, task) => {
+    startAuto: (id, mode, task, opts) => {
       const begin = (t?: string): void => {
-        void window.canvas.agentSession.autoStart({ id, mode, ...(t === undefined ? {} : { task: t }) }).then((r) => {
+        void window.canvas.agentSession.autoStart({ id, mode, ...(t === undefined ? {} : { task: t }), ...(opts?.sandboxed === true ? { sandboxed: true } : {}) }).then((r) => {
           if (r.kind === 'refused') { setInputMode({ kind: 'text', label: `auto refused — ${r.reason}`, initial: '', feedback: true, submit: () => {} }); palette.openPalette() }
         })
       }
@@ -651,6 +653,10 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     // refusal says why.
     answerTeamAsk: (workspaceId, askId, allow) => {
       void answerTeamAskInStore({ workspaceId, askId }, allow ? 'allow' : 'deny').then((reason) => { if (reason !== null) notifyRefused(reason) })
+    },
+    // M583. A handoff or review press from the palette: the Dock's own door.
+    teamFlow: (req) => {
+      void writeTeamFlow(req).then((reason) => { if (reason !== null) notifyRefused(reason) })
     },
     answerApproval: (id, requestId, allow, scope) => {
       if (isAnswered(id, requestId)) return

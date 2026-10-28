@@ -32,6 +32,7 @@ import { preflightTools, recipePreflight, recipeTexts } from '@shared/recipe-por
 import { outward } from '@shared/outward'
 import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { adoptedRunId, beginRun, mintRunId, recordOrchEvent, runOfTask } from '../orchestration/orch-record'
+import { tournamentVerb } from './tournament-verb'
 
 /**
  * Read off the hook that owns them rather than re-spelled here: these four
@@ -74,6 +75,8 @@ export interface BoardVerbs {
   related?: (panelId: string) => VerbOutcome
   arrange?: (panelId: string) => VerbOutcome
   fitTask?: () => VerbOutcome
+  /** M548. Start a tournament on a task, stop it, or pick its winner (`tournament-verb.ts`). */
+  tournament?: (op: string, value?: string) => Promise<VerbOutcome>
   /** M324. Open the focus view of the task a card or member panel belongs to. */
   focus?: (panelId: string) => VerbOutcome
   /** M326. Open a task's focus view by its item — where a task a person just started lands. */
@@ -947,6 +950,8 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
   // M202 (D07). The fourth door's landing point: the palette row, the agent
   // line and an action node all reach the card's own Review through here.
   boardVerbsRef.current.review = reviewTaskLane
+  // M548. Through the same refs every verb here reads, at the time of the press.
+  boardVerbsRef.current.tournament = tournamentVerb({ panelsRef, setPanels, commitHistory, workItemsRef, setWorkItems, nextIdRef, mergedRef, placer, hostRef, viewportRef, presetRowsRef, closePanel: (id) => closePanelRef.current(id), focusItem: (id) => boardVerbsRef.current.focusItem?.(id) })
   // M203 (D08). SHOW THIS TASK. Membership is derived at PRESS time from what
   // the canvas already holds — the DISPLAYED panels (an anchored card's
   // derived rect, a merged lane's synthetic one), the board, the worktree

@@ -5,6 +5,10 @@ import type { AgentSessionManager } from '../agent-session'
 import type { ApprovalTracker } from '../approvals'
 import type { PoolCaller } from '../pool-caller'
 import type { TonightRunner } from '../tonight-runner'
+import type { VmLanes } from '../vm-lanes'
+import type { VmDoors } from '../vm-doors'
+import type { VmEgressEntry, VmProbe } from '../../shared/vm-lane'
+import type { TournamentRunner } from '../tournament-runner'
 import type { ControlServer } from '../control-server'
 import type { PresenceHub } from '../presence/presence-hub'
 import type { CanvasSync } from '../presence/canvas-sync'
@@ -76,6 +80,16 @@ export interface MainState {
   pool: PoolCaller | null
   /** M477. The Tonight batch runner, made beside the manager it drives. */
   tonight: TonightRunner | null
+  /** M552. Which chat panels run their agent in a VM; wraps the manager's runner. Made beside it. */
+  vmLanes: VmLanes | null
+  /** M550. The last VM runtime probe (startup, then every environment report). Null until the first answers. */
+  vmProbe: VmProbe | null
+  /** M553. The doors Tonight and auto mode call to run a task sandboxed. */
+  vmDoors: VmDoors | null
+  /** M554. The egress log every sandboxed lane's proxy writes. */
+  vmEgress: { list(laneId?: string): VmEgressEntry[] } | null
+  /** M547. The tournament runner, made beside the create door it spawns entrants through (agent-handlers.ts). */
+  tournament: TournamentRunner | null
   /** M112. Decided once, after the store loads; read by `createWindow` for the renderer's flag. */
   telemetryOn: boolean
   /** M48. When the startup probe ran; the report says so, since it never re-runs. */
@@ -109,6 +123,11 @@ export function createMainState(): MainState {
     approvals: null,
     pool: null,
     tonight: null,
+    vmLanes: null,
+    vmProbe: null,
+    vmDoors: null,
+    vmEgress: null,
+    tournament: null,
     telemetryOn: false,
     probedAt: 0,
     controlServer: null,

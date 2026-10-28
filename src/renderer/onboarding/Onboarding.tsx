@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useModalFocus } from '@renderer/primitives'
 import type { JSX } from 'react'
 import { panelState } from '../panels/panel-state'
 import type { AgentState } from '@shared/types'
@@ -45,6 +46,9 @@ export function Onboarding({
   initialStep = 'workspace', workspaceName = '', probes = [], enabled = [], tmux, onCopy, onCustom, onHandoff, onSkip
 }: OnboardingProps): JSX.Element {
   const [step, setStep] = useState<OnboardingStepId>(initialStep)
+  // M600. The card owns the window on first run: Tab stays inside it.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useModalFocus(rootRef)
   const [name, setName] = useState(workspaceName)
   // Untouched, the toggles follow `enabled` — the report can arrive after the
   // card mounts, and a found agent should not sit Off because it was late.
@@ -75,7 +79,7 @@ export function Onboarding({
   const canAdvance = step === 'workspace' ? name.trim() !== '' : step === 'agents' ? view.canContinue : true
 
   return (
-    <div className="rd-onboard" data-rd-onboarding="" data-step={step}>
+    <div ref={rootRef} className="rd-onboard" data-rd-onboarding="" data-step={step} role="dialog" aria-modal="true" aria-label="Set up Terminal Canvas">
       <div className="rd-onboard__card">
         <div className="rd-onboard__main">
           <div className="rd-onboard__brand">

@@ -22,6 +22,8 @@
     "build": "npm run typecheck && electron-vite build",
     "build:web": "vite build -c vite.web.config.ts",
     "dev:web": "vite -c vite.web.config.ts",
+    "build:host": "node scripts/build-host.cjs",
+    "host": "node out/host/host.cjs",
     "start": "unset ELECTRON_RUN_AS_NODE && electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
@@ -90,6 +92,9 @@
     "verify:panels:flowchart": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels-flowchart.cjs",
     "verify:onboarding": "node scripts/verify-onboarding.cjs",
     "verify:borrow": "node scripts/verify-borrow.cjs",
+    "verify:fork": "node scripts/verify-fork.cjs",
+    "verify:tournament": "node scripts/verify-tournament.cjs",
+    "verify:cloud": "node scripts/verify-cloud.cjs",
     "verify:orchestration": "node scripts/verify-orchestration.cjs",
     "verify:first-run": "node scripts/verify-first-run.cjs",
     "verify:primitives": "node scripts/verify-primitives.cjs",
@@ -105,6 +110,7 @@
     "verify:presence": "node scripts/verify-presence.cjs",
     "verify:team": "node scripts/verify-team.cjs",
     "verify:canvas-sync": "node scripts/verify-canvas-sync.cjs",
+    "verify:multiplayer": "node scripts/verify-multiplayer.cjs",
     "relay": "node scripts/relay-server.cjs",
     "relay:deploy": "bash server/relay/deploy/deploy.sh",
     "collab:deploy": "bash server/collab/deploy/deploy.sh",
@@ -129,7 +135,10 @@
     "verify:rd-w6": "node scripts/verify-rd-w6.cjs",
     "verify:ux": "node scripts/verify-ux.cjs",
     "verify:auto": "node scripts/verify-auto.cjs",
-    "verify:vm": "node scripts/verify-vm.cjs"
+    "verify:film": "node scripts/verify-film.cjs",
+    "verify:vm": "node scripts/verify-vm.cjs",
+    "verify:learn": "node scripts/verify-learn.cjs",
+    "verify:host": "node scripts/verify-host.cjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { spawn as spawnChild } from 'node:child_process'
 import { BrowserWindow, app, shell, webContents } from 'electron'
 import { createExporters } from '../export'
+import { createFilmDoors } from '../film-export'
 import { createDeckExporter } from '../deck-export'
 import { createDeckPdf, createPdfRenderer } from '../deck-pdf'
 import { createFlowchartFiles } from '../flowchart-files'
@@ -86,6 +87,7 @@ export function createEnvReporter(state: MainState, stores: Stores, which: (comm
     // M550. Asked on every report, not cached: `container system start` is a
     // thing a person does mid-session, and Check again must see it.
     const vm = await probeVmRuntimesLive((name) => again ? whichFromEnv(name, env2) : which(name), env2)
+    state.vmProbe = vm
     return buildEnvReport({
       env: env2,
       shell: shellProbeOutcome(),
@@ -150,6 +152,14 @@ export function createExportHandlers(state: MainState, stores: Stores) {
         askPath: async (suggested: string) => askSave(liveWindow(state), {
           title: 'Export deck', defaultPath: inDownloads(suggested), filters: [{ name: 'PowerPoint', extensions: ['pptx'] }]
         })
+      })
+    }),
+    // M562–M563 (lane L). The night film: the record it is drawn from, and the save.
+    ...createFilmDoors({
+      timeline: (filter, limit) => stores.runLedger.timeline(filter, limit),
+      tonight: () => state.tonight?.status() ?? null,
+      askPath: async (suggested: string) => askSave(liveWindow(state), {
+        title: 'Save last night\'s film', defaultPath: inDownloads(suggested), filters: [{ name: 'MP4 video', extensions: ['mp4'] }]
       })
     }),
     // M248. A deck to PDF: main reads the file, a hidden sandboxed window prints it.

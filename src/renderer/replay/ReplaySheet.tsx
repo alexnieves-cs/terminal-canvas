@@ -2,7 +2,8 @@ import { useEffect, useState, type JSX } from 'react'
 import type { TranscriptTurn } from '@shared/transcript'
 import { compareFrames, compareWords, fileStateWords, replayAt, replayMoments, replayPath, shellWords, sinceStartWords, type ReplayFile, type ReplayFrame } from '@shared/replay'
 import { Dialog, DialogClose, DialogContent } from '@renderer/primitives'
-import { closeReplay, compareReplay, onReplay, replayRequest, type ReplayRequest } from './replay-store'
+import { frameTurn, forkedFromWords, messageWords, snapshotFor, type TurnSnapshotRow } from '@shared/turn-fork'
+import { branchFromHere, closeReplay, compareReplay, forkOf, onReplay, replayRequest, type ReplayRequest } from './replay-store'
 
 /**
  * M383. THE REPLAY SHEET — a conversation scrubbed back to any turn (M381's
@@ -15,6 +16,10 @@ import { closeReplay, compareReplay, onReplay, replayRequest, type ReplayRequest
  * a shared clock would compare one agent's start with the other's end. Both
  * open on their latest moment, which is the comparison most people want
  * first — where did each end up.
+ *
+ * M558 (lane K). The one door here that ACTS is "Branch from here": the
+ * sheet asks the canvas (replay-store's brancher), which builds the fork and
+ * places it; the sheet then compares the original with its fork (M559).
  */
 export interface ReplaySheetProps {
   /** Every conversation on the canvas this sheet may show or compare with. */
@@ -35,6 +40,20 @@ export function ReplaySheet({ chats, turnsOf }: ReplaySheetProps): JSX.Element {
   // A new conversation (or a new one beside it) opens on its latest moment.
   useEffect(() => { setAt((s) => ({ ...s, a: null })); setPicked((s) => ({ ...s, a: null })) }, [request?.panelId])
   useEffect(() => { setAt((s) => ({ ...s, b: null })); setPicked((s) => ({ ...s, b: null })) }, [request?.compareWith])
+  // M558. Each side's turn snapshots, read when the side changes — what the
+  // Branch button says about the files a fork at this moment would get.
+  const [snaps, setSnaps] = useState<{ a: TurnSnapshotRow[]; b: TurnSnapshotRow[] }>({ a: [], b: [] })
+  useEffect(() => {
+    let live = true
+    const read = (id: string | undefined): Promise<TurnSnapshotRow[]> => (id === undefined ? Promise.resolve([]) : window.canvas.fork.turns(id).catch(() => []))
+    void Promise.all([read(request?.panelId), read(request?.compareWith)]).then(([ra, rb]) => { if (live) setSnaps({ a: ra, b: rb }) })
+    return () => { live = false }
+  }, [request?.panelId, request?.compareWith])
+  const caption = (id: string | undefined): string | undefined => {
+    const f = id === undefined ? undefined : forkOf(id)
+    if (f === undefined) return undefined
+    return forkedFromWords(chats.find((c) => c.id === f.from)?.label ?? 'a closed conversation', f.turn)
+  }
 
   const side = (c: typeof a, index: number | null): { moments: number[]; index: number; frame: ReplayFrame } | null => {
     if (c === undefined) return null
@@ -69,10 +88,10 @@ export function ReplaySheet({ chats, turnsOf }: ReplaySheetProps): JSX.Element {
             <p className="replay__empty">That conversation is no longer on the canvas.</p>
           ) : (
             <div className="replay__cols" data-replay-cols={b === undefined ? '1' : '2'}>
-              <ReplayColumn label={a.label} cwd={a.cwd} state={sa} picked={picked.a}
+              <ReplayColumn panelId={a.id} snapshots={snaps.a} caption={caption(a.id)} label={a.label} cwd={a.cwd} state={sa} picked={picked.a}
                 onIndex={(i) => setAt((s) => ({ ...s, a: i }))} onPick={(p) => setPicked((s) => ({ ...s, a: p }))} side="a" />
               {b !== undefined && (
-                <ReplayColumn label={b.label} cwd={b.cwd} state={sb} picked={picked.b}
+                <ReplayColumn panelId={b.id} snapshots={snaps.b} caption={caption(b.id)} label={b.label} cwd={b.cwd} state={sb} picked={picked.b}
                   onIndex={(i) => setAt((s) => ({ ...s, b: i }))} onPick={(p) => setPicked((s) => ({ ...s, b: p }))} side="b" />
               )}
             </div>
@@ -109,8 +128,36 @@ function lastWords(frame: ReplayFrame): string | null {
   return null
 }
 
+/** M558. What a fork at this turn would get for files, said before the click. */
+function snapshotWords(rows: readonly TurnSnapshotRow[], turn: number): string {
+  if (turn < 1) return 'Nothing to branch from before the first message.'
+  const hit = snapshotFor(rows, turn)
+  if (hit === null) return rows.length === 0 ? 'No snapshots for this conversation — turn on "Snapshot each agent turn" in Settings to branch with its files.' : `No snapshot at or before ${messageWords(turn)}.`
+  return hit.exact ? `Branches with its files as they were after ${messageWords(turn)}.` : `Branches with its files from after ${messageWords(hit.row.turn)}, the nearest snapshot before this.`
+}
+
+function BranchButton(props: { panelId: string; turn: number; snapshots: readonly TurnSnapshotRow[]; side: 'a' | 'b' }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  useEffect(() => { setSaid(null) }, [props.panelId, props.turn])
+  const ready = props.turn >= 1 && snapshotFor(props.snapshots, props.turn) !== null
+  return (
+    <div className="replay__branch" data-replay-branch={props.side}>
+      <button type="button" className="replay__branch-go" disabled={busy || !ready} aria-busy={busy}
+        onClick={() => {
+          setBusy(true)
+          void branchFromHere(props.panelId, props.turn).then((answer) => { setSaid(answer.sentence); setBusy(false) })
+        }}>Branch from here</button>
+      <span className="replay__branch-why" data-replay-branch-words>{said ?? snapshotWords(props.snapshots, props.turn)}</span>
+    </div>
+  )
+}
+
 function ReplayColumn(props: {
   side: 'a' | 'b'
+  panelId: string
+  snapshots: readonly TurnSnapshotRow[]
+  caption: string | undefined
   label: string
   cwd: string | undefined
   state: { moments: number[]; index: number; frame: ReplayFrame } | null
@@ -129,6 +176,7 @@ function ReplayColumn(props: {
   return (
     <section className="replay__col" data-replay-side={props.side} aria-label={`Replay of ${props.label}`}>
       <h3 className="replay__who">{props.label}</h3>
+      {props.caption !== undefined && <p className="replay__forked" data-replay-forked>{props.caption}</p>}
       <input type="range" className="replay__scrub" data-replay-scrub={props.side} min={0} max={moments.length - 1} value={index}
         aria-label={`Moment in ${props.label}`} aria-valuetext={`turn ${frame.turns.length} of ${moments.length}`}
         onChange={(e) => props.onIndex(Number(e.target.value))} />
@@ -137,6 +185,7 @@ function ReplayColumn(props: {
         {index === moments.length - 1 ? ' · latest' : ''}
       </p>
       {said !== null && <blockquote className="replay__said">{said}</blockquote>}
+      <BranchButton panelId={props.panelId} turn={frameTurn(frame.turns)} snapshots={props.snapshots} side={props.side} />
       <h4 className="replay__section">Files by then</h4>
       {frame.files.length === 0 ? <p className="replay__empty">No file changed by this moment.</p> : (
         <ul className="replay__files">

@@ -79,6 +79,13 @@ export interface BackendDef {
    * another vocabulary (ACP kinds, a vendor's own) is never batched.
    */
   batchesReads: boolean
+  /**
+   * M557 (lane K). A fork from an earlier turn can carry the conversation:
+   * the CLI's own transcript is a file main can cut at a prompt and resume
+   * under a new id (main/turn-forks.ts). False forks the files only, and the
+   * fork says so.
+   */
+  forksTurns: boolean
   /** M120. The tool-denying argv for a chat with no folder. Absent means the row DECLINES chat mode by name (`reasons.noSandbox`). */
   sandboxArgs?: readonly string[]
   /** M120. A closed list of model names where the CLI has one; absent means free text. */
@@ -124,6 +131,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     appendsPrompt: true,
     handshake: false,
     batchesReads: true,
+    forksTurns: true,
     // Plan mode: read-only, no edits, no shell writes — the one flag that makes a chat with no folder safe.
     sandboxArgs: ['--permission-mode', 'plan'],
     reasons: {
@@ -153,6 +161,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     appendsPrompt: false,
     handshake: false,
     batchesReads: false,
+    forksTurns: false,
     sandboxArgs: ['--sandbox', 'read-only'],
     reasons: {
       noCli: 'codex was not found on the login PATH — install it, or check the environment report',
@@ -188,6 +197,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     appendsPrompt: false,
     handshake: false,
     batchesReads: false,
+    forksTurns: false,
     // Denial rules outrank --allow-all-tools (`copilot help permissions`).
     sandboxArgs: ['--deny-tool', 'shell', '--deny-tool', 'write'],
     // The fixtures' own `availableModels`; `auto` (the CLI's router) is what NO `--model` means, so it is the empty choice, not a second row.
@@ -227,6 +237,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     appendsPrompt: false,
     handshake: true,
     batchesReads: false,
+    forksTurns: false,
     reasons: {
       noCli: 'copilot was not found on the login PATH — install it, or check the environment report',
       noInterrupt: 'nothing is answering — there is no turn to cancel',

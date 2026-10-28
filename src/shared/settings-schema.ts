@@ -191,6 +191,18 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // M571 (lane O). Off by default: drafting a rule from lessons, and (M573)
+    // replaying a task to prove it, each run an agent and spend money. Not
+    // planWritable: an agent never turns on a door that runs agents.
+    id: 'learn.agents',
+    label: 'Lessons: let an agent draft and prove rules',
+    description: 'on the Lessons page, a press can ask an agent (with no tools) to draft a CLAUDE.md line or a skill from related lessons, and another can prove a draft by replaying the task in a scratch copy, where an agent can read and edit files but run no command; each press is one paid run, and nothing is written to your repository until you accept it',
+    keywords: ['lessons', 'learn', 'rules', 'claude.md', 'skill', 'propose', 'draft', 'harness'],
+    type: 'boolean',
+    default: false,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agents.budgetUsd',
     label: 'Budget for this canvas',
     description: 'stop this canvas\'s agents when their reported cost reaches this many dollars — a send past this is refused by name; 0 is no ceiling',
@@ -199,6 +211,60 @@ export const SETTINGS: readonly SettingDef[] = [
     default: 0,
     min: 0,
     max: 1000,
+    category: AGENT_CATEGORY
+  },
+  {
+    // M553 (lane J). Off unless a person turns it on, and never
+    // `planWritable`: a plan that could set this would be an agent choosing to
+    // run itself with prompts off. On, Tonight and auto mode OFFER a
+    // sandboxed run per task; nothing becomes sandboxed by this switch alone.
+    id: 'vm.lanes',
+    label: 'Sandboxed lanes',
+    description: 'let Tonight and auto mode run a task in a throwaway Linux VM with prompts off — only its folder is shared, and the network is an allowlist',
+    keywords: ['sandbox', 'sandboxed', 'vm', 'virtual machine', 'container', 'docker', 'orbstack', 'yolo', 'prompts off', 'isolation'],
+    type: 'boolean',
+    default: false,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'vm.cpus',
+    label: 'Sandboxed lane CPUs',
+    description: 'how many CPU cores one sandboxed lane\'s VM may use',
+    keywords: ['sandbox', 'vm', 'cpu', 'cores', 'cap'],
+    type: 'number',
+    default: 4,
+    min: 1,
+    max: 64,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'vm.memoryMiB',
+    label: 'Sandboxed lane memory (MiB)',
+    description: 'how much memory one sandboxed lane\'s VM may use, in MiB',
+    keywords: ['sandbox', 'vm', 'memory', 'ram', 'cap'],
+    type: 'number',
+    default: 4096,
+    min: 256,
+    max: 262144,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'vm.image',
+    label: 'Sandboxed lane image',
+    description: 'the image a sandboxed lane boots — build it from docs/streams/vm-lane/ (it carries claude and the network lock)',
+    keywords: ['sandbox', 'vm', 'image', 'container', 'docker'],
+    type: 'text',
+    default: 'terminal-canvas/lane:1',
+    category: AGENT_CATEGORY
+  },
+  {
+    // Comma-separated, beyond the model's own hosts, which are always allowed.
+    id: 'vm.allowHosts',
+    label: 'Sandboxed lane network allowlist',
+    description: 'hosts a sandboxed lane may reach besides Claude\'s own, comma-separated (a leading *. allows subdomains) — e.g. registry.npmjs.org; every host here is a way out for what the agent reads, so avoid wide wildcards like *.amazonaws.com',
+    keywords: ['sandbox', 'vm', 'network', 'allowlist', 'egress', 'hosts', 'proxy', 'firewall'],
+    type: 'text',
+    default: '',
     category: AGENT_CATEGORY
   },
   {
@@ -259,6 +325,17 @@ export const SETTINGS: readonly SettingDef[] = [
     default: 0,
     min: 0,
     max: 1000,
+    category: AGENT_CATEGORY
+  },
+  {
+    // M556 (lane K). Off by default: a snapshot writes objects and a hidden
+    // ref into the person's own repository, which is a write outside the app.
+    id: 'agents.turnSnapshots',
+    label: 'Snapshot each agent turn',
+    description: 'when an agent in a git repository finishes a turn, keep its files as a hidden snapshot (never a branch, never your index or stash), so Replay can branch a new worktree and conversation from that turn; the newest 50 per agent are kept, and closing the agent removes them',
+    keywords: ['fork', 'branch', 'turn', 'snapshot', 'replay', 'worktree', 'rewind', 'checkpoint', 'history'],
+    type: 'boolean',
+    default: false,
     category: AGENT_CATEGORY
   },
   {

@@ -1,7 +1,7 @@
 import { join } from 'node:path'
-import { mkdirSync, rmSync, unlinkSync, statSync } from 'node:fs'
+import { mkdirSync, rmSync, unlinkSync, statSync, copyFileSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { Notification, app, net, powerMonitor, shell } from 'electron'
-import { PtyManager, type AttentionSink } from '../pty-manager'
+import { PtyManager, expandTilde, type AttentionSink } from '../pty-manager'
 import { createLayoutSnapshots } from '../layout-snapshots'
 import { createLayoutStore, type LayoutStore } from '../layout-store'
 import { createCredentialStore, type CredentialStore } from '../credential-store'
@@ -17,6 +17,8 @@ import { createWorktreeManager } from '../worktree-manager'
 import { createBaselineCapture } from '../baseline-capture'
 import { createGitRunner } from '../git-runner'
 import { createMemoryStore } from '../memory-store'
+import { createLessonStore, type LessonStore } from '../lesson-store'
+import { withLessonCapture } from '../lesson-capture'
 import { createBrokerAudit } from '../broker-audit'
 import { createDecisionAudit, type DecisionAudit } from '../decision-audit'
 import { createLastExitStore, type LastExitStore } from '../last-exit'
@@ -25,7 +27,7 @@ import { createAttentionUnion } from '../approvals'
 import { createPhoneAlerts, type PhoneAlerts } from '../phone-alerts'
 import { createPhoneAnswers, POLL_MAX_CHARS } from '../phone-answers'
 import { recordDecision } from '../decision-audit'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { denyMessageFor, type PermissionAnswer } from '../../shared/transcript'
 import { FileWatchers } from '../file-watch'
 import { ToolboxCache } from '../toolbox-cache'
@@ -34,6 +36,9 @@ import { IPC_EVENTS } from '../../shared/ipc-contract'
 import { needsYouCount, needsYouNamed } from '../../shared/attention-words'
 import type { MainState } from './context'
 import { menuBarCount } from '../menu-bar'
+import { createTurnForks, type TurnForks } from '../turn-forks'
+import { resolveTranscript } from '../transcript-reader'
+import { homedir, tmpdir } from 'node:os'
 
 /**
  * Everything main owns for the whole life of the process: the stores rooted
@@ -73,6 +78,8 @@ export interface Stores {
   fileWatchers: FileWatchers
   toolboxCache: ToolboxCache
   memoryStore: ReturnType<typeof createMemoryStore>
+  /** M570 (lane O). What discards and sent comments taught, per repository. */
+  lessonStore: LessonStore
   teammateMemory: ReturnType<typeof createMemoryStore>
   brokerAudit: ReturnType<typeof createBrokerAudit>
   /** M369. Every person-sourced ledger row, scrubbed, outliving the ledger's trim. */
@@ -87,6 +94,8 @@ export interface Stores {
   lastExit: LastExitStore
   /** M316. The pool's job journal; a saved `running` is converted to interrupted at construction. */
   jobs: JobStore
+  /** M556–M560 (lane K). Turn snapshots and forks; the capture is called from the agent fan-out. */
+  turnForks: TurnForks
 }
 
 /** M532. A response body as text, read until `max` characters and then cancelled. */
@@ -169,7 +178,10 @@ export function createStores(state: MainState): Stores {
   let scratchIndexSeq = 0
   // M53. The subject's own peer count is the refusal the renderer cannot make
   // stale; removal is a FILE unlink through node, never a git write.
-  const reviewDiscard = createReviewDiscarder({
+  // M570 (lane O). Each discarded file becomes a lesson — read before the
+  // discard, recorded after it, never able to block it (lesson-capture.ts).
+  const lessonStore = createLessonStore({ dir: join(userData, 'lessons') })
+  const reviewDiscard = withLessonCapture(createReviewDiscarder({
     run: gitRunner,
     peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
     removeFile: (p) => unlinkSync(p),
@@ -179,6 +191,11 @@ export function createStores(state: MainState): Stores {
     // M285. The engine's own identity read, so the re-check before a write
     // and the answer the person read are one computation.
     identityOf: (root, base) => reviewEngine.identityOf(root, base)
+  }), {
+    fileDiff: (req) => reviewEngine.fileDiff(req),
+    commonRootOf: (root) => reviewEngine.commonRootOf(root),
+    record: (lessons) => { lessonStore.add(lessons) },
+    now: () => Date.now()
   })
   const reviewCommit = createReviewCommitter({
     run: gitRunner,
@@ -445,12 +462,38 @@ export function createStores(state: MainState): Stores {
   const lastExit = createLastExitStore({ file: join(userData, 'last-exit.json') })
   // M316. Built here, before any pool can start — see job-store.ts.
   const jobs = createJobStore({ file: join(userData, 'jobs.json') })
+  // M556–M560 (lane K). `session` reads state.agents at USE (context.ts's
+  // rule): the runtime is built after these stores, at whenReady.
+  const turnForks = createTurnForks({
+    run: gitRunner,
+    enabled: () => layoutStore.getSetting('agents.turnSnapshots') === true,
+    worktreesDir: join(userData, 'worktrees'),
+    addWorktree: (record) => layoutStore.addWorktree(record),
+    session: (panelId) => {
+      const snap = state.agents?.get(panelId)
+      return snap === undefined || snap === null ? undefined : { cwd: expandTilde(snap.cwd), sessionId: snap.sessionId, backend: snap.backend }
+    },
+    transcripts: agentTranscripts,
+    claude: { find: resolveTranscript, projectsDir: join(homedir(), '.claude', 'projects') },
+    fs: {
+      readText: (path) => { try { return readFileSync(path, 'utf8') } catch { return undefined } },
+      writeText: (path, text) => { writeFileSync(path, text, { flag: 'wx' }) },
+      copy: (from, to) => { try { copyFileSync(from, to); return true } catch { return false } },
+      remove: (path) => { rmSync(path, { force: true }) },
+      mkdirp: (path) => { mkdirSync(path, { recursive: true }) },
+      exists: (path) => existsSync(path)
+    },
+    tmpDir: tmpdir(),
+    newSessionId: () => randomUUID(),
+    mintId: () => `wt-${randomUUID().slice(0, 8)}`,
+    now: () => new Date()
+  })
 
   return {
     layoutStore, layoutSnapshots, credentialStore, gitRunner, reviewEngine,
     reviewDiscard, reviewCommit, baselineCapture, captureBaseline, dropBaseline,
     runLedger, checkOutputs, agentTranscripts, scrollbackLog, worktreeManager, ptyManager,
-    fileWatchers, toolboxCache, memoryStore, teammateMemory, brokerAudit, decisionAudit,
-    attention, phoneAlerts, controlSocketPath, launcherDir, lastExit, jobs
+    fileWatchers, toolboxCache, memoryStore, lessonStore, teammateMemory, brokerAudit, decisionAudit,
+    attention, phoneAlerts, controlSocketPath, launcherDir, lastExit, jobs, turnForks
   }
 }

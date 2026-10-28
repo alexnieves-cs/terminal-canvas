@@ -133,6 +133,66 @@ export type AskOutcome = 'allowed' | 'denied' | 'withdrawn'
 export const ASK_OUTCOMES: readonly AskOutcome[] = ['allowed', 'denied', 'withdrawn']
 export const CANVAS_ASKS = 'canvas:asks'
 
+/**
+ * M581. A HANDOFF: the person responsible for an agent passes it to a
+ * teammate — by name, or to anyone in the workspace — with a note. The agent
+ * keeps running where it runs (a process does not move between Macs); what
+ * moves is whose it is to watch, answer and review: its STEWARD. The panel's
+ * owner is its first steward; each accepted handoff names the next one.
+ *
+ * `n` is the handoff's place in its panel's chain (1 for the first). The
+ * server checks it against the handoffs already handed, so the chain is
+ * ordered by the server's serial judgement and never by anyone's clock —
+ * `at` is for display only.
+ *
+ * `note` is SCRUBBED on the writer's machine before it is written, and
+ * `scrubbed` says how many secrets the scrub replaced (the asks' rule).
+ */
+export interface SharedHandoff {
+  /** `<host>_<local id>`, like every doc key. */
+  id: string
+  /** The handed agent's panel, as a doc key. */
+  panel: string
+  /** The Supabase user id handing it: the panel's steward when it opened. */
+  from: string
+  /** Who may take it: one user id, or '' for anyone who may edit the workspace. */
+  to: string
+  note: string
+  scrubbed: number
+  at: number
+  n: number
+}
+export type HandoffReply = 'accept' | 'decline'
+export const CANVAS_HANDOFFS = 'canvas:handoffs'
+/** A handoff note's cap, in UTF-16 code units: a paragraph a person reads, never a transcript. */
+export const HANDOFF_NOTE_MAX = 600
+
+/**
+ * M581. The SHARED REVIEW QUEUE: an agent's result put in front of the team.
+ * Posted by the agent's steward; any OTHER editor may say they are looking
+ * (`claim`) and give one verdict in their own name; the poster closes it.
+ * The author never reviews their own result — the point is a second pair of
+ * eyes. `title` and `summary` are scrubbed before they leave the poster's
+ * machine; nothing else about the work (its diff, its transcript) is sent.
+ */
+export interface SharedReview {
+  id: string
+  panel: string
+  /** Who asks for the review: the panel's steward when it was posted. */
+  owner: string
+  title: string
+  summary: string
+  scrubbed: number
+  at: number
+}
+export type ReviewVerdict = 'approve' | 'changes'
+export type ReviewOutcome = 'approved' | 'changes' | 'withdrawn'
+export const REVIEW_OUTCOMES: readonly ReviewOutcome[] = ['approved', 'changes', 'withdrawn']
+export const CANVAS_REVIEWS = 'canvas:reviews'
+/** A review's title and summary caps: a line and a short paragraph. */
+export const REVIEW_TITLE_MAX = 160
+export const REVIEW_SUMMARY_MAX = 600
+
 export type CanvasOp =
   /** A move or resize: only the fields that changed. */
   | { kind: 'rect'; panelId: string; fields: Partial<Record<RectField | 'z', number>> }
@@ -164,6 +224,20 @@ export type CanvasOp =
   | { kind: 'ask-answer'; askId: string; by: string; answer: AskAnswer }
   /** M375. The ask decided or withdrawn, by its owner, once. */
   | { kind: 'ask-close'; askId: string; outcome: AskOutcome }
+  /** M581. A handoff opened by the panel's steward, in their own name. */
+  | { kind: 'handoff-open'; handoff: SharedHandoff }
+  /** M581. Taken or turned down, in the replier's own name, by the named person (or anyone, for an open offer). */
+  | { kind: 'handoff-reply'; handoffId: string; by: string; reply: HandoffReply }
+  /** M581. An offer nobody has taken yet, called back by the person who made it. */
+  | { kind: 'handoff-withdraw'; handoffId: string }
+  /** M581. A result put in the team's review queue by the panel's steward. */
+  | { kind: 'review-open'; review: SharedReview }
+  /** M581. "I'm looking at it", in the claimer's own name. */
+  | { kind: 'review-claim'; reviewId: string; by: string }
+  /** M581. One reviewer's verdict, in their own name, once. */
+  | { kind: 'review-verdict'; reviewId: string; by: string; verdict: ReviewVerdict }
+  /** M581. Closed by the person who posted it, once. */
+  | { kind: 'review-close'; reviewId: string; outcome: ReviewOutcome }
   /** Server-side only: the Team view's snapshot key in the `team` map. */
   | { kind: 'team-snapshot'; key: string }
   /** Server-side only: anything an update does that none of the above names. Always refused. */
@@ -182,6 +256,18 @@ export interface OpContext {
   askOwner?: string | null
   /** M375. The ask was already closed before this op. */
   askClosed?: boolean
+  /**
+   * M581. For handoff-open / review-open: the target panel's STEWARD before
+   * this op (its owner, or whoever took its last handoff), whether a handoff
+   * of it is still open, and how many of its handoffs were handed.
+   */
+  panelSteward?: string | null
+  panelHandoffOpen?: boolean
+  panelHanded?: number
+  /** M581. For handoff-reply / handoff-withdraw: the handoff as it stood, or null when there is none. */
+  handoff?: { from: string; to: string; settled: boolean } | null
+  /** M581. For review-claim / review-verdict / review-close: the review as it stood, or null when there is none. */
+  review?: { owner: string; closed: boolean; decision?: 'open' | 'approved' | 'changes' } | null
 }
 
 export type Verdict = { ok: true } | { ok: false; reason: string }
@@ -211,6 +297,16 @@ const OK: Verdict = { ok: true }
  *   editor      own agent     own name, open    own ask, once
  *   viewer      -             -                 -
  *   (no share)  -             -                 -
+ *
+ *              handoff-open        handoff-reply             handoff-withdraw (M581)
+ *   owner       as its steward      own name, named or open   own, untaken
+ *   editor      as its steward      own name, named or open   own, untaken
+ *   viewer      -                   -                         -
+ *
+ *              review-open    review-claim / -verdict     review-close (M581)
+ *   owner       as steward     own name, not the poster    own, once
+ *   editor      as steward     own name, not the poster    own, once
+ *   viewer      -              -                           -
  *
  * Moving someone else's panel is allowed to an editor: arranging the shared
  * canvas IS the point of editing it. Deleting it is not — a tombstone is
@@ -287,6 +383,63 @@ export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx:
       if (ctx.askOwner === undefined || ctx.askOwner === null) return refuse(`no ask is called ${op.askId}`)
       if (ctx.askOwner !== ctx.userId) return refuse('only the person whose agent asked closes the ask')
       return ctx.askClosed === true ? refuse('that ask is already decided') : OK
+    // M581. A handoff is made by whoever holds the agent NOW — its steward —
+    // one at a time, in order; taken or declined only by the person it names
+    // (anyone but its maker, for an open offer); withdrawn only by its maker
+    // and only while nobody has taken it.
+    case 'handoff-open': {
+      const h = op.handoff
+      if (h.from !== ctx.userId) return refuse('a handoff is made in its maker\'s name only')
+      if (ctx.panelOwner === null) return refuse(`panel ${h.panel} is not on the shared canvas`)
+      if (ctx.panelSteward !== ctx.userId) return refuse('only the person who holds an agent now hands it on')
+      if (ctx.panelHandoffOpen === true) return refuse('that agent already has a handoff waiting')
+      if (h.n !== (ctx.panelHanded ?? 0) + 1) return refuse(`that agent's next handoff is number ${(ctx.panelHanded ?? 0) + 1}`)
+      if (h.to === h.from) return refuse('a handoff goes to someone else')
+      if (h.note.length > HANDOFF_NOTE_MAX) return refuse('that note is longer than a handoff carries')
+      return OK
+    }
+    case 'handoff-reply': {
+      const h = ctx.handoff
+      if (h === undefined || h === null) return refuse(`no handoff is called ${op.handoffId}`)
+      if (h.settled) return refuse('that handoff is already settled')
+      if (op.by !== ctx.userId) return refuse('a handoff is taken in the taker\'s own name only')
+      if (op.by === h.from) return refuse('a handoff is not taken by the person who made it')
+      if (h.to !== '' && h.to !== op.by) return refuse('that handoff is for someone else')
+      return OK
+    }
+    case 'handoff-withdraw': {
+      const h = ctx.handoff
+      if (h === undefined || h === null) return refuse(`no handoff is called ${op.handoffId}`)
+      if (h.from !== ctx.userId) return refuse('only the person who made a handoff withdraws it')
+      return h.settled ? refuse('that handoff is already settled') : OK
+    }
+    case 'review-open': {
+      const r = op.review
+      if (r.owner !== ctx.userId) return refuse('a review is asked for in the asker\'s name only')
+      if (ctx.panelOwner === null) return refuse(`panel ${r.panel} is not on the shared canvas`)
+      if (ctx.panelSteward !== ctx.userId) return refuse('only the person who holds an agent now asks for its review')
+      if (ctx.review !== undefined && ctx.review !== null) return refuse(`review ${r.id} already exists`)
+      if (r.title.length > REVIEW_TITLE_MAX || r.summary.length > REVIEW_SUMMARY_MAX) return refuse('that review is longer than the queue carries')
+      return OK
+    }
+    case 'review-claim':
+    case 'review-verdict': {
+      const r = ctx.review
+      if (r === undefined || r === null) return refuse(`no review is called ${op.reviewId}`)
+      if (r.closed) return refuse('that review is already closed')
+      if (op.by !== ctx.userId) return refuse('a review is given in the reviewer\'s own name only')
+      return op.by === r.owner ? refuse('nobody reviews their own result') : OK
+    }
+    case 'review-close': {
+      const r = ctx.review
+      if (r === undefined || r === null) return refuse(`no review is called ${op.reviewId}`)
+      if (r.owner !== ctx.userId) return refuse('only the person who asked for a review closes it')
+      if (r.closed) return refuse('that review is already closed')
+      // The poster withdraws, or records what the reviewers decided — never
+      // their own verdict on their own result.
+      if (op.outcome !== 'withdrawn' && op.outcome !== r.decision) return refuse(r.decision === 'open' ? 'nobody has judged that review yet' : `the reviewers decided ${r.decision}`)
+      return OK
+    }
   }
 }
 

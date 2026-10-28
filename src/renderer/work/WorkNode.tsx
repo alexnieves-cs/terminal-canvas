@@ -2,7 +2,9 @@ import { useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { WorkPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { panelState, providerState } from '@renderer/panels/panel-state'
+import { cloudLaneWord, panelState, providerState } from '@renderer/panels/panel-state'
+import { PROVIDERS as CLOUD_PROVIDERS } from '@shared/cloud-lane'
+import { useCloudLane } from './cloud-lanes-store'
 import { useNow } from '@renderer/components/useNow'
 import { shellControl } from '@renderer/shell/shell-control'
 import { Menu, MenuTrigger, MenuContent, MenuItem } from '@renderer/primitives'
@@ -90,8 +92,24 @@ export interface WorkNodeProps {
    * room to state it.
    */
   onSwarm: (itemId: string, preset: SwarmPresetId) => void
+  /**
+   * M548. THE CARD'S TOURNAMENT DOOR — the canvas gesture behind the
+   * `tournament` verb: the task on several agents at once, each in its own
+   * worktree, its check picking the winner. Absent renders nothing.
+   */
+  onTournament?: (itemId: string) => void
+  /** M606. The same tournament, with the agents chosen first. */
+  onTournamentField?: (itemId: string) => void
   /** M275. Whether any agent CLI answered discovery — a row of seats needs one, and the refusal says so by name. */
   agentAvailable?: boolean
+  /**
+   * M543. THE CARD'S CLOUD DOOR — the canvas gesture behind `cloud-send`, by
+   * the CARD's panel id like every door of that verb. Main asks before
+   * anything is sent, so the menu row starts the ask rather than the send.
+   */
+  onSendToCloud?: (panelId: string, provider: string) => void
+  /** M544. Merge the card's ready cloud lane — the canvas door of `cloud-merge`. */
+  onMergeCloud?: (panelId: string) => void
   /** M115. Open the pull request from the lane. */
   onOpenPr: (itemId: string) => void
   /** M115. The PR door's synchronous refusal (`prRefusalSync`), or null when the door is open — the lane's standing is asked at the click. */
@@ -119,6 +137,9 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
   const { panel, item } = props
   const [assignOpen, setAssignOpen] = useState(false)
   const [swarmOpen, setSwarmOpen] = useState(false)
+  const [cloudOpen, setCloudOpen] = useState(false)
+  const cloud = useCloudLane(item?.id)
+  const cloudWord = cloud === undefined ? undefined : cloudLaneWord(cloud.state)
   const readOnly = props.readOnly === true
   const now = useNow(item?.remoteState !== undefined, 60_000)
   const state = panelState({ kind: 'work', status: undefined, dormant: false, ...(item === undefined ? {} : { work: { state: item.state } }) }, undefined)
@@ -241,6 +262,16 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
               {item.pr !== undefined && (
                 <div><dt>pr</dt><dd><a href={item.pr.url} data-work-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
                   onClick={(e) => { e.preventDefault(); openLink((item.pr as { url: string }).url) }}>#{item.pr.number}</a></dd></div>
+              )}
+              {/* M543. The cloud lane's word in the state vocabulary, its reason on hover, and the PR it opened. */}
+              {cloud !== undefined && cloudWord !== undefined && (
+                <div><dt>cloud</dt><dd data-work-cloud={cloud.state} data-tone={cloudWord.tone} title={cloud.reason}>
+                  {cloudWord.word}
+                  {/* M544. The link opens the PR's files: reviewing it is reading those. */}
+                  {cloud.pr !== undefined && <>{' · '}<a href={`https://github.com/${cloud.repo}/pull/${cloud.pr}/files`} data-work-cloud-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
+                    onClick={(e) => { e.preventDefault(); openLink(`https://github.com/${cloud.repo}/pull/${cloud.pr as number}/files`) }}>#{cloud.pr}</a></>}
+                  {cloud.stat !== undefined && <span data-work-cloud-stat>{` · +${cloud.stat.additions} −${cloud.stat.deletions}`}</span>}
+                </dd></div>
               )}
               {props.execution !== undefined && <div><dt>execution</dt><dd data-work-execution data-tone={props.execution.tone}>{props.execution.word}</dd></div>}
               {props.retainedOutcome !== undefined && <div><dt>last outcome</dt><dd data-work-outcome={props.retainedOutcome.execution}>{props.retainedOutcome.execution.replace('-', ' ')}</dd></div>}
@@ -374,9 +405,49 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                         </li>
                       )
                     })}
+                    {/* M548. The tournament rides this menu rather than a new
+                        button: it is an arrangement of agents over the task too,
+                        and the card's resting face stays as it was. Refused by
+                        the two facts the card holds — a lane to fork from and a
+                        check to decide — in the verb's own words. */}
+                    {props.onTournament !== undefined && (() => {
+                      const why = item.panelId === undefined ? 'no lane yet — start work on this item first'
+                        : (item.checks ?? []).length === 0 && (item.recipeUsed?.definition.checks ?? []).length === 0 ? 'this task has no check — add one; the check is what picks the winner' : null
+                      return (<>
+                        <li role="none">
+                          <MenuItem className="pf__verb pf__verb--word" data-work-tournament disabled={why !== null}
+                            title={why ?? 'the task on several agents at once, each in its own worktree — its check picks the winner'}
+                            onSelect={() => props.onTournament?.(item.id)}>Tournament</MenuItem>
+                        </li>
+                        {props.onTournamentField !== undefined && (
+                          <li role="none">
+                            <MenuItem className="pf__verb pf__verb--word" data-work-tournament-field disabled={why !== null}
+                              title={why ?? 'choose which agents race, then start'}
+                              onSelect={() => props.onTournamentField?.(item.id)}>Tournament with…</MenuItem>
+                          </li>
+                        )}
+                      </>)
+                    })()}
                   </ul>
                 </MenuContent>
               </Menu>
+              {cloud?.state === 'ready' && props.onMergeCloud !== undefined && verb('cloud-merge', 'Merge', null, () => props.onMergeCloud?.(panel.rect.id))}
+              {props.onSendToCloud !== undefined && (
+                <Menu open={cloudOpen} onOpenChange={setCloudOpen}>
+                  {menuVerb('cloud', 'Cloud…', null)}
+                  <MenuContent>
+                    <ul className="work-node__menu" role="menu" data-work-cloud-menu>
+                      {CLOUD_PROVIDERS.map((p) => (
+                        <li key={p.id} role="none">
+                          <MenuItem className="pf__verb pf__verb--word" data-work-cloud-send={p.id}
+                            title={`hand this task to ${p.label}; it comes back as a pull request`}
+                            onSelect={() => props.onSendToCloud?.(panel.rect.id, p.id)}>{p.label}</MenuItem>
+                        </li>
+                      ))}
+                    </ul>
+                  </MenuContent>
+                </Menu>
+              )}
               {verb('done', 'Done', null, () => props.onDone(item.id))}
               {props.retainedOutcome !== undefined && verb('clear-history', 'Clear history', null, () => props.onClearHistory(item.id))}
             </div>
