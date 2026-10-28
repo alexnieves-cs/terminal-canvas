@@ -329,6 +329,37 @@ temporary repository. Decisions:
 - **M568** — a Pages workflow publishes it on merge to main.
 - **M569** — the README links it.
 
+Decisions (lane N):
+
+- **The renderer is not forked.** `vite.web.config.ts` builds `src/renderer`
+  as it is, entered through `src/web/main.ts`, which installs the fake bridge
+  first. The demo is what the app draws; nothing under `src/renderer` knows it
+  is in a browser.
+- **The fake is typed where it answers, and answers by declared shape
+  elsewhere.** `src/web/fake-bridge.ts` checks each door it implements
+  against `CanvasBridge`. Every other door is a Proxy (`stub-door.ts`) that
+  answers in the return shape `scripts/lib/bridge-shapes.cjs` reads off the
+  contract: `[]`, `null`, or the union's "not here" member. A plain-record
+  read has no stand-in, so each is answered by hand (`demo.shapes.2`). The
+  method's name decides only whether the visitor is told "in the app". A
+  name-based guess blanked the page from the find box (the critic's finding).
+- **The world is `world-sim` itself**, given scripts keyed by the cast's
+  panel ids, so the World room, the panel state word and the terminal read one
+  stream. Scripts open on the cast's frame (3 waiting, 1 failed, 4 working,
+  `demo.world.1`), then work, wait for you, and finish.
+- **The canvas is the rd-steward cast**, through a TS port of `load.cjs`
+  (a browser cannot `node:fs`); `demo.layout.1` holds the two byte-equal.
+- **Not an outward door.** The page is built in CI from fixture text only;
+  nothing on a person's Mac reaches it, so it does not join `outward`'s list.
+  Telemetry is pinned off (`demo.bridge.2`).
+- **The browser half is a smoke test, not a suite.** `scripts/demo-smoke.cjs`
+  needs a browser and `out/web`; pages.yml runs it on every PR and before each
+  deploy, using the runner's Chrome through `playwright-core --no-save`, so
+  the lock file does not change.
+- **First visit skips setup.** The app's four-step setup names a workspace and
+  probes a Mac; `src/web/first-visit.ts` stamps the version so a visitor lands
+  on the canvas.
+
 ## Q — The app, hosted (M590–M599)
 
 Alex's ask (2026-10-26): the whole app in the cloud, opened from any browser,

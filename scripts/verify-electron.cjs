@@ -44,6 +44,8 @@ const { ok, results } = require('./lib/checks.cjs').createChecks()
 const ACCEPTED = [
   { check: 'CSP_GLOBAL_CHECK', file: 'src/renderer/index.html', sample: "content=\"default-src 'self'",
     why: "xterm sets inline styles on its layers; script-src stays 'self' and nothing loads remotely" },
+  { check: 'CSP_GLOBAL_CHECK', file: 'src/web/index.html', sample: "content=\"default-src 'self'",
+    why: "lane N's browser demo: the renderer's own CSP, unchanged, for the same xterm reason; the page is static and has no preload or Node" },
   { check: 'CSP_GLOBAL_CHECK', file: 'src/host-web/index.html', sample: "content=\"default-src 'self'",
     why: "lane Q's hosted page: the renderer's own CSP, unchanged; the WebSocket and /host-info.js are same-origin, so 'self' covers both" },
   { check: 'SANDBOX_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: 'sandbox: false,',
