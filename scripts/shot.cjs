@@ -746,6 +746,17 @@ const SCENES = [
   { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram (scan, workers, judge, report) with the edge words between them; the verb row with Run ENABLED (the pool has its caller since M138), Triggers, Stop (disabled — no pool is running), Save (disabled — the draft is kept on the panel; Save on the diagram arrives with M184), Delete and Build with AI; the Definition tab selected.',
     run: async (k) => {
       await k.goTo('the workflow'); await sleep(600)
+      // M463. React Flow measures each node's handles once, when the node's
+      // box changes, from getBoundingClientRect: measured while the canvas
+      // camera was still landing, the handles sat 12px off (the workers-to-
+      // judge line at another x, "exit 0" clipped to "kit 0"), and nothing
+      // moved again to correct them, so the wrong routing held perfectly
+      // still. One pixel on every node's width and back makes its
+      // ResizeObserver measure again, now with the camera at rest.
+      await k.js(`(() => { for (const n of document.querySelectorAll('.react-flow__node')) n.style.minWidth = (n.offsetWidth + 1) + 'px'; return true })()`)
+      await sleep(200)
+      await k.js(`(() => { for (const n of document.querySelectorAll('.react-flow__node')) n.style.minWidth = ''; return true })()`)
+      await sleep(300)
       // M463. React Flow routes the edges after it has measured the nodes,
       // and on a loaded runner the shot sometimes landed between the two: the
       // workers-to-judge line at another x and its label clipped ("kit 0" for
@@ -1169,6 +1180,21 @@ const SCENES = [
       // M463. The shot lands in one of two end states (the map overlay in and
       // the camera framed 80px further right, or neither), 9.9% apart. Say
       // which, so a run that flips names its own cause.
+      await k.layoutStill()
+      // M463. Even with the layout still before the press, applyStarter's fit
+      // reads the safe area while the launcher is leaving, so one paint in
+      // four still framed 150px off (camera x -206 against -56, the map hidden
+      // against shown). The arrangement is framed again once nothing is moving,
+      // by the HUD's own Fit all as a person would press it; the pointer goes
+      // back where the starter press left it, so the hover is the same.
+      const fit = await k.js(`(() => { const b = document.querySelector('[data-hud-fit]'); if (!b) return null; const r = b.getBoundingClientRect(); return r.width === 0 ? null : { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      if (fit === null) throw new Error('starter scene: the HUD has no Fit all button to frame the arrangement with')
+      k.wc.focus()
+      k.wc.sendInputEvent({ type: 'mouseDown', ...fit, button: 'left', clickCount: 1 })
+      k.wc.sendInputEvent({ type: 'mouseUp', ...fit, button: 'left', clickCount: 1 })
+      const last = pressed[pressed.length - 1]
+      if (last) k.wc.sendInputEvent({ type: 'mouseMove', x: last[1], y: last[2] })
+      await sleep(600)
       await k.layoutStill()
       await k.cameraLog('starter')
       console.log(`[shot] starter: minimap ${await k.js(`(() => { const m = document.querySelector('[data-minimap]'); if (!m) return 'absent'; const r = m.getBoundingClientRect(); return JSON.stringify({ w: Math.round(r.width), x: Math.round(r.x), op: getComputedStyle(m).opacity, presence: m.getAttribute('data-presence') || m.className }) })()`)}`)
