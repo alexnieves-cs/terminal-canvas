@@ -259,6 +259,18 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
     lane: {
       async radar() { return { at: 0, collisions: [], unread: [] } }
     },
+    cloud: {
+      async radar() { return { at: 0, collisions: [], unread: [] } }
+    },
+    vm: {
+      async lanes() { return { lanes: [], egress: [] } }
+    },
+    learn: {
+      async read() { return { repos: [], agents: false } }
+    },
+    team: {
+      async flow() { return { handoffs: [], reviews: [], mine: [], stewards: [], held: [], teammates: [] } }
+    },
     setup: {
       async preflight(req) { return { tools: Object.fromEntries(req.tools.map((t) => [t, false])), ports: null } }
     },
