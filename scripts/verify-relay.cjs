@@ -486,7 +486,12 @@ function connect(port, tok, opts = {}) {
 
   // ── backpressure ──────────────────────────────────────────────────────────
   {
-    const { relay: bpRelay } = makeRelay({ deps: { backpressure: { high: 256 * 1024, low: 64 * 1024, cut: 256 * 1024 * 1024 }, ringBytes: 1024 * 1024 } })
+    // The heartbeat is pushed out of the way: a viewer whose socket is paused
+    // cannot read pings either, so with the suite's 150 ms beat a pump slower
+    // than two beats (a busy macOS runner) got the stalled viewer TERMINATED
+    // before it lagged, it never saw a resync, and bp.2 and bp.4 failed with
+    // nothing wrong in the backpressure. relay.heartbeat.1 covers the beat.
+    const { relay: bpRelay } = makeRelay({ deps: { backpressure: { high: 256 * 1024, low: 64 * 1024, cut: 256 * 1024 * 1024 }, ringBytes: 1024 * 1024, heartbeatMs: 10 * 60 * 1000 } })
     const bp = await bpRelay.listen(0, '127.0.0.1')
     const fast = await connect(bp, token(OWNER))
     fast.send({ t: 'spawn', program: 'shell', cols: 80, rows: 24, shareId: SHARE })
@@ -502,16 +507,7 @@ function connect(port, tok, opts = {}) {
     // twice what this loopback absorbs, plus HIGH, plus twice the ring, and never
     // less than the 5 MB this test was written with.
     const chunk = 16 * 1024
-    //
-    // The measure is a floor, not the answer: macOS autotunes a loopback
-    // socket's buffers up to kern.ipc.maxsockbuf (8 MB each side) as the stream
-    // runs, well past what a 50 ms probe sees, and then the stalled viewer never
-    // fell behind the ring at all, so no resync came and bp.2 had nothing to
-    // read (seen on the macOS runner, 2026-10-29). So the stream is also never
-    // smaller than both of those buffers full twice over, plus HIGH and the ring.
-    const MAX_SOCKBUF = 8 * 1024 * 1024
-    const absorbs = Math.max(await loopbackAbsorbs(), 2 * MAX_SOCKBUF)
-    const n = Math.max(320, Math.ceil((2 * absorbs + 256 * 1024 + 2 * 1024 * 1024) / chunk))
+    const n = Math.max(320, Math.ceil((2 * await loopbackAbsorbs() + 256 * 1024 + 2 * 1024 * 1024) / chunk))
     const stream = Buffer.alloc(chunk * n)
     for (let i = 0; i < stream.length; i++) stream[i] = 97 + ((i * 7 + (i >> 10)) % 26)
     // Like a real pty: one read per loop turn, and a paused pty produces nothing until resumed.
