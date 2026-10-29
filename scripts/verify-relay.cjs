@@ -502,7 +502,16 @@ function connect(port, tok, opts = {}) {
     // twice what this loopback absorbs, plus HIGH, plus twice the ring, and never
     // less than the 5 MB this test was written with.
     const chunk = 16 * 1024
-    const n = Math.max(320, Math.ceil((2 * await loopbackAbsorbs() + 256 * 1024 + 2 * 1024 * 1024) / chunk))
+    //
+    // The measure is a floor, not the answer: macOS autotunes a loopback
+    // socket's buffers up to kern.ipc.maxsockbuf (8 MB each side) as the stream
+    // runs, well past what a 50 ms probe sees, and then the stalled viewer never
+    // fell behind the ring at all, so no resync came and bp.2 had nothing to
+    // read (seen on the macOS runner, 2026-10-29). So the stream is also never
+    // smaller than both of those buffers full twice over, plus HIGH and the ring.
+    const MAX_SOCKBUF = 8 * 1024 * 1024
+    const absorbs = Math.max(await loopbackAbsorbs(), 2 * MAX_SOCKBUF)
+    const n = Math.max(320, Math.ceil((2 * absorbs + 256 * 1024 + 2 * 1024 * 1024) / chunk))
     const stream = Buffer.alloc(chunk * n)
     for (let i = 0; i < stream.length; i++) stream[i] = 97 + ((i * 7 + (i >> 10)) % 26)
     // Like a real pty: one read per loop turn, and a paused pty produces nothing until resumed.
@@ -526,7 +535,7 @@ function connect(port, tok, opts = {}) {
     // the first pump. Counting only, so it is cheap enough to poll.
     const received = (c, fromIndex) => {
       let n = 0
-      for (let i = c.log.length - 1; i >= fromIndex; i--) {
+      for (let i = c.log.length - 1; i >= Math.max(fromIndex, 0); i--) {
         const e = c.log[i]
         if (e.m && e.m.t === 'resync') return n + e.m.offset
         if (e.b) n += e.b.length
@@ -538,7 +547,8 @@ function connect(port, tok, opts = {}) {
     // Wait for the drain itself, not a fixed window: a slow runner can still be
     // delivering the ring (or send a second resync) after 300 ms, and bytes that
     // land after bp.4 takes its mark corrupt that check too.
-    await until(() => received(slow, slow.log.findLastIndex((e) => e.m && e.m.t === 'resync')) === stream.length, 5000 * Math.ceil(n / 320))
+    // No resync at all is bp.2's failure to report, not a reason to read log[-1].
+    await until(() => { const at = slow.log.findLastIndex((e) => e.m && e.m.t === 'resync'); return at >= 0 && received(slow, at) === stream.length }, 5000 * Math.ceil(n / 320))
     const lastResync = slow.log.findLastIndex((e) => e.m && e.m.t === 'resync')
     const after = Buffer.concat(slow.log.slice(lastResync + 1).filter((e) => e.b).map((e) => e.b))
     const from = lastResync >= 0 ? slow.log[lastResync].m.offset : -1
@@ -596,4 +606,6 @@ function connect(port, tok, opts = {}) {
   const failures = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failures.length}/${results.length} checks passed`)
   process.exitCode = failures.length ? 1 : 0
-})().catch((e) => { console.log(`verify-relay threw: ${e && e.stack}`); process.exitCode = 1 })
+// A throw leaves sockets, relays and the drain interval open, so the process
+// would sit until the runner's 600 s backstop called it a hang; exit instead.
+})().catch((e) => { console.log(`verify-relay threw: ${e && e.stack}`); process.exit(1) })
