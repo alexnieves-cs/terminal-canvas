@@ -1002,6 +1002,13 @@ const SCENES = [
         if (!(await k.js(`!!document.querySelector('.orch__cube--busy')`))) throw new Error('orchestration-working: no cube took the busy tone, so the lit ring this scene exists to show is not in the frame')
         await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(700)
+        // M463. Painted before the dark switch is not painted after it: one
+        // paint in twelve captured this scene 2.7% off, after the first
+        // orchestration scene had needed a remount. Look again here, and say so.
+        for (let look = 0; look < 10 && !(await k.paintedWithin('.orch__cube-canvas canvas', 0.12)); look++) {
+          console.log(`[shot] orchestration-working: the 3D layer is blank before the shot (look ${look + 1})`)
+          await sleep(300)
+        }
         await changesRead(k, 'orchestration-working')
         await k.shot('orchestration-working')
       } finally {

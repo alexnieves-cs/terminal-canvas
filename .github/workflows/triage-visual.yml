@@ -35,7 +35,7 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/peek
-          for s in runs workflow orchestration-watch starter memory header; do
+          for s in orchestration-working orchestration memory; do
             for kind in shot diff; do
               if [ "$kind" = shot ]; then f="out/visual/shots/$s.png"; else f="out/visual/$s.diff.png"; fi
               [ -f "$f" ] || continue
