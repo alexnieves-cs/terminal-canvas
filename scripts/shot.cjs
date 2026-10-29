@@ -2211,6 +2211,13 @@ app.whenReady().then(async () => {
     shotRelay
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
+  // M463. Both 3D views pick their quality tier from MEASURED frame time and
+  // step down on a busy runner (Orchestrate's pools and bloom, the world's
+  // bloom and shadows), so a golden painted one tier or the other from run to
+  // run: orchestration-working 2.7%, rd-world-transition-rm 4.4%. Every page
+  // this harness loads pins both to full, the tier a Mac paints, through the
+  // harness doors the views already read.
+  wc.on('did-finish-load', () => { wc.executeJavaScript("window.__tcWorldQuality = 'full'; window.__tcOrchQuality = 'full'; true").catch(() => {}) })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })
 
   // ---------------------------------------------------------------------
