@@ -486,7 +486,12 @@ function connect(port, tok, opts = {}) {
 
   // ── backpressure ──────────────────────────────────────────────────────────
   {
-    const { relay: bpRelay } = makeRelay({ deps: { backpressure: { high: 256 * 1024, low: 64 * 1024, cut: 256 * 1024 * 1024 }, ringBytes: 1024 * 1024 } })
+    // The heartbeat is pushed out of the way: a viewer whose socket is paused
+    // cannot read pings either, so with the suite's 150 ms beat a pump slower
+    // than two beats (a busy macOS runner) got the stalled viewer TERMINATED
+    // before it lagged, it never saw a resync, and bp.2 and bp.4 failed with
+    // nothing wrong in the backpressure. relay.heartbeat.1 covers the beat.
+    const { relay: bpRelay } = makeRelay({ deps: { backpressure: { high: 256 * 1024, low: 64 * 1024, cut: 256 * 1024 * 1024 }, ringBytes: 1024 * 1024, heartbeatMs: 10 * 60 * 1000 } })
     const bp = await bpRelay.listen(0, '127.0.0.1')
     const fast = await connect(bp, token(OWNER))
     fast.send({ t: 'spawn', program: 'shell', cols: 80, rows: 24, shareId: SHARE })
@@ -526,7 +531,7 @@ function connect(port, tok, opts = {}) {
     // the first pump. Counting only, so it is cheap enough to poll.
     const received = (c, fromIndex) => {
       let n = 0
-      for (let i = c.log.length - 1; i >= fromIndex; i--) {
+      for (let i = c.log.length - 1; i >= Math.max(fromIndex, 0); i--) {
         const e = c.log[i]
         if (e.m && e.m.t === 'resync') return n + e.m.offset
         if (e.b) n += e.b.length
@@ -538,7 +543,8 @@ function connect(port, tok, opts = {}) {
     // Wait for the drain itself, not a fixed window: a slow runner can still be
     // delivering the ring (or send a second resync) after 300 ms, and bytes that
     // land after bp.4 takes its mark corrupt that check too.
-    await until(() => received(slow, slow.log.findLastIndex((e) => e.m && e.m.t === 'resync')) === stream.length, 5000 * Math.ceil(n / 320))
+    // No resync at all is bp.2's failure to report, not a reason to read log[-1].
+    await until(() => { const at = slow.log.findLastIndex((e) => e.m && e.m.t === 'resync'); return at >= 0 && received(slow, at) === stream.length }, 5000 * Math.ceil(n / 320))
     const lastResync = slow.log.findLastIndex((e) => e.m && e.m.t === 'resync')
     const after = Buffer.concat(slow.log.slice(lastResync + 1).filter((e) => e.b).map((e) => e.b))
     const from = lastResync >= 0 ? slow.log[lastResync].m.offset : -1
@@ -596,4 +602,6 @@ function connect(port, tok, opts = {}) {
   const failures = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failures.length}/${results.length} checks passed`)
   process.exitCode = failures.length ? 1 : 0
-})().catch((e) => { console.log(`verify-relay threw: ${e && e.stack}`); process.exitCode = 1 })
+// A throw leaves sockets, relays and the drain interval open, so the process
+// would sit until the runner's 600 s backstop called it a hang; exit instead.
+})().catch((e) => { console.log(`verify-relay threw: ${e && e.stack}`); process.exit(1) })
