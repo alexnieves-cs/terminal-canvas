@@ -868,7 +868,11 @@ const SCENES = [
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       try {
         await k.loadMain()
-        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        // M463. The 3D tier is pinned to FULL (the harness door OrchestrationView reads).
+        // Left to itself it steps down from MEASURED frame time, so a loaded runner
+        // painted the lean tier (no platform pools, no bloom) and an idle one the full
+        // tier: 2.7% apart, one paint in eight. A Mac shows full; so does the golden.
+        await k.js(`(() => { window.__tcOrchQuality = 'full'; const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -947,7 +951,8 @@ const SCENES = [
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       const seeded = []
       try {
-        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        // M463. The 3D tier pinned to full, as in the orchestration scene.
+        await k.js(`(() => { window.__tcOrchQuality = 'full'; const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -1036,7 +1041,7 @@ const SCENES = [
         await k.loadMain()
         for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-panel-id="chat"], .chat')`)); i++) await sleep(100)
         await sleep(400)
-        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        await k.js(`(() => { window.__tcOrchQuality = 'full'; const b = document.querySelector('[data-seg="orchestration"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         opened = true
         for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-orch-lens="watch"]')`)); i++) await sleep(100)
         await k.theme('dark')
