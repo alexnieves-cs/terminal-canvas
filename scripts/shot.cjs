@@ -744,7 +744,35 @@ const SCENES = [
         return JSON.stringify([r('.shell'), r('.shell__inspector'), r('.shell__inspector > *'), r('.context'), r('.context__header'), r('.context__tabs'), r('.context__body'), r('.inspector__actions'), r('.context__panel[data-context-panel="tools"]')]) })()`))
       await k.shot('compact'); await k.context(false) } },
   { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram (scan, workers, judge, report) with the edge words between them; the verb row with Run ENABLED (the pool has its caller since M138), Triggers, Stop (disabled — no pool is running), Save (disabled — the draft is kept on the panel; Save on the diagram arrives with M184), Delete and Build with AI; the Definition tab selected.',
-    run: async (k) => { await k.goTo('the workflow'); await sleep(600); await k.shot('workflow') } },
+    run: async (k) => {
+      await k.goTo('the workflow'); await sleep(600)
+      // M463. React Flow measures each node's handles once, when the node's
+      // box changes, from getBoundingClientRect: measured while the canvas
+      // camera was still landing, the handles sat 12px off (the workers-to-
+      // judge line at another x, "exit 0" clipped to "kit 0"), and nothing
+      // moved again to correct them, so the wrong routing held perfectly
+      // still. One pixel on every node's width and back makes its
+      // ResizeObserver measure again, now with the camera at rest.
+      await k.js(`(() => { for (const n of document.querySelectorAll('.react-flow__node')) n.style.minWidth = (n.offsetWidth + 1) + 'px'; return true })()`)
+      await sleep(200)
+      await k.js(`(() => { for (const n of document.querySelectorAll('.react-flow__node')) n.style.minWidth = ''; return true })()`)
+      await sleep(300)
+      // M463. React Flow routes the edges after it has measured the nodes,
+      // and on a loaded runner the shot sometimes landed between the two: the
+      // workers-to-judge line at another x and its label clipped ("kit 0" for
+      // "exit 0"), 0.4% off. Wait until every edge's path and every node's box
+      // read the same on three looks in a row.
+      let prev = ''
+      let agreed = 0
+      for (let i = 0; i < 60 && agreed < 3; i++) {
+        const sig = await k.js(`[...document.querySelectorAll('.react-flow__edge-path')].map((e) => e.getAttribute('d')).join('|') + '#' + [...document.querySelectorAll('.react-flow__node')].map((n) => { const r = n.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round).join(',') }).join('|')`)
+        agreed = sig === prev && sig !== '#' ? agreed + 1 : 0
+        prev = sig
+        await sleep(150)
+      }
+      if (agreed < 3) console.log('[shot] workflow: the diagram never held still in 60 looks; captured as it was')
+      await k.shot('workflow')
+    } },
   { name: 'workflow-edit', intent: 'M183. The workflow panel as an EDITOR: the node library opened from its `Add node…` disclosure (an entry per kind, each a name, one sentence and an example, with its own Add control), the diagram beside it with a port on every block, the `scan` block selected with the accent stroke, and the context pane on Detail showing that node\'s own fields from its kind\'s schema — folder, title, command, arguments, preset, first message — as editable inputs with a Done verb; Save still disabled with the sentence naming M184; nothing running.', size: [1800, 1000],
     run: async (k) => {
       // In order, and every step a REAL press: select the panel (the pane names
@@ -840,7 +868,11 @@ const SCENES = [
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       try {
         await k.loadMain()
-        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        // M463. The 3D tier is pinned to FULL (the harness door OrchestrationView reads).
+        // Left to itself it steps down from MEASURED frame time, so a loaded runner
+        // painted the lean tier (no platform pools, no bloom) and an idle one the full
+        // tier: 2.7% apart, one paint in eight. A Mac shows full; so does the golden.
+        await k.js(`(() => { window.__tcOrchQuality = 'full'; const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -919,7 +951,8 @@ const SCENES = [
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       const seeded = []
       try {
-        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        // M463. The 3D tier pinned to full, as in the orchestration scene.
+        await k.js(`(() => { window.__tcOrchQuality = 'full'; const b = document.querySelector('[data-seg="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         // M325. Orchestrate opens on its task list; this scene is the diorama, the visualisation a person chooses.
         for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('[data-orch-lens="scene"]')`)); i++) await sleep(100)
         await k.js(`(() => { if (!document.querySelector('[data-orch-view="tasks"]')) return false; const b = document.querySelector('[data-orch-lens="scene"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
@@ -974,6 +1007,13 @@ const SCENES = [
         if (!(await k.js(`!!document.querySelector('.orch__cube--busy')`))) throw new Error('orchestration-working: no cube took the busy tone, so the lit ring this scene exists to show is not in the frame')
         await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = ''; document.head.appendChild(s); return true })()`)
         await sleep(700)
+        // M463. Painted before the dark switch is not painted after it: one
+        // paint in twelve captured this scene 2.7% off, after the first
+        // orchestration scene had needed a remount. Look again here, and say so.
+        for (let look = 0; look < 10 && !(await k.paintedWithin('.orch__cube-canvas canvas', 0.12)); look++) {
+          console.log(`[shot] orchestration-working: the 3D layer is blank before the shot (look ${look + 1})`)
+          await sleep(300)
+        }
         await changesRead(k, 'orchestration-working')
         await k.shot('orchestration-working')
       } finally {
@@ -1001,7 +1041,7 @@ const SCENES = [
         await k.loadMain()
         for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-panel-id="chat"], .chat')`)); i++) await sleep(100)
         await sleep(400)
-        await k.js(`(() => { const b = document.querySelector('[data-seg="orchestration"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        await k.js(`(() => { window.__tcOrchQuality = 'full'; const b = document.querySelector('[data-seg="orchestration"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         opened = true
         for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-orch-lens="watch"]')`)); i++) await sleep(100)
         await k.theme('dark')
@@ -1042,6 +1082,19 @@ const SCENES = [
           for (let i = 0; i < 40 && !(await k.js(`!!document.querySelector('[data-orch-live] canvas')`)); i++) await sleep(100)
           await sleep(1200)
         }
+        // M463. The callout follows the latest batch's session, but holds each
+        // one for its dwell (CALLOUT_DWELL_MS, 2.2 s) first, so a shot taken
+        // inside codex's dwell pinned "Writing ../src/server.ts" and one taken
+        // after it pinned chat's "Wrote …": 3.7% apart, flipping run to run.
+        // The picture is the settled one: chat's, the last turn sent.
+        let callout = null
+        for (let i = 0; i < 60; i++) {
+          callout = await k.js(`document.querySelector('[data-orch-live-callout]')?.getAttribute('data-orch-live-callout') ?? null`)
+          if (callout === 'chat') break
+          await sleep(100)
+        }
+        if (callout !== 'chat') throw new Error(`orchestration-watch: the callout never settled on chat (last: ${JSON.stringify(callout)})`)
+        await sleep(400)
         await changesRead(k, 'orchestration-watch')
         await k.shot('orchestration-watch')
       } finally {
@@ -1139,6 +1192,21 @@ const SCENES = [
       // M463. The shot lands in one of two end states (the map overlay in and
       // the camera framed 80px further right, or neither), 9.9% apart. Say
       // which, so a run that flips names its own cause.
+      await k.layoutStill()
+      // M463. Even with the layout still before the press, applyStarter's fit
+      // reads the safe area while the launcher is leaving, so one paint in
+      // four still framed 150px off (camera x -206 against -56, the map hidden
+      // against shown). The arrangement is framed again once nothing is moving,
+      // by the HUD's own Fit all as a person would press it; the pointer goes
+      // back where the starter press left it, so the hover is the same.
+      const fit = await k.js(`(() => { const b = document.querySelector('[data-hud-fit]'); if (!b) return null; const r = b.getBoundingClientRect(); return r.width === 0 ? null : { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      if (fit === null) throw new Error('starter scene: the HUD has no Fit all button to frame the arrangement with')
+      k.wc.focus()
+      k.wc.sendInputEvent({ type: 'mouseDown', ...fit, button: 'left', clickCount: 1 })
+      k.wc.sendInputEvent({ type: 'mouseUp', ...fit, button: 'left', clickCount: 1 })
+      const last = pressed[pressed.length - 1]
+      if (last) k.wc.sendInputEvent({ type: 'mouseMove', x: last[1], y: last[2] })
+      await sleep(600)
       await k.layoutStill()
       await k.cameraLog('starter')
       console.log(`[shot] starter: minimap ${await k.js(`(() => { const m = document.querySelector('[data-minimap]'); if (!m) return 'absent'; const r = m.getBoundingClientRect(); return JSON.stringify({ w: Math.round(r.width), x: Math.round(r.x), op: getComputedStyle(m).opacity, presence: m.getAttribute('data-presence') || m.className }) })()`)}`)
@@ -2143,6 +2211,13 @@ app.whenReady().then(async () => {
     shotRelay
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
+  // M463. Both 3D views pick their quality tier from MEASURED frame time and
+  // step down on a busy runner (Orchestrate's pools and bloom, the world's
+  // bloom and shadows), so a golden painted one tier or the other from run to
+  // run: orchestration-working 2.7%, rd-world-transition-rm 4.4%. Every page
+  // this harness loads pins both to full, the tier a Mac paints, through the
+  // harness doors the views already read.
+  wc.on('did-finish-load', () => { wc.executeJavaScript("window.__tcWorldQuality = 'full'; window.__tcOrchQuality = 'full'; true").catch(() => {}) })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })
 
   // ---------------------------------------------------------------------
@@ -2172,6 +2247,87 @@ app.whenReady().then(async () => {
     }
     return -1
   }
+  // The capture itself: the session count settled, the private-word scan,
+  // hold-still, then the warm-up and real capture. `kit.shot` wraps it.
+  const capture = async (name, opts) => {
+    // M463. The top bar's "N sessions" label counts the terminal and chat
+    // panels on a 1 s tick (TopBar's useObservedSessionCount), so a capture
+    // within a second of a panel arriving or leaving reads the PREVIOUS
+    // count, and the label's width moves the search field with it: both
+    // pictures are stable, 0.58% apart, which no hold-still can tell
+    // apart. Wait for the label to say what is on the canvas (silence for
+    // none), then capture. A scene whose top bar is not mounted is left alone.
+    for (let i = 0; i < 40; i++) {
+      const settled = await js(`(() => {
+        if (!document.querySelector('.shell__top')) return true
+        const n = document.querySelectorAll('[data-panel-kind="terminal"], [data-panel-kind="chat"]').length
+        const l = document.querySelector('[data-session-count]')
+        const want = n <= 0 ? '' : n === 1 ? '1 session' : n + ' sessions'
+        return (l ? l.textContent.trim() : '') === want
+      })()`)
+      if (settled) break
+      await sleep(100)
+    }
+    // M410. No capture names this Mac. The PNGs are committed and handed to
+    // critics, and a live shell's row 0 once printed the developer's
+    // `user@host ~ %` (flowchart-dark). Every terminal's rows and the
+    // page's own text are read before the capture; a hit fails the scene
+    // by name instead of writing the picture.
+    // Whole tokens, not substrings (R-065): a product word that merely
+    // contains the host must not fail the scene. The camera row "Zoom to
+    // cursor" is that word on a host named cursor, so the row is left out
+    // of the page scan. A terminal row is still scanned.
+    const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const panel = document.querySelector('[data-world-camera]'); let page = document.body.innerText; if (panel && panel.innerText) page = page.split(panel.innerText).join(' '); const text = page + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const tokens = new Set(text.split(/[^A-Za-z0-9]+/).filter(Boolean)); return words.filter((w) => tokens.has(w)) })()`)
+    if (leaks.length > 0) {
+      // Where it was seen, so a CI run that refuses says which row to fix.
+      const where = await js(`(() => { const t = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const w = ${JSON.stringify(leaks[0])}; const i = t.indexOf(w); return i < 0 ? '' : t.slice(Math.max(0, i - 60), i + w.length + 40).replace(/\\s+/g, ' ') })()`)
+      throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name, in "${where}"`)
+    }
+    // M463. A picture is taken once the page HOLDS STILL: two captures 200ms
+    // apart that agree. Six scenes painted one of two pictures from run to
+    // run on a hosted runner (the top bar before and after its layout, a
+    // WebGL layer before and after its first frame, a camera mid-flight),
+    // because each waited a fixed time for something whose time is the
+    // machine's. A page that never holds still (a cube bobbing, an arc in
+    // flight) is captured after the bound, as before, and says so in the log.
+    const looks = opts.still === false ? 0 : await holdStill()
+    if (looks < 0) console.log(`[shot] ${name}: never held still in ${HOLD_STILL_LOOKS} looks; captured as it was`)
+    // M466. Two captures, the first thrown away. The window is hidden, so
+    // nothing asks the compositor for a frame between gestures, and the
+    // first capturePage after a change hands back the LAST frame it made
+    // while scheduling a new one: a theme switched 950ms earlier was still
+    // light in the picture though the DOM computed dark (fix-list: the
+    // three dark scenes that captured light). Measured on xvfb: the warm-up
+    // capture is stale, one 150ms later is current.
+    await wc.capturePage()
+    await sleep(200)
+    const img = await wc.capturePage()
+    const path = join(OUT, `${name}.png`)
+    writeFileSync(path, img.toPNG())
+    console.log(`wrote ${path}`)
+  }
+  // M463. An open run's rail row says how long it has run ("1 panel · 29s")
+  // and re-reads Date.now on a 1 s tick (useRunRows), so the header and runs
+  // pictures carried whatever second the runner reached: a tile 35% off on
+  // one runner image, 0.5% on another. While a run is open the renderer's
+  // clock is held at a value that makes the row read OPEN_RUN_SECONDS, nudged
+  // until it does (the tick is the only reader that matters here), and
+  // handed back after the capture. Returns whether it held the clock.
+  const OPEN_RUN_SECONDS = 30
+  const OPEN_RUN_FACTS = `document.querySelector('.rail-run[data-run-outcome="working"] .rail-run__facts')`
+  const freezeOpenRun = async (name) => {
+    if (!(await js(`!!${OPEN_RUN_FACTS}`))) return false
+    await js(`(() => { if (!window.__shotRealNow) window.__shotRealNow = Date.now; window.__shotHeldNow = window.__shotRealNow(); Date.now = () => window.__shotHeldNow; return true })()`)
+    let shown = null
+    for (let i = 0; i < 5; i++) {
+      await sleep(1150)
+      shown = await js(`(() => { const m = /(?:(\\d+)m )?(\\d+)s$/.exec((${OPEN_RUN_FACTS}?.textContent ?? '').trim()); return m ? Number(m[1] ?? 0) * 60 + Number(m[2]) : null })()`)
+      if (shown === null || shown === OPEN_RUN_SECONDS) break
+      await js(`window.__shotHeldNow += ${(OPEN_RUN_SECONDS - shown) * 1000}`)
+    }
+    console.log(`[shot] ${name}: open run held at ${shown}s`)
+    return true
+  }
   const kit = {
     js,
     // M345. The shared-workspace scenes turn the share on through these.
@@ -2182,61 +2338,10 @@ app.whenReady().then(async () => {
     // `still: false` is for a scene whose picture IS a moment (a transition frozen mid-way): holding still would wait it out.
     shot: async (name, opts = {}) => {
       await sleep(250)
-      // M463. The top bar's "N sessions" label counts the terminal and chat
-      // panels on a 1 s tick (TopBar's useObservedSessionCount), so a capture
-      // within a second of a panel arriving or leaving reads the PREVIOUS
-      // count, and the label's width moves the search field with it: both
-      // pictures are stable, 0.58% apart, which no hold-still can tell
-      // apart. Wait for the label to say what is on the canvas (silence for
-      // none), then capture. A scene whose top bar is not mounted is left alone.
-      for (let i = 0; i < 40; i++) {
-        const settled = await js(`(() => {
-          if (!document.querySelector('.shell__top')) return true
-          const n = document.querySelectorAll('[data-panel-kind="terminal"], [data-panel-kind="chat"]').length
-          const l = document.querySelector('[data-session-count]')
-          const want = n <= 0 ? '' : n === 1 ? '1 session' : n + ' sessions'
-          return (l ? l.textContent.trim() : '') === want
-        })()`)
-        if (settled) break
-        await sleep(100)
+      const runClock = await freezeOpenRun(name)
+      try { await capture(name, opts) } finally {
+        if (runClock) await js(`(() => { if (window.__shotRealNow) { Date.now = window.__shotRealNow; delete window.__shotRealNow } return true })()`)
       }
-      // M410. No capture names this Mac. The PNGs are committed and handed to
-      // critics, and a live shell's row 0 once printed the developer's
-      // `user@host ~ %` (flowchart-dark). Every terminal's rows and the
-      // page's own text are read before the capture; a hit fails the scene
-      // by name instead of writing the picture.
-      // Whole tokens, not substrings (R-065): a product word that merely
-      // contains the host must not fail the scene. The camera row "Zoom to
-      // cursor" is that word on a host named cursor, so the row is left out
-      // of the page scan. A terminal row is still scanned.
-      const leaks = await js(`(() => { const words = ${JSON.stringify(PRIVATE_WORDS)}; const panel = document.querySelector('[data-world-camera]'); let page = document.body.innerText; if (panel && panel.innerText) page = page.split(panel.innerText).join(' '); const text = page + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const tokens = new Set(text.split(/[^A-Za-z0-9]+/).filter(Boolean)); return words.filter((w) => tokens.has(w)) })()`)
-      if (leaks.length > 0) {
-        // Where it was seen, so a CI run that refuses says which row to fix.
-        const where = await js(`(() => { const t = document.body.innerText + '\\n' + [...document.querySelectorAll('.xterm-rows')].map((r) => r.textContent).join('\\n'); const w = ${JSON.stringify(leaks[0])}; const i = t.indexOf(w); return i < 0 ? '' : t.slice(Math.max(0, i - 60), i + w.length + 40).replace(/\\s+/g, ' ') })()`)
-        throw new Error(`${name}: the capture would show ${leaks.map((w) => JSON.stringify(w)).join(', ')} — this Mac's user or host name, in "${where}"`)
-      }
-      // M463. A picture is taken once the page HOLDS STILL: two captures 200ms
-      // apart that agree. Six scenes painted one of two pictures from run to
-      // run on a hosted runner (the top bar before and after its layout, a
-      // WebGL layer before and after its first frame, a camera mid-flight),
-      // because each waited a fixed time for something whose time is the
-      // machine's. A page that never holds still (a cube bobbing, an arc in
-      // flight) is captured after the bound, as before, and says so in the log.
-      const looks = opts.still === false ? 0 : await holdStill()
-      if (looks < 0) console.log(`[shot] ${name}: never held still in ${HOLD_STILL_LOOKS} looks; captured as it was`)
-      // M466. Two captures, the first thrown away. The window is hidden, so
-      // nothing asks the compositor for a frame between gestures, and the
-      // first capturePage after a change hands back the LAST frame it made
-      // while scheduling a new one: a theme switched 950ms earlier was still
-      // light in the picture though the DOM computed dark (fix-list: the
-      // three dark scenes that captured light). Measured on xvfb: the warm-up
-      // capture is stale, one 150ms later is current.
-      await wc.capturePage()
-      await sleep(200)
-      const img = await wc.capturePage()
-      const path = join(OUT, `${name}.png`)
-      writeFileSync(path, img.toPNG())
-      console.log(`wrote ${path}`)
     },
     press: (key, mods = {}) => js(`window.dispatchEvent(new KeyboardEvent('keydown', ${JSON.stringify({ key, bubbles: true, cancelable: true, ...mods })})), true`),
     // React's controlled input ignores a plain value assignment: the native
