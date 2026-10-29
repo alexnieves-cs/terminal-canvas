@@ -227,13 +227,27 @@ if (tmux === '') {
   try {
     run(['kill-server'])
     const started = run(['start-server'])
-    const madeA = run(['new-session', '-d', '-s', 'lf-a', 'sleep', '60'])
-    const madeB = run(['new-session', '-d', '-s', 'lf-b', 'sleep', '60'])
-    const listed = run(['list-panes', '-a', '-F', '#{session_name}\t#{pane_pid}'])
-    const rows = listed.stdout.trim().split('\n').filter(Boolean).map((line) => {
-      const [name, pid] = line.split('\t')
-      return { panelId: name, pid: Number(pid) }
-    })
+    // `start-server` with no session leaves a server that exits as soon as it
+    // is empty, and a `new-session` that lands on it while it exits is lost
+    // with status 0 (seen on the macOS runner: one of the two panes missing,
+    // so nothing was paused and nothing ended). Both sessions are listed back
+    // before the kill, and one that is missing is made again.
+    const listRows = () => {
+      const listed = run(['list-panes', '-a', '-F', '#{session_name}\t#{pane_pid}'])
+      return listed.status !== 0 ? [] : listed.stdout.trim().split('\n').filter(Boolean).map((line) => {
+        const [name, pid] = line.split('\t')
+        return { panelId: name, pid: Number(pid) }
+      })
+    }
+    let madeA = run(['new-session', '-d', '-s', 'lf-a', 'sleep', '60'])
+    let madeB = run(['new-session', '-d', '-s', 'lf-b', 'sleep', '60'])
+    let rows = listRows()
+    for (let i = 0; i < 20 && !(rows.some((r) => r.panelId === 'lf-a') && rows.some((r) => r.panelId === 'lf-b')); i++) {
+      spawnSync('sleep', ['0.1'])
+      if (!rows.some((r) => r.panelId === 'lf-a')) madeA = run(['new-session', '-d', '-s', 'lf-a', 'sleep', '60'])
+      if (!rows.some((r) => r.panelId === 'lf-b')) madeB = run(['new-session', '-d', '-s', 'lf-b', 'sleep', '60'])
+      rows = listRows()
+    }
     const liveA = rows.find((r) => r.panelId === 'lf-a')
     const liveB = rows.find((r) => r.panelId === 'lf-b')
     const killed = locked(['kill-server'])
@@ -267,7 +281,7 @@ if (tmux === '') {
       recovered.ended.some((p) => p.panelId === 'lf-b' && p.pid === liveB.pid) &&
       again.status === 0
     detail = JSON.stringify({
-      socket, killed: killed.status, answered, paused: paused.phase,
+      socket, made: [started.status, madeA.status, madeB.status], rows, killed: killed.status, answered, paused: paused.phase,
       ended: recovered.ended, rows2, again: again.status
     })
   } finally {
