@@ -54,8 +54,14 @@ jobs:
         with:
           path: out/web
 
+  # Publishing is opt-in: the deploy runs only once the repository variable
+  # PAGES_ENABLED is 'true' (Settings → Secrets and variables → Actions →
+  # Variables), set together with Settings → Pages → Source: GitHub Actions.
+  # Without Pages enabled, deploy-pages answers 404 and every push to main went
+  # red; whether the demo is public is a person's decision, so until it is made
+  # the job is skipped and the build above still proves the page.
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PAGES_ENABLED == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:

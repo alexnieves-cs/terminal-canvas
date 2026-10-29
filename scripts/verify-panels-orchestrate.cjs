@@ -378,6 +378,11 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       const readDiff = await wc.executeJavaScript(`document.querySelector('[data-orch-workbench] [data-orch-diff]') !== null`)
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
       const back = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.orch[data-orch-reading]') === null && document.querySelector('.orch__body').getBoundingClientRect().height > 0`), 4000)
+      // The same stall on the way down: three equal reads at 449 settled while
+      // the bench was still easing back to 200 (the chain read a moment later
+      // said 200). So the rest height is waited for, up to 5s, first; a bench
+      // that never comes back still fails on its number.
+      await waitUntil(async () => Math.abs((await benchH()) - restH) <= 2, 5000)
       const backH = await settledBenchH()
       // Evidence for a red run: the height chain the bench's `flex: 1` fills.
       const chain = await wc.executeJavaScript(`(() => { const out = []; let el = document.querySelector('.orch'); while (el && out.length < 7) { out.push(el.className.toString().slice(0, 24) + ':' + Math.round(el.getBoundingClientRect().height)); el = el.parentElement } const kids = [...document.querySelector('.orch').children].map((k) => { const cs = getComputedStyle(k); return k.className.toString().slice(0, 20) + ':' + Math.round(k.getBoundingClientRect().height) + ':' + cs.display + ':' + cs.flex.slice(0, 14) + ':' + cs.maxHeight }); return { inner: innerHeight, chain: out, kids } })()`)
