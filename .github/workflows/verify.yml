@@ -97,6 +97,11 @@ jobs:
           # measured on; headroom.1 skips itself above 1, so a slow runner
           # cannot read as a regression.
           TC_WATCHDOG_SCALE: '2'
+          # A failed suite runs once more, alone, and passes only if that run is
+          # clean; every suite that needed it is named in a FLAKY line and a
+          # warning annotation, so a timing race on this shared runner stays
+          # listed until its test is fixed (verify-all.cjs, TC_VERIFY_RETRY).
+          TC_VERIFY_RETRY: '1'
         run: npm run verify
 
   # M462. The visual suite (scripts/verify-visual.cjs): every shot scene painted

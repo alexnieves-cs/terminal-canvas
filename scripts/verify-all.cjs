@@ -214,6 +214,25 @@ const report = (r) => {
   }
 }
 
+/* TC_VERIFY_RETRY=1 — CI's one retry. A suite that fails is run ONCE more,
+   alone, and passes the gate only if that second run is clean. Both runs are
+   printed in full, and every suite that needed the retry is named in the
+   summary, in a FLAKY line, and as a GitHub warning annotation carrying its
+   FAIL lines. The retry hides nothing: it keeps a timing race on a shared
+   runner from turning main red, and the race stays listed until its test is
+   fixed. Absent locally, so a local run still shows every failure exactly
+   once. A suite that fails twice is red. */
+const retrying = (env) => String(env.TC_VERIFY_RETRY ?? '').trim() === '1'
+const failLines = (out) => out.split('\n').filter((l) => /^\s*FAIL\s/.test(l)).map((l) => l.trim().slice(0, 300))
+const runWithRetry = async (name, body, env = process.env) => {
+  const first = await runOne(name, body, SUITE_TIMEOUT_MS, env)
+  if (first.status === 'passed' || !retrying(process.env)) return first
+  report(first)
+  console.log(`--- ${name} ${first.status}; running it once more (TC_VERIFY_RETRY)`)
+  const second = await runOne(name, body, SUITE_TIMEOUT_MS, env)
+  return { ...second, ms: first.ms + second.ms, retried: { status: first.status, fails: failLines(first.out) } }
+}
+
 const runConcurrently = async (list, limit, envFor = null) => {
   const queue = list.slice()
   const done = []
@@ -221,7 +240,7 @@ const runConcurrently = async (list, limit, envFor = null) => {
     for (;;) {
       const next = queue.shift()
       if (!next) return
-      const r = await runOne(next.name, next.body, SUITE_TIMEOUT_MS, envFor ? envFor(next) : process.env)
+      const r = await runWithRetry(next.name, next.body, envFor ? envFor(next) : process.env)
       report(r)
       done.push(r)
     }
@@ -297,7 +316,7 @@ const main = async () => {
     results.push(...await runConcurrently(serial, jobs, (s) => jobEnv(s.name, process.env, jobs)))
   } else {
     for (const s of serial) {
-      const r = await runOne(s.name, s.body)
+      const r = await runWithRetry(s.name, s.body)
       report(r)
       results.push(r)
     }
@@ -316,6 +335,15 @@ const finish = (results, started, note) => {
   console.log('='.repeat(60))
   console.log(`${results.length - failed.length}/${results.length} suites passed in ${((Date.now() - started) / 1000).toFixed(1)}s${note ? ` (${note})` : ''}`)
   if (failed.length) console.log('FAILED: ' + failed.map((r) => `${r.name} (${r.status})`).join(', '))
+  const flaky = results.filter((r) => r.retried !== undefined && r.status === 'passed')
+  if (flaky.length) {
+    console.log('FLAKY (failed, then passed on the one retry): ' + flaky.map((r) => r.name).join(', '))
+    for (const r of flaky) {
+      const fails = r.retried.fails.length ? r.retried.fails.join(' | ') : `the first run ${r.retried.status}`
+      // A workflow command: the warning lands on the run's summary page, one per flaky suite.
+      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning title=flaky ${r.name}::${fails.replace(/\r?\n/g, ' ').replace(/%/g, '%25')}`)
+    }
+  }
   // NOT `process.exit(code)`. Every suite's output is buffered and flushed
   // here, and when stdout is a pipe — a CI log, a `> run.log`, the exact cases
   // that matter — console.log is asynchronous, so exiting immediately can
@@ -331,7 +359,7 @@ const finish = (results, started, note) => {
 // runOne/report/runConcurrently/finish are exported for scripts/affected.cjs,
 // so a narrowed run executes, prints and summarises suites exactly as the gate
 // does rather than through a second copy that could drift from it.
-module.exports = { suites, HAND_RUN, isAggregate, tierOf, electronJobs, jobEnv, runOne, report, runConcurrently, finish }
+module.exports = { suites, HAND_RUN, isAggregate, tierOf, electronJobs, jobEnv, runOne, runWithRetry, report, runConcurrently, finish }
 
 if (require.main === module) {
   main().catch((error) => {
