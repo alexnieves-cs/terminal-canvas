@@ -1165,8 +1165,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // them (watched on the runner: n2 read at x 652, then sitting at 548,
       // the drop landing in n3 and only the reverse wire made). Measure once
       // every block's rect holds for three reads 100 ms apart.
+      // Each read waits two animation frames first. The refit on a resize is
+      // queued on requestAnimationFrame (WorkflowFlow's ResizeObserver), and
+      // the hidden CI window makes no frames between gestures, so three equal
+      // reads could all come BEFORE that queued fit, and the drag's own first
+      // mouseMove then produced the frame that ran it: the blocks jumped
+      // (-92, +160) under the pointer and the drop landed on the bare pane.
+      // invalidate() asks for a frame; frames run queued callbacks in order,
+      // so the fit has run by the time ours do. The 1 s fallback keeps a
+      // window that never paints from hanging the read.
       const blocksSettled = async (timeoutMs = 3000) => {
-        const read = () => wc.executeJavaScript(`[...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) }).join(' ')`)
+        const read = () => { wc.invalidate(); return wc.executeJavaScript(`new Promise((resolve) => { let done = false; const fin = () => { if (done) return; done = true; resolve([...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) }).join(' ')) }; requestAnimationFrame(() => requestAnimationFrame(fin)); setTimeout(fin, 1000) })`) }
         let last = await read(), same = 0
         const until = Date.now() + timeoutMs
         while (same < 2 && Date.now() < until) { await sleep(100); const now = await read(); same = now === last ? same + 1 : 0; last = now }
