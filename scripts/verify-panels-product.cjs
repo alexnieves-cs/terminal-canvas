@@ -1165,8 +1165,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // them (watched on the runner: n2 read at x 652, then sitting at 548,
       // the drop landing in n3 and only the reverse wire made). Measure once
       // every block's rect holds for three reads 100 ms apart.
+      // Each read waits two animation frames first. The refit on a resize is
+      // queued on requestAnimationFrame (WorkflowFlow's ResizeObserver), and
+      // the hidden CI window makes no frames between gestures, so three equal
+      // reads could all come BEFORE that queued fit, and the drag's own first
+      // mouseMove then produced the frame that ran it: the blocks jumped
+      // (-92, +160) under the pointer and the drop landed on the bare pane.
+      // invalidate() asks for a frame; frames run queued callbacks in order,
+      // so the fit has run by the time ours do. The 1 s fallback keeps a
+      // window that never paints from hanging the read.
       const blocksSettled = async (timeoutMs = 3000) => {
-        const read = () => wc.executeJavaScript(`[...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) }).join(' ')`)
+        const read = () => { wc.invalidate(); return wc.executeJavaScript(`new Promise((resolve) => { let done = false; const fin = () => { if (done) return; done = true; resolve([...document.querySelectorAll('[data-workflow-block]')].map((b) => { const r = b.getBoundingClientRect(); return b.getAttribute('data-workflow-block') + '@' + Math.round(r.left) + ',' + Math.round(r.top) }).join(' ')) }; requestAnimationFrame(() => requestAnimationFrame(fin)); setTimeout(fin, 1000) })`) }
         let last = await read(), same = 0
         const until = Date.now() + timeoutMs
         while (same < 2 && Date.now() < until) { await sleep(100); const now = await read(); same = now === last ? same + 1 : 0; last = now }
@@ -3333,6 +3342,27 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           writeFileSync(fileS, `fence ${fenceN}\n`)
           return waitUntil(() => (S.state.loads > was ? S.state.loads : false), 10000)
         }
+        // WARM-UP: prove each bound pane's watch is LIVE before any claim reads
+        //     a count. On the macOS runner a watch armed moments ago can drop
+        //     its first event (libuv rebuilds one shared FSEvents stream each
+        //     time a watch is added or closed, and an event landing during the
+        //     rebuild is lost), so pane A's burst or the sentinel's first fence
+        //     intermittently never reloaded — a startup race, not a routing
+        //     fault. Each pane gets fresh writes until it reloads once; the
+        //     claims below measure from counts taken AFTER this, so the extra
+        //     reloads change nothing they assert. `opened` was read before it.
+        const warm = {}
+        for (const [key, file, srv] of [['A', fileA, A], ['B', fileB, B], ['S', fileS, S]]) {
+          const was = srv.state.loads
+          warm[key] = false
+          for (let k = 1; k <= 10 && warm[key] === false; k += 1) {
+            writeFileSync(file, `warm ${k}\n`)
+            warm[key] = await waitUntil(() => (srv.state.loads > was ? k : false), 1500)
+          }
+        }
+        if (Object.values(warm).some((v) => v === false)) throw new Error('a bound pane never reloaded during warm-up: ' + JSON.stringify(warm))
+        // Drain anything a warm-up retry left in flight before the counts.
+        await fence()
         const counts = () => ({ A: A.state.loads, B: B.state.loads, U: U.state.loads })
         // (a) + (c). A burst under A alone. The writes are spaced past main's
         // own WATCH_DEBOUNCE_MS (100 ms) on purpose: closer together, main

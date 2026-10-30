@@ -123,6 +123,10 @@ function compare(golden, fresh) {
   const cols = Math.ceil(golden.width / TILE)
   const tiles = new Uint32Array(cols * Math.ceil(golden.height / TILE))
   let differing = 0
+  // Where the differing pixels lie, so a red run says WHERE in its own log:
+  // the diff PNG is an artifact behind a storage host a cloud session can be
+  // refused, and a percentage alone cannot tell a missing layer from a shift.
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1
   for (let i = 0; i < total; i++) {
     const o = i * 4
     const dB = Math.abs(golden.bytes[o] - fresh.bytes[o])
@@ -133,6 +137,7 @@ function compare(golden, fresh) {
       differing += 1
       const x = i % golden.width, y = (i - x) / golden.width
       tiles[Math.floor(y / TILE) * cols + Math.floor(x / TILE)] += 1
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
       diff[o] = 40; diff[o + 1] = 40; diff[o + 2] = 230; diff[o + 3] = 255
     } else {
       diff[o] = golden.bytes[o] >> 2; diff[o + 1] = golden.bytes[o + 1] >> 2; diff[o + 2] = golden.bytes[o + 2] >> 2; diff[o + 3] = 255
@@ -145,7 +150,8 @@ function compare(golden, fresh) {
     const frac = tiles[t] / (TILE * TILE)
     if (frac > worstTile) { worstTile = frac; worstAt = [(t % cols) * TILE, Math.floor(t / cols) * TILE] }
   }
-  return { differing, ratio: differing / total, worstTile, worstAt, diff }
+  const bounds = x1 < 0 ? null : [x0, y0, x1, y1]
+  return { differing, ratio: differing / total, worstTile, worstAt, bounds, diff }
 }
 
 let shotChild = null // held so the watchdog can kill it: an orphaned child keeps the build and its fixture HOME alive
@@ -251,7 +257,7 @@ app.whenReady().then(async () => {
         ok(`${name} FAIL — the size changed`, false, `golden ${g.width}x${g.height}, fresh ${f.width}x${f.height}`)
         continue
       }
-      const { differing, ratio, worstTile, worstAt, diff } = compare(g, f)
+      const { differing, ratio, worstTile, worstAt, bounds, diff } = compare(g, f)
       const pct = (ratio * 100).toFixed(3)
       const tilePct = (worstTile * 100).toFixed(0)
       if (ratio > PIXEL_BUDGET || worstTile > TILE_BUDGET) {
@@ -259,7 +265,7 @@ app.whenReady().then(async () => {
         writeFileSync(diffPath, nativeImage.createFromBitmap(diff, { width: g.width, height: g.height }).toPNG())
         writeFileSync(join(DIFFS, `${name}.fresh.png`), halved(capture).toPNG())
         const why = ratio > PIXEL_BUDGET ? `${pct}% of pixels differ (budget ${(PIXEL_BUDGET * 100).toFixed(1)}%)` : `a ${TILE}px tile at ${worstAt.join(',')} is ${tilePct}% different (budget ${(TILE_BUDGET * 100).toFixed(0)}%)`
-        ok(`${name} FAIL — ${why}`, false, `diff: ${diffPath}; fresh: ${join(DIFFS, `${name}.fresh.png`)}`)
+        ok(`${name} FAIL — ${why}`, false, `differing pixels within x ${bounds[0]}–${bounds[2]}, y ${bounds[1]}–${bounds[3]} of ${g.width}x${g.height}; worst tile ${tilePct}% at ${worstAt.join(',')}; diff: ${diffPath}; fresh: ${join(DIFFS, `${name}.fresh.png`)}`)
       } else {
         ok(`${name}`, true, `${pct}% differ (${differing} px); worst tile ${tilePct}%`)
       }
