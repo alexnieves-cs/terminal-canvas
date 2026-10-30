@@ -4,6 +4,7 @@ import {
   CHECK_OUTPUT_MAX_RECORDS, isCheckRunId, parseCheckOutputRecord,
   type CheckOutputRead, type CheckOutputRecord
 } from '../shared/check-output'
+import { writeFileAtomicAsync } from './atomic-file'
 
 /**
  * M306. One file per check run under `<userData>/check-output`, named by its
@@ -59,9 +60,7 @@ export function createCheckOutputStore(o: { dir: string; maxRecords?: number }):
     const file = join(o.dir, `${record.runId}.json`)
     // Temp and rename: a record is read whole, so a half-written file must
     // never be visible under its final name.
-    const tmp = `${file}.tmp`
-    await fs.writeFile(tmp, JSON.stringify(record), 'utf8')
-    await fs.rename(tmp, file)
+    await writeFileAtomicAsync(file, JSON.stringify(record))
     const at = ids.indexOf(record.runId)
     if (at !== -1) ids.splice(at, 1)
     ids.push(record.runId)

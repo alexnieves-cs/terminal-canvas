@@ -9,6 +9,8 @@ module.exports = {
   /* M83. The project memory store: node:fs against an injected directory,
      the scrollback log's own shape, with the M39 scrubber on every write. */
   ...require('../src/main/memory-store'),
+  /* M617. The one atomic write and ring trim every store and exporter uses. */
+  ...require('../src/main/atomic-file'),
   /* M101. The routine runner over injected timers, and the record's own rules. */
   ...require('../src/main/routine-runner'),
   /* M107. The environment report: pure over injected facts. */

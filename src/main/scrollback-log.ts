@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { stripAnsi } from '../shared/ansi'
+import { writeFileAtomicAsync } from './atomic-file'
 
 /**
  * M39. One append-only file per panel under `<userData>/scrollback`, written
@@ -110,9 +111,7 @@ export function createScrollbackLog(o: {
       await handle.read(buf, 0, buf.length, start)
       const nl = buf.indexOf(0x0a)
       const kept = nl >= 0 && nl + 1 < buf.length ? buf.subarray(nl + 1) : buf
-      const tmp = `${path}.tmp`
-      await fs.writeFile(tmp, kept)
-      await fs.rename(tmp, path)
+      await writeFileAtomicAsync(path, kept)
     } finally {
       await handle.close()
     }

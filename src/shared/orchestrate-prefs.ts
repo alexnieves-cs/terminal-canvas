@@ -1,3 +1,4 @@
+import { isRecord } from './guards'
 /**
  * M287. ORCHESTRATE'S LAYOUT, persisted PER WORKSPACE — what Phase A held in
  * memory (`renderer/orchestration/orchestration-prefs.ts`), now a record on
@@ -105,7 +106,6 @@ export interface PersistedOrchestrate {
   views?: OrchSavedView[]
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 export function clampWorkbenchHeight(h: number): number {

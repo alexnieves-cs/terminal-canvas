@@ -12,13 +12,14 @@
  * door out, and the gate is the one scrubber (no new `redactSecrets` caller,
  * `verify:verbs gate.2`). Speaker notes never reach the page.
  */
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { markdownHtml, splitDeck, type ImageAnswer } from '../shared/deck'
 import { outward } from '../shared/outward'
 import type { FileResult } from '../shared/file-panel'
 import type { ImageResult } from '../shared/starter'
 import type { DeckPdfExportRequest, DeckPdfExportResult } from '../shared/export'
+import { writeFileAtomic } from './atomic-file'
 
 export interface DeckPdfDeps {
   readText: (path: string) => Promise<FileResult>
@@ -32,9 +33,7 @@ export interface DeckPdfDeps {
 
 const atomicWrite = (path: string, data: Buffer): void => {
   mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
-  writeFileSync(tmp, data, { mode: 0o600 })
-  renameSync(tmp, path)
+  writeFileAtomic(path, data, { mode: 0o600 })
 }
 
 /** 1280x720 CSS px is 13.33 x 7.5 in — 16:9 at a slide's usual size. */

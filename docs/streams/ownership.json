@@ -171,7 +171,9 @@
       "src/renderer/hosted.ts"
     ],
     "V": [
-      "src/main/broker-refusal.ts"
+      "src/main/broker-refusal.ts",
+      "src/shared/guards.ts",
+      "src/main/atomic-file.ts"
     ]
   }
 }

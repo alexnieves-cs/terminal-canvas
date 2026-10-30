@@ -18,13 +18,14 @@
  * `~/.ssh/id_rsa` is not a picture, so its bytes never enter the file — it is
  * listed in the report instead.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import PptxGenJS from 'pptxgenjs'
 import { redactSecrets } from '../shared/redact'
 import { pptxDeck, slideHasContent, unmappedName, type DeckExportRequest, type DeckExportResult, type PptxSlide, type DeckUnmapped } from '../shared/deck-pptx'
 import type { ImageResult } from '../shared/starter'
 import { readImage as readImageFile } from './image-read'
+import { writeFileAtomic } from './atomic-file'
 
 export interface DeckExporterDeps {
   /** The save dialog: a path, or null when the person cancelled. */
@@ -40,10 +41,7 @@ export interface DeckExporter {
 }
 
 const atomicWrite = (path: string, data: Buffer): void => {
-  mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
-  writeFileSync(tmp, data, { mode: 0o600 })
-  renameSync(tmp, path)
+  writeFileAtomic(path, data, { mode: 0o600, mkdir: true })
 }
 
 export const INERT_DECK_EXPORTER: DeckExporter = {

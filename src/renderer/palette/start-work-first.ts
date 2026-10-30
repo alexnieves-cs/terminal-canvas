@@ -31,6 +31,7 @@ import type { SwarmPresetId } from '@shared/swarm'
 import { SWARM_PRESETS } from '@shared/swarm'
 import type { BackendFit } from '@shared/backend-fit'
 import { FIRST_LAUNCH_BACKENDS } from '@shared/onboarding'
+import { isRecord } from '../../shared/guards'
 
 /** What the last successful start used — the "existing configuration" a preselection reads. */
 export interface StartWorkLast {
@@ -121,7 +122,6 @@ export interface StartWorkDraft {
   issueKey?: string
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
 
 /**

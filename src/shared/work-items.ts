@@ -30,6 +30,7 @@ import type { RecipeUse } from './recipe-portability'
 import { carryReviewIdentity, parseReviewIdentity, type ReviewIdentity } from './review-identity'
 import { carryReviewComment, parseReviewComments, type ReviewComment } from './review-comments'
 import { carryTaskPlan, parseTaskPlan, type TaskPlan } from './task-plan'
+import { isRecord } from './guards'
 
 export type WorkItemState = 'todo' | 'working' | 'review' | 'done'
 export const WORK_ITEM_STATES: readonly WorkItemState[] = ['todo', 'working', 'review', 'done']
@@ -160,7 +161,6 @@ export interface PersistedWorkItem {
   updatedAt: number
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 

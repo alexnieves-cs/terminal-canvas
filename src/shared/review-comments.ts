@@ -1,6 +1,7 @@
 import { carryReviewIdentity, parseReviewIdentity, type ReviewIdentity } from './review-identity'
 import type { ReviewHandoffState, ReviewStanding } from './review-readiness'
 import type { CheckRecord } from './check-evidence'
+import { isRecord } from './guards'
 
 /**
  * M307. THE REVIEWER'S SIDE OF A REVIEW — comments pinned to diff lines, the
@@ -67,7 +68,6 @@ export interface ReviewComment {
 
 export const PROPOSED_BY_LABEL_MAX = 80
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 

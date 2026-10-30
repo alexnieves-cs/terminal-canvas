@@ -27,9 +27,9 @@ import {
   type Effort,
   type PermissionMode
 } from '../cost'
+import { isRecord } from '../guards'
 
-export const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v)
+export { isRecord }
 export const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 export const isStr = (v: unknown): v is string => typeof v === 'string'
 

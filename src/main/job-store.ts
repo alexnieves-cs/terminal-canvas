@@ -1,5 +1,6 @@
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { JOBS_MAX, markInterrupted, parseJournal, type JobRecord } from '../shared/job-journal'
+import { writeFileAtomic } from './atomic-file'
 
 /**
  * M316. The job journal on disk — `userData/jobs.json`, one file, every job
@@ -48,10 +49,8 @@ export function createJobStore(opts: { file: string; now?: () => number }): JobS
     jobs = parseJournal(JSON.parse(readFileSync(opts.file, 'utf8')))
   } catch { /* absent or unreadable: an empty journal, never a throw at boot */ }
   const write = (): void => {
-    const tmp = `${opts.file}.tmp`
     try {
-      writeFileSync(tmp, JSON.stringify({ version: 1, jobs }))
-      renameSync(tmp, opts.file)
+      writeFileAtomic(opts.file, JSON.stringify({ version: 1, jobs }))
     } catch (error) {
       console.warn('[jobs] could not write the job journal', error)
     }

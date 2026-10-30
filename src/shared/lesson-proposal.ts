@@ -1,5 +1,6 @@
 import { signatureOverlap, type Lesson } from './lessons'
 import { SKILL_NAME_RE, parseProofRecord, type ProofRecord } from './lesson-proof'
+import { isRecord } from './guards'
 
 /**
  * M571–M572 (lane O). FROM LESSONS TO A PROPOSED RULE — related lessons are
@@ -171,7 +172,6 @@ export function lessonsToSend(lessons: readonly Lesson[]): Lesson[] {
   return [...lessons].sort((a, b) => b.at - a.at).slice(0, PROPOSAL_LESSONS_MAX)
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /**

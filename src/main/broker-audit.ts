@@ -1,6 +1,7 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { BrokerAuditRow } from './broker'
+import { keepNewestLines } from './atomic-file'
 
 /**
  * M87. The broker's audit: one append-only JSONL beside the run ledger,
@@ -18,16 +19,7 @@ export interface BrokerAudit {
 export function createBrokerAudit(o: { file: string; max?: number }): BrokerAudit {
   const max = o.max ?? BROKER_AUDIT_MAX
   let appends = 0
-  const trim = (): void => {
-    let lines: string[]
-    try { lines = readFileSync(o.file, 'utf8').split('\n').filter((l) => l.trim() !== '') } catch { return }
-    if (lines.length <= max) return
-    const tmp = `${o.file}.tmp`
-    try {
-      writeFileSync(tmp, `${lines.slice(lines.length - max).join('\n')}\n`)
-      renameSync(tmp, o.file)
-    } catch { /* the file stays long; a later append trims again */ }
-  }
+  const trim = (): void => keepNewestLines(o.file, max)
   return {
     append(row) {
       try {

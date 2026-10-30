@@ -1,8 +1,9 @@
-import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { redactSecrets } from '../shared/redact'
 import { DECISION_AUDIT_MAX, decisionOf, parseDecisionRow, type DecisionRow } from '../shared/decision-audit'
 import type { EventRow, LedgerRow } from '../shared/run-ledger'
+import { keepNewestLines } from './atomic-file'
 
 /**
  * M369. The decision audit's file: one append-only JSONL in userData, beside
@@ -23,16 +24,7 @@ export interface DecisionAudit {
 export function createDecisionAudit(o: { file: string; max?: number }): DecisionAudit {
   const max = o.max ?? DECISION_AUDIT_MAX
   let appends = 0
-  const trim = (): void => {
-    let lines: string[]
-    try { lines = readFileSync(o.file, 'utf8').split('\n').filter((l) => l.trim() !== '') } catch { return }
-    if (lines.length <= max) return
-    const tmp = `${o.file}.tmp`
-    try {
-      writeFileSync(tmp, `${lines.slice(lines.length - max).join('\n')}\n`)
-      renameSync(tmp, o.file)
-    } catch { /* the file stays long; a later append trims again */ }
-  }
+  const trim = (): void => keepNewestLines(o.file, max)
   return {
     record(row) {
       const d = decisionOf(row)

@@ -1,3 +1,4 @@
+import { isRecord } from './guards'
 /**
  * M327. A TASK'S EXECUTION PLAN — who is doing what, what each step waits on,
  * and what counts as done, as a record a person can read and edit.
@@ -109,7 +110,6 @@ export function implementVerifyPlan(input: { now: number; owner?: string; check?
 
 /* ── The record ─────────────────────────────────────────────────────────── */
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
 

@@ -1,6 +1,7 @@
 import { AUTO_CLAIMED_OUTCOME } from './auto'
 import type { PersistedRun } from './runs'
 import type { PersistedWorkItem, WorkItemState } from './work-items'
+import { isRecord } from './guards'
 
 /** D11's bounded record of a task after its lane has left the canvas. */
 export const RETAINED_OUTCOMES_MAX = 200
@@ -43,7 +44,6 @@ function parseRefs(raw: unknown): RetainedRefs | undefined {
   return Object.keys(out).length === 0 ? undefined : out
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const STATES: readonly WorkItemState[] = ['todo', 'working', 'review', 'done']

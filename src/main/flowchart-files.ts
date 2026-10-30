@@ -1,5 +1,5 @@
-import { closeSync, constants as fsc, fstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { basename, dirname, extname, isAbsolute } from 'node:path'
+import { closeSync, constants as fsc, fstatSync, openSync, readSync, realpathSync } from 'node:fs'
+import { basename, extname, isAbsolute } from 'node:path'
 import { outward as outwardGate } from '../shared/outward'
 import {
   SHAPE_FILLS, SHAPE_INKS, SHAPE_SIZE, SHAPE_STROKES, isEnds, isRoute, isShapeForm, parseConnectors, parseShapeRecord,
@@ -12,6 +12,7 @@ import {
   flowchartFileName, svgActiveContent,
   type FlowchartExportFormat, type FlowchartExportResult, type FlowchartReadResult
 } from '../shared/flowchart-files'
+import { writeFileAtomic } from './atomic-file'
 
 /**
  * The flowchart's two file doors: a diagram's text OUT (`export:flowchart`) and
@@ -53,16 +54,7 @@ export interface FlowchartFileDeps {
 }
 
 const atomicWrite = (path: string, data: string): void => {
-  mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
-  try {
-    writeFileSync(tmp, data, { mode: 0o600 })
-    renameSync(tmp, path)
-  } catch (error) {
-    // A half-written sibling is a file the person did not ask for.
-    try { unlinkSync(tmp) } catch { /* nothing was created */ }
-    throw error
-  }
+  writeFileAtomic(path, data, { mode: 0o600, mkdir: true })
 }
 
 const said = (error: unknown): string => (error instanceof Error ? error.message : String(error))

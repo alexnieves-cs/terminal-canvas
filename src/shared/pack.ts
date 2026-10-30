@@ -2,6 +2,7 @@ import { redactSecrets } from './redact'
 import { findService, notConnectedReason, type CredentialMeta } from './credential-schema'
 import { parsePresets, parsePrompts, parseTemplates, type Preset, type Prompt } from './layout-schema'
 import type { PersistedTemplate } from './templates'
+import { isRecord } from './guards'
 
 /**
  * M253. A PACK: one discipline's library objects — workflows, saved prompts
@@ -128,7 +129,6 @@ export type PackParse =
   | { kind: 'not-a-pack'; reason: string }
   | { kind: 'unknown-version'; found: number; known: number; reason: string }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
 const isText = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
 
 function parseContents(raw: unknown, warnings: string[]): PackContent[] {

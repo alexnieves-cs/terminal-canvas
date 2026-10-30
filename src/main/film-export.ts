@@ -16,13 +16,14 @@
  *
  * Injected deps, plain-node tested by `verify:film film.door.*`.
  */
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { readMp4Boxes, type Mp4Box } from '../shared/mp4-mux'
 import type { NightFilmExportRequest, NightFilmExportResult, NightFilmRecord, NightFilmRecordRequest } from '../shared/export'
 import { RUN_LEDGER_MAX_LINES } from './run-ledger'
 import type { TimelineEntry, TimelineFilter, TimelineRead } from '../shared/run-ledger'
 import type { TonightStatus } from '../shared/tonight'
+import { writeFileAtomic } from './atomic-file'
 
 /** A minute of 720p at a few Mbit/s is ~30 MB; anything near this is not our film. */
 export const NIGHT_FILM_MAX_BYTES = 128 * 1024 * 1024
@@ -46,9 +47,7 @@ export interface FilmDoors {
 
 const atomicWrite = (path: string, data: Buffer): void => {
   mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
-  writeFileSync(tmp, data, { mode: 0o600 })
-  renameSync(tmp, path)
+  writeFileAtomic(path, data, { mode: 0o600 })
 }
 
 const day = (d: Date): string => d.toISOString().slice(0, 10)

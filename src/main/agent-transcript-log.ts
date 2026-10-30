@@ -1,8 +1,10 @@
-import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { contextTokens } from '@shared/agent-session'
 import type { TokenTotals } from '@shared/cost'
 import type { TranscriptTurn } from '@shared/transcript'
+import { isRecord } from '../shared/guards'
+import { writeFileAtomic } from './atomic-file'
 
 /**
  * M73. The durable transcript of a chat panel: one append-only file per
@@ -99,10 +101,6 @@ export function carriedMeter(read: AgentTranscriptRead): { spentUsd?: number; co
   return { ...(read.meta?.spentUsd === undefined ? {} : { spentUsd: read.meta.spentUsd }), ...(context === undefined ? {} : { context }) }
 }
 
-function isRecord(raw: unknown): raw is Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-}
-
 function num(raw: unknown): number {
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
 }
@@ -146,10 +144,8 @@ export function createAgentTranscriptLog(deps: { dir: string; crypto?: Transcrip
     try { text = readFileSync(file, 'utf8') } catch { return }
     const lines = text.split('\n').filter((l) => l.trim() !== '')
     if (!lines.some((l) => !l.startsWith(SEALED_PREFIX))) return
-    const tmp = `${file}.tmp`
     try {
-      writeFileSync(tmp, lines.map((l) => (l.startsWith(SEALED_PREFIX) ? l : seal(l))).join('\n') + '\n')
-      renameSync(tmp, file)
+      writeFileAtomic(file, lines.map((l) => (l.startsWith(SEALED_PREFIX) ? l : seal(l))).join('\n') + '\n')
     } catch (error) {
       console.warn('[agent-transcript] could not seal an older transcript', error)
     }
