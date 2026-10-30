@@ -449,7 +449,7 @@ const LANE = { id: 'l', repo: 'o/r', issue: 12, provider: 'copilot', title: 't',
     const read = (f) => require('node:fs').readFileSync(join(ROOT, f), 'utf8')
     const card = read('src/renderer/work/WorkNode.tsx')
     const node = read('src/renderer/canvas/PanelNode.tsx')
-    const cmds = read('src/renderer/palette/commands.ts')
+    const cmds = require('./lib/palette-src.cjs').paletteSource()
     const exec = read('src/renderer/canvas/palette-actions/executor.ts')
     const board = read('src/renderer/canvas/palette-actions/board.ts')
     const facts = { panels: [{ id: 'wk1', kind: 'work' }] }
@@ -593,7 +593,7 @@ const LANE = { id: 'l', repo: 'o/r', issue: 12, provider: 'copilot', title: 't',
     const teammate = step === undefined ? null : P.agentDoorRefusal(step, facts, { teammateId: 'tm1' })
     const doors = {
       card: card.includes("cloud?.state === 'ready' && props.onMergeCloud !== undefined && verb('cloud-merge'") && /onMergeCloud=\{\(panelId\) =>[^\n]*mergeCloud\(panelId\)/.test(read('src/renderer/canvas/PanelNode.tsx')),
-      palette: read('src/renderer/palette/commands.ts').includes("id: 'task.cloud.merge'"),
+      palette: require('./lib/palette-src.cjs').paletteSource().includes("id: 'task.cloud.merge'"),
       agent: step?.verb === 'cloud-merge' && step.args.panel === 'wk1',
       workflow: verbs.mod?.V9_DOORS?.['cloud-merge']?.workflow === 'an action node whose line is: cloud-merge wk1',
       executor: /case 'cloud-merge': return self\.mergeCloud\(/.test(read('src/renderer/canvas/palette-actions/executor.ts')),

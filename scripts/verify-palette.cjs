@@ -3365,7 +3365,7 @@ const FRESH = () => ctx({
   // row the palette really builds: a minted creation row, or a literal id in
   // the palette's source.
   const built = new Set(P.buildCommands(ctx({ actions: spyActions() })).map((r) => r.id))
-  const palSrc = src('src/renderer/palette/commands.ts')
+  const palSrc = require('./lib/palette-src.cjs').paletteSource()
   const stale = P.LABS.flatMap((lab) => lab.rows).filter((id) => !built.has(id) && !palSrc.includes(`id: '${id}'`))
   ok('labs.2 every row a lab hides is a row the palette builds', stale.length === 0, JSON.stringify(stale))
 

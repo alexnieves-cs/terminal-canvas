@@ -881,7 +881,7 @@ check('learn.wire.1 main wraps its one discarder, both learn channels are handle
   const facts = {
     wrapped: /withLessonCapture\(createReviewDiscarder\(/.test(stores),
     channels: /IPC\.LEARN_READ/.test(ipc) && /IPC\.LEARN_RECORD/.test(ipc),
-    row: /id: 'learn\.open'/.test(read('src/renderer/palette/commands.ts')),
+    row: /id: 'learn\.open'/.test(require('./lib/palette-src.cjs').paletteSource()),
     harvest: harvestAt > 0 && pageAt > harvestAt && pages.lastIndexOf('return (', pageAt) > harvestAt
   }
   return { pass: Object.values(facts).every(Boolean), detail: facts }

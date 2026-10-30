@@ -35,7 +35,7 @@ const canvasOwn = read('src/renderer/canvas/Canvas.tsx') || ''
 // WorldLayers.tsx, which Canvas calls; read it there while Canvas calls it.
 const canvas = /\brenderWorldLayers\(\{/.test(canvasOwn) ? read('src/renderer/canvas/WorldLayers.tsx') || '' : canvasOwn
 const viewportHook = read('src/renderer/canvas/useViewport.ts') || ''
-const commands = read('src/renderer/palette/commands.ts') || ''
+const commands = require('./lib/palette-src.cjs').paletteSource() || ''
 const usePalette = read('src/renderer/palette/usePalette.ts') || ''
 const minimap = read('src/renderer/canvas/MinimapOverlay.tsx') || ''
 const hud = read('src/renderer/canvas/CanvasHud.tsx') || ''

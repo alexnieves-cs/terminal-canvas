@@ -312,7 +312,7 @@ check(P, 'swarm.doors.2 a teammate\'s plan cannot run `swarm` — five sessions 
 ok('swarm.rows.1 every arrangement has a LITERAL palette row id in commands.ts, so no preset can be added without a door',
   (() => {
     if (S.error !== undefined) return false
-    const text = src('src/renderer/palette/commands.ts')
+    const text = require('./lib/palette-src.cjs').paletteSource()
     return S.mod.SWARM_PRESET_IDS.every((id) => text.includes(`id: 'work.swarm.${id}'`))
   })(),
   'expected one `id: \'work.swarm.<preset>\'` per preset')

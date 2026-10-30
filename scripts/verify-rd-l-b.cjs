@@ -42,7 +42,7 @@ const canvas = canvasOwn + (/= useShellTail\(\{/.test(canvasOwn) ? '\n' + (read(
   + (/\brenderWorldLayers\(\{/.test(canvasOwn) ? '\n' + (read('src/renderer/canvas/WorldLayers.tsx') || '') : '')
   // M507. And snapping (smartSnap's caller) to useSnapAndAgentLinks.ts.
   + (/= useSnapAndAgentLinks\(\{/.test(canvasOwn) ? '\n' + (read('src/renderer/canvas/useSnapAndAgentLinks.ts') || '') : '')
-const commands = read('src/renderer/palette/commands.ts') || ''
+const commands = require('./lib/palette-src.cjs').paletteSource() || ''
 const shortcuts = read('src/shared/shortcuts.ts') || ''
 const cluster = read('src/renderer/canvas/TaskClusterLayer.tsx') || ''
 const approvalUi = read('src/renderer/shell/ApprovalDetail.tsx') || ''
