@@ -4029,11 +4029,30 @@ try {
     JSON.stringify({ odd, none, mapped }))
   const now = 10 * 60 * 60 * 1000
   const fresh = R.syncWord(now - 4000, now), mins = R.syncWord(now - 3 * 60 * 1000, now), old = R.syncWord(now - 2 * 60 * 60 * 1000, now), never = R.syncWord(undefined, now)
+  // M621: the words are shared/time-ago.ts agoWords, the same sentence form every surface uses.
   ok('boardx.fresh.1 freshness is a word, not a timestamp — just now, minutes, hours — stale past ten minutes, and never-read is its own third answer',
-    /just now/.test(fresh.word) && fresh.stale === false && /3m ago/.test(mins.word) && mins.stale === false && /2h ago/.test(old.word) && old.stale === true && never.stale === true && /not read/.test(never.word),
+    /just now/.test(fresh.word) && fresh.stale === false && /3 min ago/.test(mins.word) && mins.stale === false && /2 h ago/.test(old.word) && old.stale === true && never.stale === true && /not read/.test(never.word),
     JSON.stringify({ fresh, mins, old, never }))
 } catch (e) {
   ok('boardx (threw)', false, String(e && e.stack || e))
+}
+
+// M621 — one age formatter. Short form floors (a feed row never claims an age it
+// has not reached); the sentence form rounds and never says "60 min".
+try {
+  const sec = 1000, min = 60 * sec, hr = 60 * min
+  const short = [R.agoShort(-5), R.agoShort(12 * sec), R.agoShort(4 * min + 59 * sec), R.agoShort(47 * hr), R.agoShort(72 * hr), R.agoShort(30 * sec, { justNowUnderMs: 45 * sec })]
+  const words = [R.agoWords(3 * sec), R.agoWords(12 * sec), R.agoWords(59 * min + 40 * sec), R.agoWords(2 * hr), R.agoWords(72 * hr)]
+  ok('ago.1 agoShort floors to s/m/h/d with no "ago", clamps negatives, and says "just now" only when the caller asks',
+    JSON.stringify(short) === JSON.stringify(['0s', '12s', '4m', '47h', '3d', 'just now']), JSON.stringify(short))
+  ok('ago.2 agoWords is the sentence form — just now under 10s, then s / min / h / d ago, capped at 59 min',
+    JSON.stringify(words) === JSON.stringify(['just now', '12s ago', '59 min ago', '2 h ago', '3 d ago']), JSON.stringify(words))
+  const H = (f) => require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', f), 'utf8')
+  const hand = ['shell/Navigator.tsx', 'shell/SkillsWorkspace.tsx', 'learn/LearnPage.tsx', 'world/WorldTime.tsx', 'shell/integration-model.ts', 'orchestration/orchestration-model.ts', 'team/TeamView.tsx', 'shell/format-ago.ts', 'shell/decision-inbox.ts']
+    .filter((f) => /\$\{[^}]*\}\s?(?:s|m|min|h|d) ago`|\$\{[smh]\}[smh]`|\/ 60000\)|\/ 1000\)\)?\s*\n\s*if \(s < 60\)/.test(H(f)))
+  ok('ago.3 none of the surfaces that had their own age formatter writes one again — they read shared/time-ago.ts', hand.length === 0, JSON.stringify(hand))
+} catch (e) {
+  ok('ago (threw)', false, String(e && e.stack || e))
 }
 
 // D17 / daily loop 4.4 — the cross-workspace projection: hidden workspaces
