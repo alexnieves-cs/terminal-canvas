@@ -67,7 +67,11 @@ module.exports = [
       await enter(k, 60)
       const tilt = await k.js(`document.querySelector('.canvas')?.style.transform ?? ''`)
       if (typeof tilt === 'string' && /rotateX\(/.test(tilt)) throw new Error(`rd-world-transition-rm: reduced motion tilted the plan (${tilt})`)
-      await k.shot('rd-world-transition-rm', { still: false })
+      // Held still, unlike the full move: under reduced motion nothing in the
+      // world bobs or breathes, so the page CAN hold still, and on the Mac
+      // runner it sometimes captured before the 3D layer's first frame (4.4%
+      // off the golden at mid-fade). Hold-still waits that frame out.
+      await k.shot('rd-world-transition-rm')
     }
   }
 ]

@@ -3333,6 +3333,27 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           writeFileSync(fileS, `fence ${fenceN}\n`)
           return waitUntil(() => (S.state.loads > was ? S.state.loads : false), 10000)
         }
+        // WARM-UP: prove each bound pane's watch is LIVE before any claim reads
+        //     a count. On the macOS runner a watch armed moments ago can drop
+        //     its first event (libuv rebuilds one shared FSEvents stream each
+        //     time a watch is added or closed, and an event landing during the
+        //     rebuild is lost), so pane A's burst or the sentinel's first fence
+        //     intermittently never reloaded — a startup race, not a routing
+        //     fault. Each pane gets fresh writes until it reloads once; the
+        //     claims below measure from counts taken AFTER this, so the extra
+        //     reloads change nothing they assert. `opened` was read before it.
+        const warm = {}
+        for (const [key, file, srv] of [['A', fileA, A], ['B', fileB, B], ['S', fileS, S]]) {
+          const was = srv.state.loads
+          warm[key] = false
+          for (let k = 1; k <= 10 && warm[key] === false; k += 1) {
+            writeFileSync(file, `warm ${k}\n`)
+            warm[key] = await waitUntil(() => (srv.state.loads > was ? k : false), 1500)
+          }
+        }
+        if (Object.values(warm).some((v) => v === false)) throw new Error('a bound pane never reloaded during warm-up: ' + JSON.stringify(warm))
+        // Drain anything a warm-up retry left in flight before the counts.
+        await fence()
         const counts = () => ({ A: A.state.loads, B: B.state.loads, U: U.state.loads })
         // (a) + (c). A burst under A alone. The writes are spaced past main's
         // own WATCH_DEBOUNCE_MS (100 ms) on purpose: closer together, main
