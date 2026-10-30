@@ -264,7 +264,7 @@ check('borrow.reads.3 ⌘⌥Y is the registry\'s allow-reads chord with a handle
   const row = S.SHORTCUTS.find((r) => r.id === 'allow-reads')
   const clash = S.SHORTCUTS.filter((r) => r.chord === '⌘⌥Y')
   const tail = readFileSync(join(ROOT, 'src/renderer/canvas/useShellTail.ts'), 'utf8')
-  const palette = readFileSync(join(ROOT, 'src/renderer/palette/commands.ts'), 'utf8')
+  const palette = require('./lib/palette-src.cjs').paletteSource()
   const pass = row !== undefined && row.chord === '⌘⌥Y' && clash.length === 1 && S.SHORTCUT_HANDLERS['allow-reads'] === 'allowPendingReads' &&
     /hit\?\.id === 'allow-reads'[\s\S]{0,400}pendingReadBatch\(/.test(tail) && /'approval\.allow-reads'[\s\S]{0,600}run: \(\) => \{ for \(const r of pendingReadBatch\(/.test(palette) &&
     !/scope: 'session'/.test(tail.slice(tail.indexOf("'allow-reads'"), tail.indexOf("'allow-reads'") + 600))
@@ -379,7 +379,7 @@ check('borrow.view.3 file-open is a verb with all four doors, its palette door i
   const V = verbsMod.mod
   const def = V.VERBS?.find?.((v) => v.id === 'file-open') ?? Object.values(V).flat().find?.((v) => v && v.id === 'file-open')
   const doors = V.V9_DOORS?.['file-open']
-  const palette = require('node:fs').readFileSync(join(ROOT, 'src/renderer/palette/commands.ts'), 'utf8')
+  const palette = require('./lib/palette-src.cjs').paletteSource()
   const refusal = P.agentDoorRefusal({ verb: 'file-open', args: { path: '/etc/hosts' } }, { panels: [] }, { panelId: 'p', teammateId: 't' })
   const person = P.agentDoorRefusal({ verb: 'file-open', args: { path: '/etc/hosts' } }, { panels: [] }, { panelId: 'p' })
   const pass = def !== undefined && doors !== undefined && ['canvas', 'palette', 'agent', 'workflow'].every((k) => typeof doors[k] === 'string') &&

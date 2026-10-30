@@ -1,4 +1,5 @@
 // verify:orchestration (M268) — pure Orchestration snapshot + activity ring.
+const { orchViewSource } = require('./lib/orch-view-src.cjs')
 const { buildSync } = require('esbuild')
 const { existsSync, mkdirSync, readFileSync, readdirSync } = require('node:fs')
 const { join } = require('node:path')
@@ -334,7 +335,7 @@ const later = rec(new Map([['a:b', { at: 1000, origin: 'a', handoff: true }]]), 
 ok('orch.flow.4 a state fire inside a live handoff window never downgrades it (a turn end emits both); after the window it records',
   kept.get('a:b')?.handoff === true && later.get('a:b')?.handoff === false)
 
-const viewSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+const viewSrc = orchViewSource()
 ok('orch.gate.1 every HUD chat and scrollback tail reader in OrchestrationView passes through outward()',
   /lastAssistantText\(/.test(viewSrc) && /scrollback\.tail\(/.test(viewSrc) &&
     /outward\(raw/.test(viewSrc) && /outward\(got\.join/.test(viewSrc) &&
@@ -462,7 +463,7 @@ const viewFlat = viewSrc.replace(/\s+/g, ' ')
     think.label === 'Thinking…' && !JSON.stringify(think).includes('SECRET') && stale.kind === 'idle', { think, stale })
   ok('orch.phase.2 a running tool reads "Using · <tool>", a finished one "Last tool:", and nothing at all yields idle rather than a placeholder',
     using.label === 'Using · Bash' && ran.label === 'Last tool: Bash' && M.orchPhase([], true).kind === 'idle', { using, ran })
-  const view = readFileSync(join(__dirname, '..', 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  const view = orchViewSource()
   ok('orch.phase.3 every orchPhase label the view paints is scrubbed by outward() on the same line',
     view.split('\n').filter((l) => /(found|livePhase)\.label/.test(l)).every((l) => l.includes('outward(')) && /found\.label/.test(view) && /livePhase\.label/.test(view))
 }
@@ -843,7 +844,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
 // gains one: the strip may READ the durable record and may not WRITE to it.
 {
   const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
-  const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  const view = orchViewSource()
   const prefs = readFileSync(join(root, 'src/shared/orchestrate-prefs.ts'), 'utf8')
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   // M498. OrchestrationView's props are laid out in CenterPages.tsx, which Canvas
@@ -871,8 +872,10 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
         return !/onRetry|agentSession|dispatch|spawn|\.run\(|review\.commit/.test(a)
       })(),
     'artifacts/timeline words')
-  const editorStart = view.indexOf('function OrchBriefEditor(')
-  const editor = editorStart === -1 ? '' : view.slice(editorStart, view.indexOf('\nexport const OrchestrationView', editorStart))
+  // M619. The brief editor lives in OrchDetailParts.tsx, last in that file.
+  const parts = readFileSync(join(root, 'src/renderer/orchestration/OrchDetailParts.tsx'), 'utf8')
+  const editorStart = parts.indexOf('function OrchBriefEditor(')
+  const editor = editorStart === -1 ? '' : parts.slice(editorStart)
   ok('workbench.2 editing a brief launches nothing: the brief editor calls onPatchWorkItem and NO dispatch, send, spawn, startWork or run, saves on blur rather than on every keystroke, and its inputs are named so a check can find them',
     editor.length > 200 && /onPatchWorkItem\(itemId, \{ brief:/.test(editor) && /onPatchWorkItem\(itemId, \{ criteria:/.test(editor) &&
       !/dispatch|\.send\(|spawn|startWork|runNode|agentSession/.test(editor) &&
@@ -1043,7 +1046,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     '')
   const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
   const write = readFileSync(join(root, 'src/renderer/orchestration/orch-review-write.ts'), 'utf8')
-  const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  const view = orchViewSource()
   ok('orch-limits.4 commit and discard reach main ONLY through orch-review-write.ts, which always sends `expect` (a read with no identity is refused by name, never written), the workbench offers them only for a `changes` result with an identity and blocks `shared` by name, and the composer\'s retry exit inserts into the canvas composer and never sends',
     /review\.commit\(\{ root: input\.root, paths: \[\.\.\.input\.paths\], message: input\.message\.trim\(\), expect: input\.identity \}\)/.test(write) &&
       /review\.discard\(\{ root: input\.root, baseline: input\.baseline, subjectId: input\.subjectId, paths: \[\.\.\.input\.paths\], expect: input\.identity \}\)/.test(write) &&
@@ -1110,7 +1113,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     Math.abs((bottom.y - top.y) - 420 * D.ORCH_COS_TILT) < 1e-9 && top.x === bottom.x && Math.abs(centre.x - 430) < 1e-6 && Math.abs(centre.y - 210) < 1e-6 && fit.k >= D.ORCH_ZOOM_RANGE.min && fit.k <= D.ORCH_ZOOM_RANGE.max,
     JSON.stringify({ top, bottom, fit, centre }))
   const cubes = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationCubes.tsx'), 'utf8')
-  const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  const view = orchViewSource()
   ok('orch-3d.6 the three kinds are three SHAPES in the island (cube, hexagonal puck, tablet) and three WORDS on the plate (state, `check · <result>`, `file`), so a test result never reads as another reasoning agent and no state is colour alone; the platform layers are said to be decorative before hit accuracy',
     /CylinderGeometry\([^)]*6\)/.test(cubes) && /shape === 'tablet'/.test(cubes) && /`check · \$\{stateWord\(node\)\}`/.test(view) && /sub: 'file'/.test(view) && /expendable before hit accuracy/.test(cubes) && /data-orch-object=\{objectKind\}/.test(view))
 
@@ -1305,7 +1308,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   {
     const S = load('src/shared/session-standing.ts', 'session-standing.cjs')
     const model = readFileSync(join(root, 'src/renderer/orchestration/orchestration-model.ts'), 'utf8')
-    const view = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+    const view = orchViewSource()
     const base = { agentic: true, hadSession: true }
     const cases = {
       // A live session with a word wears the word; a live session without one is starting.

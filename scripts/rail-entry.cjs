@@ -60,6 +60,8 @@ module.exports = {
   ...require('../src/renderer/watcher/trigger-input'),
   /* M89. The Integrations page's pure model: services × credentials × audit → rows. */
   ...require('../src/renderer/shell/integration-model'),
+  /* M621. The one "how long ago" formatter every surface's age now reads. */
+  ...require('../src/shared/time-ago'),
   /* M116. The board's record: WORK_ITEM_STATES / USER_SET_STATES, the data
      board.1 reads its words off rather than spelling them. */
   ...require('../src/shared/work-items'),

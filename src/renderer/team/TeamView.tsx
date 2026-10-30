@@ -26,6 +26,7 @@ import { TONE } from '../presence/RosterStrip'
 import { observe, useObserved, type ObservedView } from './team-store'
 import { ChevronLeft } from '../icons'
 import type { Accounts } from '../account/useAccounts'
+import { agoWords } from '@shared/time-ago'
 
 const AGENT_WORD: Record<AgentPresenceStatus, string> = {
   none: 'no agents', idle: 'agents idle', working: 'agents working', 'needs-you': 'needs someone', error: 'agent stopped'
@@ -384,9 +385,9 @@ function ObserverStatus({ observed, name }: { observed: ObservedView | null; nam
   else if (observed.peer === null) text = observed.snapshot === null ? `${name} is not on this workspace right now` : `${name} left — showing their last canvas`
   else if (observed.snapshot === null) text = `waiting for ${name}’s canvas…`
   else {
-    const s = observed.snapshotSeenAt === null ? 0 : Math.floor((Date.now() - observed.snapshotSeenAt) / 1000)
+    const ms = observed.snapshotSeenAt === null ? 0 : Date.now() - observed.snapshotSeenAt
     const scrubbed = observed.snapshot.redacted > 0 ? ` · ${observed.snapshot.redacted} secret${observed.snapshot.redacted === 1 ? '' : 's'} redacted` : ''
-    text = `canvas updated ${s < 5 ? 'just now' : `${s}s ago`}${scrubbed}`
+    text = `canvas updated ${agoWords(ms)}${scrubbed}`
   }
   return <span className="team__status" data-team-status>{text}</span>
 }

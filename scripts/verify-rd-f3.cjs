@@ -231,7 +231,7 @@ ok('rd-host.mount.1 Canvas mounts Sessions and Review (through CenterPages) and 
   /shell__page/.test(pagesSrc) && !/createPortal/.test(top),
   'mount sites')
 
-const commands = read('src/renderer/palette/commands.ts')
+const commands = require('./lib/palette-src.cjs').paletteSource()
 const doorAt = commands.indexOf("id: 'canvas.orchestration'")
 const door = doorAt >= 0 ? commands.slice(doorAt, doorAt + 280) : ''
 ok('rd-door.orch.1 the palette row says Show Orchestrate and keeps its id',

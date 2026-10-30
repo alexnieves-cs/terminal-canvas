@@ -10,6 +10,7 @@ import { EDGE_FIRE_MS } from '@shared/edge-activity'
 import type { WorkItemState } from '@shared/work-items'
 import { WORK_ITEM_STATES } from '@shared/work-items'
 import { TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
+import { agoWords } from '@shared/time-ago'
 
 /** Same travel window as the canvas edge current (M267). */
 export const ORCH_EDGE_FIRE_MS = EDGE_FIRE_MS
@@ -895,7 +896,7 @@ export function orchMachineReadout(input: {
     return { kind: 'empty', cpu: 'no sample yet', memory: 'no sample yet', age: null }
   }
   const ageMs = Math.max(0, input.now - input.sampledAt)
-  const age = ageMs < 1000 ? 'just now' : ageMs < 60_000 ? `${Math.floor(ageMs / 1000)}s ago` : `${Math.floor(ageMs / 60_000)}m ago`
+  const age = agoWords(ageMs)
   const cpu = `${input.cpuPercent.toLocaleString(undefined, { maximumFractionDigits: input.cpuPercent < 10 ? 1 : 0 })}%`
   const mib = input.memoryBytes / (1024 * 1024)
   const memory = mib < 1024 ? `${Math.round(mib)} MB` : `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`

@@ -64,7 +64,7 @@ const FACTS = {
     // because the root holds no verb of its own any more.
     const actionSlices = readdirSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'palette-actions'))
       .filter((f) => f.endsWith('.ts')).map((f) => `renderer/canvas/palette-actions/${f}`)
-    const doors = ['shared/verb-table.ts', 'shared/plan.ts', 'renderer/palette/commands.ts', 'renderer/canvas/usePaletteActions.ts', ...actionSlices]
+    const doors = ['shared/verb-table.ts', 'shared/plan.ts', 'renderer/canvas/usePaletteActions.ts', ...actionSlices, ...require('./lib/palette-src.cjs').paletteFiles().map((f) => require('node:path').relative(join(__dirname, '..', 'src'), f))]
     // A WRITE of `reviewed` (`reviewed:` or `reviewed =`), never a read: M253's
     // palette greys an unread preset with `preset.reviewed === false`, and the
     // old `[:=]` matched that `===` as if commands.ts cleared the mark.
@@ -527,7 +527,7 @@ const FACTS = {
     const doors = V.V9_DOORS
     const legacy = ["focus", "start", "spawn", "type", "submit", "send", "interrupt", "restart", "read", "set-setting", "lock", "unlock", "pin", "unpin", "maximise", "restore", "tidy", "zoom-fit", "workspace-from-template", "zoom-reset", "workspace", "review", "run-template", "close", "reset-canvas", "discard", "remove-worktree", "dispatch", "board"]
     const ids = V.VERBS.map((verb) => verb.id).filter((id) => !legacy.includes(id))
-    const commandsSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
+    const commandsSrc = require('./lib/palette-src.cjs').paletteSource()
     const librarySrc = readFileSync(join(__dirname, '..', 'src', 'shared', 'template-library.ts'), 'utf8')
     // M186. The fixture holds one panel of every kind a v9 door's example
     // line names, because a verb whose first argument is a PANEL cannot bind

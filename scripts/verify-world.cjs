@@ -28,6 +28,7 @@
    preload's subscribe) — `SIMULATE_AGENTS=true npm run dev` is where that was
    watched by hand. */
 'use strict'
+const { orchViewSource } = require('./lib/orch-view-src.cjs')
 const { buildSync } = require('esbuild')
 const { mkdirSync, readFileSync, readdirSync, existsSync } = require('node:fs')
 const { join } = require('node:path')
@@ -1633,7 +1634,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
 
   const stage = code('WorldStage.tsx'), probeSrc = readFileSync(join(root, 'src/renderer/webgl-probe.ts'), 'utf8')
   const gate = stage.indexOf('webgl && !lost ? ('), lazyAt = stage.indexOf('<WorldView '), note = stage.indexOf('data-world-no-webgl')
-  const orchSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  const orchSrc = orchViewSource()
   ok('world.quality.probe.1 WebGL is PROBED before the lazy load: the stage asks a scratch context in the render that opens the view, renders the lazy WorldView only inside the probe\'s yes, says what and the way back otherwise, and the warm-up fetches nothing on a machine that said no — one shared probe (no imports, released at once), which Orchestrate uses too',
     /import \{ webglAvailable \} from '@renderer\/webgl-probe'/.test(stage) && /const webgl = useMemo\(\(\) => \(on && fits \? probeWebgl\(\) : \(probed \?\? true\)\), \[on, fits\]\)/.test(stage) &&
       gate > 0 && lazyAt > gate && note > lazyAt && (stage.match(/<WorldView /g) ?? []).length === 1 &&
@@ -1887,7 +1888,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
   const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
   // M498. Orchestrate's props are laid out in CenterPages.tsx, which Canvas renders.
   const pagesSrc = /<CenterPages\b/.test(canvasSrc) ? readFileSync(join(root, 'src/renderer/canvas/CenterPages.tsx'), 'utf8') : ''
-  const orch = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  const orch = orchViewSource()
 
   // The arrival: held until the room settles, the first member IN the room, kept a grace while none is, then dropped.
   const inRoom = (ids) => (id) => ids.includes(id)

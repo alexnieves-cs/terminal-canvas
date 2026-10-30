@@ -440,7 +440,7 @@ check('tournament.doors.1 tournament is a verb with a card gesture, three palett
   const stop = P.buildPlan(P.parsePlanLine('tournament stop'), facts)
   const pick = P.buildPlan(P.parsePlanLine('tournament pick b'), facts)
   const mate = start.kind === 'plan' ? P.agentDoorRefusal(start.plan.steps[0], facts, { teammateId: 'tm1' }) : null
-  const commands = src('src/renderer/palette/commands.ts')
+  const commands = require('./lib/palette-src.cjs').paletteSource()
   const card = src('src/renderer/work/WorkNode.tsx')
   const node = src('src/renderer/canvas/PanelNode.tsx')
   const canvas = src('src/renderer/canvas/Canvas.tsx')

@@ -16,6 +16,7 @@ import {
   type SkillColumn,
   type SkillPaneKind
 } from './skills-pane-model'
+import { agoWords } from '@shared/time-ago'
 
 /**
  * M256. THE SKILLS WORKSPACE — the Skills pane's inventory given the room it
@@ -64,13 +65,7 @@ type Preview =
   | { kind: 'text'; body: string; truncated: number }
   | { kind: 'unreadable'; why: string }
 
-function ago(at: number, now: number): string {
-  const s = Math.max(0, Math.round((now - at) / 1000))
-  if (s < 60) return 'just now'
-  if (s < 3600) return `${Math.round(s / 60)} min ago`
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`
-  return `${Math.round(s / 86400)} d ago`
-}
+const ago = (at: number, now: number): string => agoWords(now - at)
 
 function SkillsWorkspaceImpl(props: SkillsWorkspaceProps): JSX.Element {
   const { columns, placedKeys } = props

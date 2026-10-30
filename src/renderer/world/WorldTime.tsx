@@ -5,6 +5,7 @@ import { dismissAway, useAwaySince } from './world-away'
 import { prefersReducedMotion } from './world-perf'
 import { awayBeats, JOURNAL_MAX_AGE_MS, PAST_ROOM_REASON, tickTone, timelineMarks, tourOfferLabel, tourStep, TOUR_BEAT_MS, verbsForRoom, type Beat } from './world-replay'
 import type { CameraApi } from './world-set'
+import { agoWords } from '@shared/time-ago'
 
 /**
  * Time in the room (M425): a scrubber over the last hour the room saw, and —
@@ -24,12 +25,7 @@ function clock(t: number): string {
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-function ago(ms: number): string {
-  const s = Math.round(ms / 1000)
-  if (s < 60) return `${s}s ago`
-  const m = Math.round(s / 60)
-  return m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`
-}
+const ago = agoWords
 
 const nameOf = (id: string): string => getAgent(id)?.name ?? id
 

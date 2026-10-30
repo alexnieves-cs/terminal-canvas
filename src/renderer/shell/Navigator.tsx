@@ -18,6 +18,7 @@ import { railGroups, railRoleOf } from './rail-rows'
 import type { TaskMemberReason } from '@renderer/canvas/task-members'
 import { EmptyState } from './EmptyState'
 import { PANEL_FILTERS, type PanelFilter } from '@renderer/panels/panel-state'
+import { agoWords } from '@shared/time-ago'
 
 export interface NavigatorProps {
   navigator: NavigatorPane
@@ -330,10 +331,4 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
 export const Navigator = memo(NavigatorImpl)
 
 /** M93. A relative time for a snapshot row; the exact time is the title. */
-function ago(at: number): string {
-  const s = Math.max(0, Math.round((Date.now() - at) / 1000))
-  if (s < 60) return `${s}s ago`
-  if (s < 3600) return `${Math.round(s / 60)} min ago`
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`
-  return `${Math.round(s / 86400)} d ago`
-}
+const ago = (at: number): string => agoWords(Date.now() - at)

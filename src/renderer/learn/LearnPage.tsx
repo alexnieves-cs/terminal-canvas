@@ -8,6 +8,7 @@ import { ruleShape, type ProofRecord } from '@shared/lesson-proof'
 import { canAccept, provenance, type LearnedRule } from '@shared/lesson-library'
 import type { LearnRead, LearnRepo } from '@shared/learn'
 import { openSettingsPage } from '@renderer/settings/open'
+import { agoWords } from '@shared/time-ago'
 
 /**
  * M570–M572 (lane O). The Lessons page: what this canvas's repositories have
@@ -42,12 +43,7 @@ export interface LearnPageProps {
   onShowQueue?: () => void
 }
 
-const ago = (at: number, now: number): string => {
-  const m = Math.max(0, Math.round((now - at) / 60000))
-  if (m < 60) return m <= 1 ? 'just now' : `${m} min ago`
-  const h = Math.round(m / 60)
-  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`
-}
+const ago = (at: number, now: number): string => agoWords(now - at)
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`
 

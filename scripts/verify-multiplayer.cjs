@@ -404,7 +404,7 @@ async function until(pred, ms = 3000) {
   // ── M583: the screens read the one store ─────────────────────────────────
   {
     const read = (p) => readFileSync(join(root, p), 'utf8')
-    const dock = read('src/renderer/shell/Dock.tsx'), section = read('src/renderer/team-flow/TeamFlowSection.tsx'), cmds = read('src/renderer/palette/commands.ts'), verbs = read('src/shared/verb-table.ts')
+    const dock = read('src/renderer/shell/Dock.tsx'), section = read('src/renderer/team-flow/TeamFlowSection.tsx'), cmds = require('./lib/palette-src.cjs').paletteSource(), verbs = read('src/shared/verb-table.ts')
     ok('mp.ui.1 Needs you mounts the section (handed to you, the review queue, waiting on your team) and speaks its count; the palette mints hand-off, offer-to-anyone, ask-for-review, take, approve and ask-for-changes rows from the same store; teamFlow is excluded from the verb table with its reason',
       /<TeamFlowSection onGoToPanel=\{onGoToPanel\}/.test(dock) && /flow\.handoffs\.length \+ flow\.reviews\.length/.test(dock) &&
         ['data-team-handoffs-title', 'data-team-reviews-title', 'data-team-mine-title', "data-team-handoff-verb=\"take\"", "data-team-review-verb=\"approve\""].every((k) => section.includes(k)) &&

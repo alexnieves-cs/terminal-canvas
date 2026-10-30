@@ -1,5 +1,6 @@
 import type { CredentialMeta, CredentialService } from '@shared/credential-schema'
 import { notConnectedReason } from '@shared/credential-schema'
+import { agoWords } from '@shared/time-ago'
 
 /**
  * M89. THE INTEGRATIONS PAGE'S MODEL — pure, plain-node checked in
@@ -139,7 +140,6 @@ export const STALE_AFTER_MS = 10 * 60 * 1000
  */
 export function syncWord(at: number | undefined, now: number, verb = 'updated', staleAfter = STALE_AFTER_MS): { word: string; stale: boolean } {
   if (at === undefined) return { word: 'not read yet', stale: true }
-  const s = Math.max(0, Math.round((now - at) / 1000))
-  const age = s < 10 ? 'just now' : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 48 * 3600 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`
+  const age = agoWords(now - at)
   return { word: `${verb} ${age}`, stale: now - at > staleAfter }
 }

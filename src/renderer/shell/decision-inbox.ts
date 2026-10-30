@@ -1,6 +1,7 @@
 import type { PendingApproval, RailAttention } from './rail-sections'
 import { holdWords, type CapHold } from '@shared/agent-session'
 import { PLAN_TOOL } from '@shared/transcript'
+import { agoShort } from '@shared/time-ago'
 
 /**
  * M308. THE DECISION INBOX — the Needs-you queue as decisions rather than a
@@ -214,12 +215,8 @@ export function buildInbox(input: InboxInput): Inbox {
 
 /** "4m", "2h", "just now" — how long a decision has waited, at rest-layer brevity. */
 export function waitedWords(since: number, now: number): string {
-  const s = Math.max(0, Math.floor((now - since) / 1000))
-  if (s < 45) return 'just now'
-  const m = Math.round(s / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.round(m / 60)
-  return h < 48 ? `${h}h` : `${Math.round(h / 24)}d`
+  // A decision under 45s old has not been waiting yet (shared/time-ago.ts).
+  return agoShort(now - since, { justNowUnderMs: 45_000 })
 }
 
 /** The snooze choices, in minutes. Until a time, never "forever": a decision cannot be put off into silence. */
