@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
 import { outward } from '../shared/outward'
-import { NOT_CONNECTED_CODE } from '../shared/credential-schema'
+import { githubMessage as messageOf, githubSuffix, sortRefusal } from './broker-refusal'
 import type { GithubPublishRequest, GithubPublishResult } from '../shared/ipc-contract'
 
 /**
@@ -114,16 +114,8 @@ function split(text: string, path: string): { title: string; body: string } {
   return { title: basename(path).replace(/\.[^.]+$/, ''), body: text.trim() }
 }
 
-/** The broker's refusal, sorted by CODE (never its sentence) into the three arms. */
-function refusalOf(answer: { reason: string; code?: string }): PublishResult {
-  if (answer.code === NOT_CONNECTED_CODE) return { kind: 'no-credential', reason: answer.reason }
-  if (answer.code === 'not-asked' || answer.code === 'not-answered' || answer.code === 'not-granted') return { kind: 'refused', reason: answer.reason }
-  return { kind: 'unavailable', reason: answer.reason }
-}
-
-function messageOf(body: string): string | null {
-  try { const m = (JSON.parse(body) as { message?: unknown }).message; return typeof m === 'string' ? m : null } catch { return null }
-}
+/** The broker's refusal, sorted by CODE (never its sentence) into the three arms (`broker-refusal.ts`). */
+const refusalOf = (answer: { reason: string; code?: string }): PublishResult => sortRefusal(answer)
 
 const REPO_QUERY = 'query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id discussionCategories(first: 50) { nodes { id name } } } }'
 const CREATE_DISCUSSION = 'mutation($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) { createDiscussion(input: { repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body }) { discussion { url } } }'
@@ -163,7 +155,7 @@ export async function publish(deps: PublishDeps, req: PublishRequest): Promise<P
       : await post(`/repos/${repo}/issues/${req.number}/comments`, { body: gated.text })
     if (!answer.ok) return refusalOf(answer)
     if (answer.status === 401) return { kind: 'refused', reason: 'GitHub rejected the credential — replace it in ⌘K › Credentials' }
-    if (answer.status !== 201) return { kind: 'unavailable', reason: `GitHub answered ${answer.status}${messageOf(answer.body) === null ? '' : ` — ${messageOf(answer.body)}`}` }
+    if (answer.status !== 201) return { kind: 'unavailable', reason: `GitHub answered ${answer.status}${githubSuffix(answer.body)}` }
     let url: unknown
     try { url = (JSON.parse(answer.body) as { html_url?: unknown }).html_url } catch { url = undefined }
     return { kind: 'published', url: typeof url === 'string' ? url : '', redacted }

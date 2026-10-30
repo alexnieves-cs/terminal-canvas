@@ -18,7 +18,8 @@
     "O": "M570-M579",
     "P": "M580-M589",
     "Q": "M590-M599",
-    "U": "M600-M614"
+    "U": "M600-M614",
+    "V": "M615-M629"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -168,6 +169,9 @@
       "src/renderer/review/**",
       "src/shared/hosted-keys.ts",
       "src/renderer/hosted.ts"
+    ],
+    "V": [
+      "src/main/broker-refusal.ts"
     ]
   }
 }

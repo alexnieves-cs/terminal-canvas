@@ -1,6 +1,7 @@
 import type { CredentialStore } from './credential-store'
 import { parseJiraCredential } from './jira-client'
 import { NOT_CONNECTED_CODE, notConnectedReason } from '../shared/credential-schema'
+import { NOT_GRANTED_CODE, NOT_ANSWERED_CODE, NOT_ASKED_CODE } from './broker-refusal'
 
 /**
  * M87. THE BROKER — an agent in a panel calls a service this app holds a
@@ -51,14 +52,8 @@ export interface BrokerRequest {
  */
 export const READ_ONLY_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
 
-export const NOT_GRANTED_CODE = 'not-granted'
-export const NOT_ANSWERED_CODE = 'not-answered'
-/**
- * M255. A write nobody was asked about: no teammate whose card could ask,
- * and no person who confirmed it in main. Before M255 such a write simply
- * went out — a terminal, a workflow's chat or a bare `tc api` could POST.
- */
-export const NOT_ASKED_CODE = 'not-asked'
+// The refusal codes live in the leaf module every client sorts them with (M615).
+export { NOT_GRANTED_CODE, NOT_ANSWERED_CODE, NOT_ASKED_CODE } from './broker-refusal'
 
 let cardSeq = 0
 /**

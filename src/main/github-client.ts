@@ -1,5 +1,5 @@
 import type { WorkItem } from '../shared/work-item'
-import { NOT_CONNECTED_CODE } from '../shared/credential-schema'
+import { githubMessage as messageOf, githubSuffix, sortRefusal } from './broker-refusal'
 import { stripAnsi } from '../shared/ansi'
 
 /**
@@ -72,14 +72,10 @@ function toItem(raw: unknown, stateWord: string | null): WorkItem | null {
   }
 }
 
-/** The broker's own refusal, sorted into the panel's arms: no credential is its own state. */
+/** The broker's own refusal, sorted into the panel's arms: no credential is its own state. A read is never asked, so nothing here is `refused`. */
 function refusal(answer: { reason: string; code?: string }): GithubListResult {
-  return answer.code === NOT_CONNECTED_CODE ? { kind: 'no-credential', reason: answer.reason } : { kind: 'unavailable', reason: answer.reason }
-}
-
-/** GitHub's own sentence, when its body carries one. */
-function messageOf(body: string): string | null {
-  try { const m = (JSON.parse(body) as { message?: unknown }).message; return typeof m === 'string' ? m : null } catch { return null }
+  const sorted = sortRefusal(answer)
+  return { kind: sorted.kind === 'no-credential' ? 'no-credential' : 'unavailable', reason: answer.reason }
 }
 
 export async function listAssignedWorkItems(deps: GithubDeps): Promise<GithubListResult> {
@@ -144,12 +140,8 @@ export type CommentResult =
 
 const ride = (deps: GithubDeps): { panelId?: string; teammateId?: string } => ({ ...(deps.panelId === undefined ? {} : { panelId: deps.panelId }), ...(deps.teammateId === undefined ? {} : { teammateId: deps.teammateId }) })
 
-/** The broker's refusal for a WRITE: not-connected is the credential arm; a teammate's unanswered or ungranted write is `refused` with the broker's own sentence. */
-function writeRefusal(answer: { reason: string; code?: string }): { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string } {
-  if (answer.code === NOT_CONNECTED_CODE) return { kind: 'no-credential', reason: answer.reason }
-  if (answer.code === 'not-answered' || answer.code === 'not-granted') return { kind: 'refused', reason: answer.reason }
-  return { kind: 'unavailable', reason: answer.reason }
-}
+/** The broker's refusal for a WRITE: shared with every broker client (`broker-refusal.ts`), so a new refusal code is sorted the same everywhere. */
+const writeRefusal = sortRefusal
 
 /**
  * M115. ONE POST to /repos/{owner}/{repo}/pulls through the broker — never
@@ -174,7 +166,7 @@ export async function openPullRequest(deps: GithubDeps, req: { repo: string; hea
     return { kind: 'exists', number: first.number, url: first.html_url }
   }
   if (answer.status === 403) return { kind: 'unavailable', reason: `GitHub refused the request — ${messageOf(answer.body) ?? 'a rate limit, or an organisation that needs SSO authorisation for this token'}.` }
-  if (answer.status !== 201) return { kind: 'unavailable', reason: `GitHub answered ${answer.status}${messageOf(answer.body) === null ? '' : ` — ${messageOf(answer.body)}`}.` }
+  if (answer.status !== 201) return { kind: 'unavailable', reason: `GitHub answered ${answer.status}${githubSuffix(answer.body)}.` }
   let parsed: { number?: unknown; html_url?: unknown }
   try { parsed = JSON.parse(answer.body) as { number?: unknown; html_url?: unknown } } catch { return { kind: 'malformed', reason: 'GitHub returned a response this app could not read.' } }
   if (typeof parsed.number !== 'number' || typeof parsed.html_url !== 'string') return { kind: 'malformed', reason: 'GitHub opened a pull request but did not say which.' }
@@ -186,7 +178,7 @@ export async function commentIssue(deps: GithubDeps, req: { repo: string; number
   const answer = await deps.broker.call({ service: 'github', method: 'POST', path: `/repos/${req.repo}/issues/${req.number}/comments`, body: JSON.stringify({ body: req.body }), ...ride(deps) })
   if (!answer.ok) return writeRefusal(answer)
   if (answer.status === 401) return { kind: 'rejected', reason: 'GitHub rejected the credential.' }
-  if (answer.status !== 201) return { kind: 'unavailable', reason: `GitHub answered ${answer.status}${messageOf(answer.body) === null ? '' : ` — ${messageOf(answer.body)}`}.` }
+  if (answer.status !== 201) return { kind: 'unavailable', reason: `GitHub answered ${answer.status}${githubSuffix(answer.body)}.` }
   let parsed: { html_url?: unknown }
   try { parsed = JSON.parse(answer.body) as { html_url?: unknown } } catch { return { kind: 'malformed', reason: 'GitHub returned a response this app could not read.' } }
   return { kind: 'commented', url: typeof parsed.html_url === 'string' ? parsed.html_url : '' }
