@@ -1,8 +1,9 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { redactSecrets } from '../shared/redact'
 import { MEMORY_MAX } from '../shared/ipc-contract'
+import { keepNewestLines } from './atomic-file'
 
 /**
  * M83. THE PROJECT MEMORY: what this repository has already decided, tried
@@ -141,20 +142,7 @@ export function createMemoryStore(deps: { dir: string; now?: () => number }): Me
    * file leaves a truncated or empty memory if the process dies mid-write,
    * and this file is the one durable record the milestone exists to keep.
    */
-  const trim = (root: string): void => {
-    const file = fileOf(root)
-    let lines: string[]
-    try {
-      lines = readFileSync(file, 'utf8').split('\n').filter((l) => l.trim() !== '')
-    } catch { return }
-    if (lines.length <= MEMORY_MAX) return
-    const kept = lines.slice(lines.length - MEMORY_MAX)
-    const tmp = `${file}.tmp`
-    try {
-      writeFileSync(tmp, `${kept.join('\n')}\n`)
-      renameSync(tmp, file)
-    } catch { /* the file stays long; a later write trims again */ }
-  }
+  const trim = (root: string): void => keepNewestLines(fileOf(root), MEMORY_MAX)
 
   return {
     fileOf,

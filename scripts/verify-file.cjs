@@ -2728,6 +2728,48 @@ await (async () => {
   rmSync(dir, { recursive: true, force: true })
 }
 
+// M617 — atomic.1/.2. THE ONE ATOMIC WRITE. About twenty stores and exporters
+// moved onto main/atomic-file.ts; a regression in it is a regression in all
+// of them, so it is pinned here on its own: the file lands whole with its
+// mode, a failed rename leaves no `.tmp` beside the person's file, and the
+// ring trim keeps the newest RAW lines (a malformed one included) in order.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc file atomic '))
+  const can = typeof F.writeFileAtomic === 'function' && typeof F.writeFileAtomicAsync === 'function' && typeof F.keepNewestLines === 'function'
+  let detail = {}
+  let pass = false
+  try {
+    const a = join(dir, 'nested', 'a.json')
+    F.writeFileAtomic(a, '{"v":1}', { mode: 0o600, mkdir: true })
+    const mode = statSync(a).mode & 0o777
+    // A rename onto a non-empty DIRECTORY fails after the temp file exists.
+    const blocked = join(dir, 'blocked')
+    mkdirSync(join(blocked, 'inside'), { recursive: true })
+    let threw = false
+    try { F.writeFileAtomic(blocked, 'x') } catch { threw = true }
+    let threwAsync = false
+    try { await F.writeFileAtomicAsync(blocked, 'x') } catch { threwAsync = true }
+    const b = join(dir, 'b.txt')
+    await F.writeFileAtomicAsync(b, 'async body')
+    detail = { mode: mode.toString(8), threw, threwAsync, tmpLeft: existsSync(`${blocked}.tmp`) }
+    pass = readFileSync(a, 'utf8') === '{"v":1}' && mode === 0o600 && !existsSync(`${a}.tmp`) &&
+      threw && threwAsync && !existsSync(`${blocked}.tmp`) && readFileSync(b, 'utf8') === 'async body' && !existsSync(`${b}.tmp`)
+  } catch (e) { detail = { threw: String(e) } }
+  ok('atomic.1 writeFileAtomic and writeFileAtomicAsync land the whole file with its mode (making the parent when asked), throw when the rename fails, and never leave a .tmp beside the file either way', can && pass, JSON.stringify(detail))
+
+  let trimmed = null
+  if (can) {
+    const log = join(dir, 'ring.jsonl')
+    writeFileSync(log, ['{"n":1}', '', '{"n":2}', 'not json', '{"n":4}', '{"n":5}'].join('\n') + '\n')
+    F.keepNewestLines(log, 3)
+    trimmed = readFileSync(log, 'utf8')
+    F.keepNewestLines(join(dir, 'missing.jsonl'), 3)
+  }
+  ok('atomic.2 keepNewestLines keeps the newest N non-blank RAW lines in order (a malformed line carried as it was), and a missing file is left alone without throwing',
+    trimmed === 'not json\n{"n":4}\n{"n":5}\n' && !existsSync(join(dir, 'missing.jsonl')), JSON.stringify({ trimmed }))
+  rmSync(dir, { recursive: true, force: true })
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

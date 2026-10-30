@@ -1,6 +1,7 @@
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DiagnosticsExportResult, DiagnosticsSnapshot } from '../shared/ipc-contract'
+import { writeFileAtomic } from './atomic-file'
 
 /**
  * Backlog #75's export half. The renderer has already assembled and scrubbed
@@ -42,9 +43,7 @@ export function writeDiagnosticsBundle(
     mkdirSync(deps.dir, { recursive: true })
     const name = `diagnostics-${timestampFor((deps.now ?? (() => new Date()))())}.json`
     const path = join(deps.dir, name)
-    const tmp = `${path}.tmp`
-    writeFileSync(tmp, JSON.stringify(snapshot, null, 2), { mode: 0o600 })
-    renameSync(tmp, path)
+    writeFileAtomic(path, JSON.stringify(snapshot, null, 2), { mode: 0o600 })
     return { ok: true, path }
   } catch (error) {
     // Unlike credential-store.ts's refusal, the payload here carries no

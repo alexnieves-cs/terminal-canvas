@@ -1,8 +1,9 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { redactSecrets } from '../shared/redact'
 import { LESSONS_MAX, LESSON_TEXT_MAX, LESSON_TITLE_MAX, clipExcerpt, lessonSignature, newestLessons, parseLesson, type Lesson } from '../shared/lessons'
 import { slugOf } from './memory-store'
+import { keepNewestLines } from './atomic-file'
 
 /**
  * M570 (lane O). The lessons a repository has taught, one append-only JSONL
@@ -75,16 +76,7 @@ export function createLessonStore(deps: { dir: string }): LessonStore {
     return count > 0 ? { ...out, redacted: count } : out
   }
 
-  const trim = (file: string): void => {
-    let lines: string[]
-    try { lines = readFileSync(file, 'utf8').split('\n').filter((l) => l.trim() !== '') } catch { return }
-    if (lines.length <= RAW_LINES_MAX) return
-    const tmp = `${file}.tmp`
-    try {
-      writeFileSync(tmp, `${lines.slice(lines.length - RAW_LINES_MAX).join('\n')}\n`)
-      renameSync(tmp, file)
-    } catch { /* the file stays long; a later write trims again */ }
-  }
+  const trim = (file: string): void => keepNewestLines(file, RAW_LINES_MAX)
 
   return {
     fileOf,

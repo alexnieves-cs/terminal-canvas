@@ -1,4 +1,4 @@
-import { appendFile, readFile, writeFile, rename } from 'node:fs/promises'
+import { appendFile, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { redactSecrets } from '../shared/redact'
 
@@ -24,6 +24,7 @@ import {
 } from '../shared/run-ledger'
 import { parseReviewIdentity } from '../shared/review-identity'
 import { isCheckRunId } from '../shared/check-output'
+import { writeFileAtomicAsync } from './atomic-file'
 
 export interface RunLedger {
   /**
@@ -137,9 +138,7 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
       } catch { /* a malformed line costs that line */ }
     }
     const marker: GapRow = { kind: 'gap', at: Date.now(), dropped }
-    const tmp = `${o.file}.tmp`
-    await writeFile(tmp, [JSON.stringify(marker), ...kept].join('\n') + '\n')
-    await rename(tmp, o.file)
+    await writeFileAtomicAsync(o.file, [JSON.stringify(marker), ...kept].join('\n') + '\n')
   }
 
   return {

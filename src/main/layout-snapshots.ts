@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseLayout, type LayoutSnapshot, type Workspace } from '@shared/layout-schema'
 import type { SnapshotMeta } from '@shared/ipc-contract'
+import { writeFileAtomic } from './atomic-file'
 export type { SnapshotMeta }
 
 /**
@@ -58,9 +59,7 @@ export function createLayoutSnapshots(deps: { dir: string; now?: () => number; m
       try {
         mkdirSync(deps.dir, { recursive: true })
         const target = join(deps.dir, `${at}.json`)
-        const tmp = `${target}.tmp`
-        writeFileSync(tmp, bytes, 'utf8')
-        renameSync(tmp, target)
+        writeFileAtomic(target, bytes)
         lastAt = at
         const all = files()
         for (const old of all.slice(0, Math.max(0, all.length - max))) {

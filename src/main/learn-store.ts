@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { PROPOSALS_MAX, parseProposal, type Proposal, type ProposalState } from '../shared/lesson-proposal'
 import { failedProof } from '../shared/lesson-proof'
 import { RULES_MAX, parseLearnedRule, type LearnedRule } from '../shared/lesson-library'
 import { slugOf } from './memory-store'
+import { writeFileAtomic } from './atomic-file'
 
 /**
  * M571–M572 (lane O). What a repository's lessons have become: the proposed
@@ -97,9 +98,7 @@ export function createLearnStore(deps: { dir: string; bootAt?: number }): LearnS
     if (existsSync(file)) {
       try { JSON.parse(readFileSync(file, 'utf8')) } catch { renameSync(file, `${file}.bad-${Date.now()}`) }
     }
-    const tmp = `${file}.tmp`
-    writeFileSync(tmp, `${JSON.stringify({ proposals, rules }, null, 2)}\n`)
-    renameSync(tmp, file)
+    writeFileAtomic(file, `${JSON.stringify({ proposals, rules }, null, 2)}\n`)
   }
 
   return {

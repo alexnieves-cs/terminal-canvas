@@ -13,7 +13,7 @@
  * file that quietly differs from the screen is the failure #31 is about.
  * Cancel writes nothing; off (persistence off AND no buffer) reads nothing.
  */
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { ScrollbackLog } from './scrollback-log'
 import { stripAnsi } from '../shared/ansi'
@@ -22,6 +22,7 @@ import type { CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult, 
 import type { DeckExportRequest, DeckExportResult } from '../shared/deck-pptx'
 import type { DeckExporter } from './deck-export'
 import type { FilmDoors } from './film-export'
+import { writeFileAtomic } from './atomic-file'
 
 export interface ExporterDeps {
   log: Pick<ScrollbackLog, 'readAll'>
@@ -54,9 +55,7 @@ export interface Exporters {
 
 const atomicWrite = (path: string, data: string | Buffer): void => {
   mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
-  writeFileSync(tmp, data, { mode: 0o600 })
-  renameSync(tmp, path)
+  writeFileAtomic(path, data, { mode: 0o600 })
 }
 
 const stamp = (d: Date): string => d.toISOString().replace(/[:.]/g, '-').slice(0, 19)

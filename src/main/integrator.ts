@@ -1,5 +1,4 @@
 import { promises as fs } from 'node:fs'
-import { join } from 'node:path'
 import type { GitRunner } from './review-engine'
 import { buildBranchArgs, buildHeadArgs } from './git-args'
 import { combineScratchPath, readLane } from './combine-runner'
@@ -7,6 +6,7 @@ import type { CheckOutputRead } from '../shared/check-output'
 import type { LaneMergeRequest, LaneMergeResult } from '../shared/lane-merge'
 import type { EventRow } from '../shared/run-ledger'
 import { parseReceipt, type IntegrateRequest, type IntegrateResult, type IntegrationReceipt, type ReceiptLane } from '../shared/integration'
+import { writeFileAtomicAsync } from './atomic-file'
 
 /**
  * M317. THE FINAL INTEGRATION STEP — the lanes land in the order that was
@@ -71,10 +71,7 @@ export function createReceiptStore(o: { file: string; max?: number }): ReceiptSt
     add: (receipt) => {
       queue = queue.catch(() => undefined).then(async () => {
         const next = [receipt, ...(await readAll()).filter((r) => r.id !== receipt.id)].slice(0, max)
-        const tmp = `${o.file}.tmp`
-        await fs.mkdir(join(o.file, '..'), { recursive: true })
-        await fs.writeFile(tmp, JSON.stringify(next, null, 1))
-        await fs.rename(tmp, o.file)
+        await writeFileAtomicAsync(o.file, JSON.stringify(next, null, 1), { mkdir: true })
       })
       return queue
     }
