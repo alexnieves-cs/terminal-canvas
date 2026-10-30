@@ -619,6 +619,24 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
       `length=${claudeMd.length} missing: ${missing.slice(0, 6).join(' ')}`)
   }
 
+  // M618 — ipc-list.1. CLAUDE.md's channel list is GENERATED (scripts/ipc-list.cjs)
+  //       from the contract, between two markers. A hand edit, or a channel
+  //       added to the contract without running the generator, is caught here
+  //       with the one command that fixes it.
+  {
+    let detail = ''
+    let pass = false
+    try {
+      const L = require('./ipc-list.cjs')
+      const have = L.currentBlock(readFileSync(join(ROOT, 'CLAUDE.md'), 'utf8'))
+      const want = L.block()
+      const n = L.contractChannels().length
+      pass = have !== null && have === want && n > 200
+      detail = have === null ? 'CLAUDE.md lost its ipc:channels markers' : pass ? `${n} channels, block matches` : 'the block and the contract disagree — run npm run ipc:list'
+    } catch (e) { detail = String(e) }
+    ok('ipc-list.1 CLAUDE.md\'s channel list is exactly what npm run ipc:list generates from the contract (every IPC then every IPC_EVENTS channel, in contract order)', pass, detail)
+  }
+
   ok('22 no two computed checks in one suite share an id',
     collisions.length === 0 && scanned > 900,
     collisions.length ? collisions.join(' ') : `${scanned} ids scanned, none collide`)
