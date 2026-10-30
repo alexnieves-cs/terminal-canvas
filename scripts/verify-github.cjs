@@ -132,6 +132,26 @@ const served = (q) => ({ ok: true, status: 200, truncated: false, body: q.path.i
       JSON.stringify({ opened, post, exists, existsCalls: existsCalls.map((c) => [c.method, c.path]), noCred, rejected, down, junk, refused, commented }))
   }
 
+  // M615 — refusal.1. ONE SORTER FOR EVERY BROKER CLIENT. The board's two
+  //      write doors had their own copy of the refusal sort and it never
+  //      learned M255's `not-asked`: a write nobody was asked about came back
+  //      as `unavailable`. Every refusal code is fed to both doors and to the
+  //      shared sorter the cloud lanes and the publisher use; all must agree.
+  {
+    const codes = { 'not-connected': 'no-credential', 'not-asked': 'refused', 'not-answered': 'refused', 'not-granted': 'refused', 'something-new': 'unavailable' }
+    const req = { repo: 'acme/canvas', head: 'tc/c9', base: 'main', title: 't', body: 'b' }
+    const got = {}
+    for (const code of Object.keys(codes)) {
+      const b = broker(() => ({ ok: false, code, reason: `refused: ${code}` }))
+      const pr = typeof G.openPullRequest === 'function' ? await G.openPullRequest({ broker: b }, req) : null
+      const cm = typeof G.commentIssue === 'function' ? await G.commentIssue({ broker: b }, { repo: 'acme/canvas', number: 7, body: 'x' }) : null
+      got[code] = [pr && pr.kind, cm && cm.kind, pr && pr.reason]
+    }
+    ok('refusal.1 openPullRequest and commentIssue sort every broker refusal code by the one shared rule — not-asked, not-answered and not-granted are refused, not-connected is no-credential, an unknown code is unavailable — keeping the broker\'s own sentence',
+      Object.entries(codes).every(([code, want]) => got[code][0] === want && got[code][1] === want && got[code][2] === `refused: ${code}`),
+      JSON.stringify(got))
+  }
+
   // M255 — publish.*. PUBLISHING IS A PERSON'S ACT, WITH THE TEXT IN FRONT OF
   //     THEM. main/github-publish.ts reads a DRAFT FILE, resolves the repo
   //     from the file's own origin remote, passes the body through outward(),

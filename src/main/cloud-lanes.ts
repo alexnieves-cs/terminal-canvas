@@ -1,5 +1,6 @@
 import { outward } from '../shared/outward'
 import { NOT_CONNECTED_CODE } from '../shared/credential-schema'
+import { githubSuffix as suffix, sortRefusal as refusalOf } from './broker-refusal'
 import {
   LANE_ID, cloudLaneState, dispatchRequest, findLanePr, handoffTook, inertForGithub, isRepo, issueRequest, nextPollMs,
   parseCloudLane, providerById,
@@ -172,17 +173,6 @@ export async function dispatchCloudLane(deps: DispatchDeps, raw: unknown): Promi
   }
   return { kind: 'dispatched', lane, redacted }
 }
-
-function refusalOf(answer: { reason: string; code?: string }): { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string } {
-  if (answer.code === NOT_CONNECTED_CODE) return { kind: 'no-credential', reason: answer.reason }
-  if (answer.code === 'not-asked' || answer.code === 'not-answered' || answer.code === 'not-granted') return { kind: 'refused', reason: answer.reason }
-  return { kind: 'unavailable', reason: answer.reason }
-}
-
-function messageOf(body: string): string | null {
-  try { const m = (JSON.parse(body) as { message?: unknown }).message; return typeof m === 'string' ? m : null } catch { return null }
-}
-const suffix = (body: string): string => (messageOf(body) === null ? '' : ` — ${messageOf(body)}`)
 
 function numberOf(body: string): number | null {
   try { const n = (JSON.parse(body) as { number?: unknown }).number; return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null } catch { return null }
