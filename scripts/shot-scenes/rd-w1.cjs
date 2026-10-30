@@ -71,6 +71,10 @@ module.exports = [
       // world bobs or breathes, so the page CAN hold still, and on the Mac
       // runner it sometimes captured before the 3D layer's first frame (4.4%
       // off the golden at mid-fade). Hold-still waits that frame out.
+      // What the frame holds, in the log: the golden is one of two pictures
+      // 4.4% apart, and a run's diff image is not always reachable.
+      const look = await k.js(`(() => { const c = document.querySelector('.canvas'); const gl = [...document.querySelectorAll('canvas')].filter((x) => !x.closest('.canvas')); return { host: c ? c.style.opacity : null, layers: gl.map((x) => x.width + 'x' + x.height + '@' + (x.closest('[style*=opacity]')?.style.opacity ?? '-')), robots: document.querySelectorAll('[data-world-card], .world-card').length } })()`)
+      console.log('[shot] rd-world-transition-rm: ' + JSON.stringify(look))
       await k.shot('rd-world-transition-rm')
     }
   }
