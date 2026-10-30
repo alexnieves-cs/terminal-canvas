@@ -1,4 +1,5 @@
 import type { EventRow, OrchEventKind } from './run-ledger'
+import { isRecord } from './guards'
 
 /**
  * M369. THE DECISION AUDIT — "who decided what, when", in one place that
@@ -54,7 +55,6 @@ export function decisionOf(row: EventRow): Omit<DecisionRow, 'scrubbed'> | null 
   }
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v !== ''
 
 /** Field-level: a malformed line costs itself; an unknown optional field is dropped, never the row. */

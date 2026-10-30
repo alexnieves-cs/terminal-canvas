@@ -1,6 +1,7 @@
 import type { TokenTotals, AgentOptions } from './cost'
 import { AGENT_CAPABILITIES } from './cost'
 import type { ContentBlock, TranscriptEvent } from './transcript'
+import { isRecord } from './guards'
 
 /**
  * M90. THE CODEX ADAPTER — `codex exec --json`'s JSONL to the SAME
@@ -31,7 +32,6 @@ import type { ContentBlock, TranscriptEvent } from './transcript'
 
 const PREVIEW_MAX = 80
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
 /**

@@ -1,5 +1,6 @@
 import type { TokenTotals } from './cost'
 import { parseRateLimitInfo, type RateLimitWindows } from './rate-limit'
+import { isRecord } from './guards'
 
 /**
  * M71. The transcript schema and the line parser for an agent conversation,
@@ -140,10 +141,6 @@ export type TranscriptEvent =
 /** Absent is 0, never NaN: one NaN poisons every later addition silently. */
 function num(raw: unknown): number {
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
-}
-
-function isRecord(raw: unknown): raw is Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
 }
 
 function str(raw: unknown): string | undefined {

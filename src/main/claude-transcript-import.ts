@@ -1,5 +1,6 @@
 import { addTotals, emptyTotals, type TokenTotals } from '@shared/cost'
 import { parseStreamLine, type TranscriptTurn } from '@shared/transcript'
+import { isRecord } from '../shared/guards'
 
 /**
  * M74. A terminal's Claude session, read from the CLI's OWN transcript
@@ -24,10 +25,6 @@ export interface ImportedTranscript {
   turns: TranscriptTurn[]
   meta: { usage: TokenTotals; costUsd?: number; turns: number }
   skipped: { sidechain: number; meta: number; ignored: number; malformed: number }
-}
-
-function isRecord(raw: unknown): raw is Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
 }
 
 export function importClaudeTranscript(text: string): ImportedTranscript {

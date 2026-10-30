@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { contextTokens } from '@shared/agent-session'
 import type { TokenTotals } from '@shared/cost'
 import type { TranscriptTurn } from '@shared/transcript'
+import { isRecord } from '../shared/guards'
 
 /**
  * M73. The durable transcript of a chat panel: one append-only file per
@@ -97,10 +98,6 @@ export function carriedMeter(read: AgentTranscriptRead): { spentUsd?: number; co
     if (turn.role === 'assistant' && turn.usage !== undefined) context = contextTokens(turn.usage)
   }
   return { ...(read.meta?.spentUsd === undefined ? {} : { spentUsd: read.meta.spentUsd }), ...(context === undefined ? {} : { context }) }
-}
-
-function isRecord(raw: unknown): raw is Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
 }
 
 function num(raw: unknown): number {

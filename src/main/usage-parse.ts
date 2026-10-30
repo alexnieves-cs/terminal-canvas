@@ -1,4 +1,5 @@
 import { type TokenTotals } from '../shared/cost'
+import { isRecord } from '../shared/guards'
 
 /**
  * One assistant turn's usage, pulled out of a Claude Code transcript line.
@@ -32,10 +33,6 @@ export interface ParsedChunk {
 /** Absent is 0, never NaN: one NaN poisons every later addition silently. */
 function num(raw: unknown): number {
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
-}
-
-function isRecord(raw: unknown): raw is Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
 }
 
 /**

@@ -1,3 +1,4 @@
+import { isRecord } from './guards'
 /**
  * M93. ANNOTATIONS — labels in the canvas's margins, pure over the workspace.
  *
@@ -86,7 +87,6 @@ export function pruneAnnotations(list: readonly Annotation[], panelIds: Readonly
   return list.filter((a) => a.anchor.kind === 'world' || panelIds.has(a.anchor.panelId))
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 /**

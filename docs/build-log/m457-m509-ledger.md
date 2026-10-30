@@ -153,3 +153,4 @@ From the feature-by-feature audit of 2026-10-30 (report in the project library, 
 | PR | Milestone | What | Checks |
 |---|---|---|---|
 | this PR | M615 | One broker-refusal sorter (`main/broker-refusal.ts`) for the GitHub client, the cloud lanes and the publisher, plus GitHub's own message tail. Fixes a drift: the board's open-PR and comment doors never learned M255's `not-asked`, so a write nobody was asked about read as `unavailable` | `verify:github` refusal.1 |
+| this PR | M616 | One plain-object guard (`shared/guards.ts`) in place of 26 copies across main, shared and the renderer; `layout-schema/fields.ts` re-exports it so its importers do not move | typecheck; every suite that bundles a parser |

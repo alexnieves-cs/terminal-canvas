@@ -33,10 +33,8 @@ import {
   type ToolScope
 } from '../shared/toolbox'
 import { PERMISSION_MODES } from '../shared/cost'
+import { isRecord } from '../shared/guards'
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
-}
 function isStr(v: unknown): v is string {
   return typeof v === 'string'
 }

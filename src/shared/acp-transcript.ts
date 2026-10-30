@@ -1,5 +1,6 @@
 import type { TokenTotals } from './cost'
 import type { ContentBlock, TranscriptEvent, OutgoingImage } from './transcript'
+import { isRecord } from './guards'
 
 /**
  * M119. THE ACP CODEC — the Agent Client Protocol (JSON-RPC 2.0 over stdio,
@@ -184,7 +185,6 @@ export function acpOptionFor(options: readonly string[], answer: { allow: boolea
 /* ------------------------------------------------------------------------ */
 
 const PREVIEW_MAX = 80
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 

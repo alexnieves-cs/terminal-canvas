@@ -1,5 +1,6 @@
 import type { ReviewHandoff } from '@shared/review-readiness'
 import type { WorkbenchTab } from '@shared/orchestrate-prefs'
+import { isRecord } from '../../shared/guards'
 
 /**
  * M324. A TASK'S FOCUS VIEW — the pure half.
@@ -68,8 +69,6 @@ export const FOCUS_PREFS_MAX = 50
 export function defaultFocusPrefs(): FocusPrefs {
   return { split: FOCUS_SPLIT_DEFAULT, side: 'changes', at: 0 }
 }
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 /** One task's prefs, field by field: a bad split costs the split, not the file. */
 export function parseFocusPrefs(raw: unknown): FocusPrefs {

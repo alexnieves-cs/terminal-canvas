@@ -1,5 +1,6 @@
 import type { AgentOptions } from './cost'
 import type { ContentBlock, TranscriptEvent } from './transcript'
+import { isRecord } from './guards'
 
 /**
  * M118. THE COPILOT ADAPTER — `copilot -p --output-format json`'s JSONL to
@@ -40,7 +41,6 @@ import type { ContentBlock, TranscriptEvent } from './transcript'
 
 const PREVIEW_MAX = 80
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** What the parser is told: the id the host pinned, because the stream never says it. */

@@ -1,4 +1,5 @@
 import type { TranscriptTurn } from './transcript'
+import { isRecord } from './guards'
 
 /**
  * M556–M560 (lane K). Fork from any turn — the pure half: how a turn's
@@ -134,10 +135,6 @@ export function snapshotFor(rows: readonly TurnSnapshotRow[], n: number): { row:
   const before = rows.filter((r) => r.turn < n)
   const last = before[before.length - 1]
   return last === undefined ? null : { row: last, exact: false }
-}
-
-function isRecord(raw: unknown): raw is Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
 }
 
 /**

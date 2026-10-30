@@ -1,3 +1,4 @@
+import { isRecord } from './guards'
 /**
  * Account-level Claude usage windows, folded from `rate_limit_event`.
  *
@@ -53,10 +54,6 @@ export type RateLimitState =
     }
 
 export const RATE_LIMIT_NONE: RateLimitState = { kind: 'none' }
-
-function isRecord(raw: unknown): raw is Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-}
 
 function finite(raw: unknown): number | undefined {
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined

@@ -1,4 +1,5 @@
 import type { DiffLine } from './review'
+import { isRecord } from './guards'
 
 /**
  * M570 (lane O). THE SIGNAL A HARNESS LEARNS FROM — a lesson is one moment a
@@ -73,7 +74,6 @@ export const LESSON_CHECKS_MAX = 10
 export const LESSON_RAW_MAX = 64 * 1024
 export const LESSON_SIGNATURE_MAX = 32
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 

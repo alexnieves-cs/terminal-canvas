@@ -21,6 +21,7 @@
  */
 import { parseTemplates } from './layout-schema'
 import type { PersistedTemplate, TemplateNode } from './templates'
+import { isRecord } from './guards'
 
 export interface ToolGenerateRequest { description: string; folder: string }
 
@@ -72,8 +73,6 @@ export const TOOL_SYSTEM_PROMPT = [
   'An app has "files" (relative paths inside its own folder; must include index.html), a "devScript" that serves the folder, and the "port" that script listens on.',
   'Keep it small. Name every address the tool contacts in its files or nodes: a person reads them before anything runs.'
 ].join('\n')
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 /**
  * The object inside an answer: the one `--json-schema` validated. A result with

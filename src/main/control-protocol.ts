@@ -16,6 +16,7 @@
 import type { Preset } from '../shared/layout-schema'
 import { SWARM_PRESET_IDS, type SwarmPresetId } from '../shared/swarm'
 import { normalizeCapability } from '../shared/toolbox-query'
+import { isRecord } from '../shared/guards'
 
 export type ControlRequest =
   | { verb: 'open'; preset?: string; cwd?: string }
@@ -113,8 +114,6 @@ export type ParsedControl =
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const CONTROL_SCHEME = 'terminal-canvas'
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 const optionalString = (v: unknown): string | undefined | null => {
   if (v === undefined) return undefined

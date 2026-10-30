@@ -1,3 +1,4 @@
+import { isRecord } from './guards'
 /**
  * M181. THE STARTER CANVAS as data: the manifest (one captioned example of
  * each object kind the app supports today, placed relative to the agent's
@@ -86,8 +87,6 @@ export interface PersistedStarter {
   version: number
   keys: string[]
 }
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 /** Absent → absent with no warning; malformed → dropped with one warning; a bad key costs that key. A fresh copy. */
 export function parseStarter(raw: unknown, warnings: string[]): PersistedStarter | undefined {
