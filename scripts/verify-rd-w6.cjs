@@ -169,7 +169,7 @@ const w6css = css.slice(css.indexOf(open), css.indexOf(close))
   ok('rd-w6.cross.1 Orchestrate\'s View in World still requests an arrival before the page change, and the flat room takes that same arrival',
     /onViewInWorld=\{\(ids\) => \{\s*requestArrival\(ids, Date\.now\(\)\)\s*leaveForCanvas\(\)\s*requestAnimationFrame\(\(\) => setWorldOn\(true\)\)/.test(canvas) &&
       /takeArrival\(\(agentId\) => stations\.current\?\.has\(agentId\) === true/.test(view) &&
-      /takeArrival\(/.test(flat) && /data-orch-platform-world/.test(read('src/renderer/orchestration/OrchestrationView.tsx')),
+      /takeArrival\(/.test(flat) && /data-orch-platform-world/.test(require('./lib/orch-view-src.cjs').orchViewSource()),
     'cross-links')
 }
 
