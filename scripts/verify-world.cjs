@@ -884,7 +884,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     /SIMULATE_AGENTS !== 'true'/.test(text('src/main/bootstrap/world-sim-wiring.ts')) && /worldSim = startWorldSimWiring\(state\)/.test(idx))
   ok('world.wire.5 the channels are declared once and carried by the bridge: WORLD_CONNECTION as an event, WORLD_STATUS and WORLD_RETRY as invokes, and the project index lists them',
     IPCC.IPC_EVENTS.WORLD_CONNECTION === 'world:connection' && IPCC.IPC.WORLD_STATUS === 'world:status' && IPCC.IPC.WORLD_RETRY === 'world:retry' &&
-      /world:events world:connection world:status world:retry/.test(text('CLAUDE.md')) && /IPC_EVENTS\.WORLD_CONNECTION/.test(text('src/preload/index.ts')) && /IPC\.WORLD_RETRY/.test(text('src/preload/index.ts')))
+      ['world:events', 'world:connection', 'world:status', 'world:retry'].every((ch) => new RegExp(`(^|\\s)${ch}(\\s|$)`).test(text('CLAUDE.md'))) && /IPC_EVENTS\.WORLD_CONNECTION/.test(text('src/preload/index.ts')) && /IPC\.WORLD_RETRY/.test(text('src/preload/index.ts')))
 }
 
 // ── the studio (M416): the platform, the set dressing, the camera, the ask pill, the chrome ──
