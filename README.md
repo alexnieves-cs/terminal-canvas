@@ -1387,6 +1387,7 @@ price of not killing something.
 | M581 | Handoffs and a shared review queue in the shared workspace doc, judged by the same one table in the app and the collab server: an agent is handed on only by whoever holds it now, taken or judged only in one's own name, and nobody reviews their own result. [Log](docs/build-log/m580-m583-multiplayer.md). |
 | M582 | Main's side: the person's queue and one write in their name (`team:flow`, `team:flow-write`, `team:flow-changed`); words scrubbed before they leave. [Log](docs/build-log/m580-m583-multiplayer.md). |
 | M583 | Needs you shows what was handed to you, the review queue and what you wait on the team for; the palette hands an agent off, offers it to anyone, and asks for a review. [Log](docs/build-log/m580-m583-multiplayer.md). |
+| M630 | The Mac release is signed and notarized when the Apple secrets exist, and unsigned exactly as before when they do not: builder-config takes a `sign` mode (hardened runtime, entitlements, notarize), release.yml decides from the secrets and gates on codesign, Gatekeeper and the stapled ticket. The owner's steps are in docs/release-signing.md. [Log](docs/build-log/m630-mac-signing.md). |
 
 ### What's next — the v10 run (D01–D20)
 

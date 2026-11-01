@@ -25,6 +25,12 @@
 
 function buildConfig(opts) {
   const arch = (opts && opts.arch) || 'arm64'
+  // M630. Signing is a MODE the caller asks for, never something inferred from
+  // the machine. electron-builder.config.cjs turns it on only for
+  // TC_MAC_SIGN=1, which release.yml sets only when the Apple secrets exist;
+  // every other build (verify:packaged, a dev `npm run package`, a fork's CI)
+  // stays on the hermetic unsigned path below, whatever keychain it runs on.
+  const sign = Boolean(opts && opts.sign)
 
   return {
     appId: 'com.alexnieves.terminal-canvas',
@@ -99,13 +105,47 @@ function buildConfig(opts) {
         { target: 'dmg', arch: [arch] }
       ],
 
-      // EXPLICIT, not omitted, and the difference is the whole point. Omitted,
-      // electron-builder may discover a Developer ID in whichever keychain the
-      // build runs against and produce a differently-signed app on a different
-      // machine. Explicit null is what makes this build hermetic and offline.
-      // M5c ships unsigned by decision, not by accident: another Mac will show
-      // Gatekeeper's unidentified-developer block, which is the accepted cost.
-      identity: null
+      // UNSIGNED: EXPLICIT null, not omitted, and the difference is the whole
+      // point. Omitted, electron-builder may discover a Developer ID in
+      // whichever keychain the build runs against and produce a
+      // differently-signed app on a different machine. Explicit null is what
+      // makes this build hermetic and offline. M5c ships unsigned by decision,
+      // not by accident: another Mac will show Gatekeeper's
+      // unidentified-developer block, which is the accepted cost.
+      //
+      // SIGNED (M630): no identity key at all. The certificate comes from
+      // CSC_LINK, which electron-builder imports into a throwaway keychain of
+      // its own, so the signed build is hermetic too: it can only ever sign
+      // with the one certificate the release job hands it.
+      ...(sign ? signedMac() : { identity: null })
+    }
+  }
+}
+
+// M630. What a signed build adds. Notarization REQUIRES the hardened runtime,
+// and the hardened runtime is what makes the entitlements file load-bearing
+// (each key in it says why). `notarize: true` makes electron-builder submit
+// the signed .app to Apple and staple the ticket before the DMG is built, so
+// the DMG carries an app that opens offline on first launch. The credentials
+// are env, never config: APPLE_API_KEY/APPLE_API_KEY_ID/APPLE_API_ISSUER, or
+// APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID (release.yml sets one set).
+function signedMac() {
+  return {
+    hardenedRuntime: true,
+    // electron-builder's own spctl check runs before notarization and fails
+    // an app that is correctly signed but not yet notarized; release.yml
+    // assesses the finished, stapled app instead.
+    gatekeeperAssess: false,
+    entitlements: 'build/entitlements.mac.plist',
+    entitlementsInherit: 'build/entitlements.mac.plist',
+    notarize: true,
+    // The usage strings macOS shows when a command run inside a pane asks for
+    // one of these (see the entitlements file): without them the prompt names
+    // no reason, and Apple Events are refused outright.
+    extendInfo: {
+      NSAppleEventsUsageDescription: 'A command running in a Terminal Canvas pane wants to control another app.',
+      NSMicrophoneUsageDescription: 'A command running in a Terminal Canvas pane wants to use the microphone.',
+      NSCameraUsageDescription: 'A command running in a Terminal Canvas pane wants to use the camera.'
     }
   }
 }
