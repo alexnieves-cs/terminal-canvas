@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Terminal Canvas</title>
+    <meta name="description" content="An infinite canvas for coding agents. Run Claude Code, Codex and plain shells side by side, see which one needs you, and review what each one changed. Free and open source, for macOS." />
+    <meta name="color-scheme" content="dark light" />
+    <meta property="og:title" content="Terminal Canvas" />
+    <meta property="og:description" content="An infinite canvas for coding agents. Try the live demo in your browser, or get the Mac app." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://alexnieves-cs.github.io/terminal-canvas/" />
+    <meta property="og:image" content="https://alexnieves-cs.github.io/terminal-canvas/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- No script on this page at all: it is words, pictures and links. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'" />
+    <link rel="icon" type="image/png" href="./assets/logo.png" />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top">
+      <a class="brand" href="./">
+        <img src="./assets/logo.png" alt="" width="28" height="28" />
+        <span>Terminal Canvas</span>
+      </a>
+      <nav aria-label="Site">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="#feedback">Feedback</a>
+        <a href="https://github.com/alexnieves-cs/terminal-canvas">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <p class="eyebrow">Free and open source · macOS</p>
+        <h1>An infinite canvas for coding&nbsp;agents.</h1>
+        <p class="lede">
+          Run Claude Code, Codex and plain shells side by side. See which one needs you, review what
+          each one changed, and keep control of the result.
+        </p>
+        <div class="cta">
+          <a class="btn btn--primary" href="./demo/">Try the live demo</a>
+          <a class="btn" href="https://github.com/alexnieves-cs/terminal-canvas/releases/latest">Download for macOS</a>
+        </div>
+        <p class="fine">
+          The demo runs in your browser with scripted agents and nothing to install.
+          The app is an unsigned build for Apple Silicon; <a href="#install">install notes</a> below.
+        </p>
+        <figure class="shot shot--hero">
+          <img
+            src="./assets/screens/canvas.png"
+            width="1600"
+            height="1000"
+            alt="The Terminal Canvas workspace: a Claude Code agent writing tests, a Codex agent asking permission to edit a file, a test watcher and a review layer, grouped under one task, with the inspector on the right."
+          />
+          <figcaption>Design mockup of the 6.0 workspace, with sample data.</figcaption>
+        </figure>
+      </section>
+
+      <section class="why" aria-labelledby="why-title">
+        <h2 id="why-title">Stop losing the agent that stopped to ask you something.</h2>
+        <p>
+          Coding agents run for minutes or hours, and the usual way to run several is a wall of
+          terminal tabs. Terminal Canvas puts each agent in a real terminal on a canvas you arrange,
+          and then does the bookkeeping.
+        </p>
+      </section>
+
+      <section id="features" class="features" aria-label="Features">
+        <article>
+          <h3>Every panel is a real terminal</h3>
+          <p>Each panel is a genuine PTY, so <code>claude</code>, <code>codex</code> or your own shell run exactly as they do anywhere else.</p>
+        </article>
+        <article>
+          <h3>The canvas tells you who needs you</h3>
+          <p>A panel's border carries its agent's state, an off-screen panel that is waiting gets an edge pip, and <kbd>⌘J</kbd> flies to the next one.</p>
+        </article>
+        <article>
+          <h3>Review is built in</h3>
+          <p>Each panel is diffed against the snapshot taken when its agent started, so you see what that agent changed and commit it from the canvas.</p>
+        </article>
+        <article>
+          <h3>One worktree per agent</h3>
+          <p>Give each agent its own git worktree and branch, arrange them side by side, and merge deliberately. Four agents, four clean checkouts.</p>
+        </article>
+        <article>
+          <h3>Agents that hand off work</h3>
+          <p>Draw an edge from one panel to another: when the source finishes, the target starts with its output as context.</p>
+        </article>
+        <article>
+          <h3>Work stays where you left it</h3>
+          <p>With <code>tmux</code> installed, agents outlive a reload and, if you ask, a quit. The Sessions page shows what finished, failed or is waiting.</p>
+        </article>
+      </section>
+
+      <section class="gallery" aria-label="Screens">
+        <figure class="shot">
+          <img src="./assets/screens/palette.png" width="1600" height="1000" loading="lazy" alt="The command palette filtered by a search word, over the canvas zoomed out so panels become status cards." />
+          <figcaption><b>Find anything.</b> <kbd>⌘K</kbd> searches panels, tasks, files and commands.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="./assets/screens/sessions.png" width="1600" height="1000" loading="lazy" alt="The Sessions page: an attention queue of three agents waiting on you, and a table of every session grouped by task." />
+          <figcaption><b>Sessions.</b> An attention queue and every session, grouped by task.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="./assets/screens/world-overview.png" width="1600" height="1000" loading="lazy" alt="The World overview: five task rooms and a replay scrubber with a While you were away summary." />
+          <figcaption><b>The World.</b> Your layout as rooms, with a catch-up when you return.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="./assets/screens/world-focus.png" width="1600" height="1000" loading="lazy" alt="The World view focused on a Codex agent asking permission to edit a file, with Approve and Deny buttons in a side sheet." />
+          <figcaption><b>Focus and act.</b> Approve or deny an agent's request from a side sheet.</figcaption>
+        </figure>
+      </section>
+
+      <section class="band" aria-labelledby="demo-title">
+        <div>
+          <h2 id="demo-title">See it before you install it</h2>
+          <p>
+            The live demo is the app's own interface on a sample canvas. Agents work, wait for you
+            and finish; terminals play recordings, and anything that would start a process says it
+            runs in the app.
+          </p>
+        </div>
+        <a class="btn btn--primary" href="./demo/">Open the live demo</a>
+      </section>
+
+      <section id="install" class="install" aria-labelledby="install-title">
+        <h2 id="install-title">Install</h2>
+        <ol>
+          <li>Download the <code>.dmg</code> from the <a href="https://github.com/alexnieves-cs/terminal-canvas/releases/latest">latest release</a>, open it, and drag <b>Terminal Canvas</b> to Applications.</li>
+          <li>
+            The build is <b>unsigned</b>, so macOS refuses the first launch. Open
+            <b>System Settings → Privacy &amp; Security</b> and choose <b>Open Anyway</b>, or clear the
+            quarantine flag:
+            <pre><code>xattr -dr com.apple.quarantine /Applications/Terminal\ Canvas.app</code></pre>
+          </li>
+          <li>Install <code>tmux</code> (<code>brew install tmux</code>) if you want agents to survive a reload or a quit. It is optional.</li>
+        </ol>
+        <p class="fine">
+          Only skip the warning because you have read the source or trust its author: the app, by
+          design, runs whatever commands you give it. Prefer to build it yourself? The
+          <a href="https://github.com/alexnieves-cs/terminal-canvas#quick-start">quick start</a> is three commands.
+        </p>
+      </section>
+
+      <section id="feedback" class="feedback" aria-labelledby="feedback-title">
+        <h2 id="feedback-title">Tell us what you think</h2>
+        <p>
+          Terminal Canvas is early, and the most useful thing you can do is say what you tried and
+          where it got in the way. Feedback lives on GitHub; you need a free account to post.
+        </p>
+        <div class="cards">
+          <a class="card" href="https://github.com/alexnieves-cs/terminal-canvas/issues/new?template=feedback.yml">
+            <b>Share feedback</b>
+            <span>First impressions, from the demo or the app. Five short questions.</span>
+          </a>
+          <a class="card" href="https://github.com/alexnieves-cs/terminal-canvas/issues/new?template=bug_report.md">
+            <b>Report a bug</b>
+            <span>Something behaved differently than it should have.</span>
+          </a>
+          <a class="card" href="https://github.com/alexnieves-cs/terminal-canvas/issues/new?template=feature_request.md">
+            <b>Ask for a feature</b>
+            <span>Something that should exist and does not.</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span>MIT licensed</span>
+      <a href="https://github.com/alexnieves-cs/terminal-canvas">Source</a>
+      <a href="https://github.com/alexnieves-cs/terminal-canvas/releases">Releases</a>
+      <a href="https://github.com/alexnieves-cs/terminal-canvas/blob/main/docs/getting-started.md">Getting started</a>
+      <a href="https://github.com/alexnieves-cs/terminal-canvas/issues">Issues</a>
+    </footer>
+  </body>
+</html>

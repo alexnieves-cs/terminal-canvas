@@ -90,7 +90,11 @@ const ok = (id, pass, detail) => {
     await page.keyboard.type('ledger')
     await page.waitForTimeout(800)
     await page.keyboard.press('Escape')
-    await page.getByText('Sessions', { exact: true }).first().click()
+    // Not getByText('Sessions', exact): once a scripted agent waits on the
+    // visitor the tab carries a count badge inside its label ("Sessions1"),
+    // and an exact match then finds nothing, a race the run lost about one
+    // time in three.
+    await page.getByRole('button', { name: /^Sessions/ }).first().click()
     await page.waitForTimeout(800)
     await page.getByText('Canvas', { exact: true }).first().click()
     await page.waitForTimeout(500)
