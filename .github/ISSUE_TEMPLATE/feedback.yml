@@ -1,0 +1,45 @@
+name: Share feedback
+description: First impressions of the live demo or the Mac app, good or bad
+title: "Feedback: "
+labels: [feedback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Terminal Canvas. Short answers are fine; the second question matters most.
+        For something that is clearly broken, the **Bug report** template asks for the details that help fix it.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did you try it?
+      options:
+        - The live demo in the browser
+        - The Mac app (downloaded .dmg)
+        - The Mac app (built from source)
+    validations:
+      required: true
+  - type: textarea
+    id: trying
+    attributes:
+      label: What were you trying to do, and what got in the way?
+      description: The situation is more useful than a proposed fix. "I wanted to see which agent was waiting and could not find it" beats "add a button".
+    validations:
+      required: true
+  - type: textarea
+    id: worked
+    attributes:
+      label: What worked, or what did you like?
+  - type: dropdown
+    id: use
+    attributes:
+      label: Would you use it for real work?
+      options:
+        - Yes, already do
+        - Yes, if something changed (say what above)
+        - Not sure yet
+        - No
+  - type: input
+    id: agents
+    attributes:
+      label: Which agents or tools do you usually run?
+      placeholder: e.g. Claude Code, Codex, aider, plain shells

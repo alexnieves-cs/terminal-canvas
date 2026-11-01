@@ -304,6 +304,39 @@ check('demo.layout.2 the canvas layout.load answers keeps every cast panel and t
     ok('demo.pages.2 build:web, its config and the smoke script exist', pass)
   }
 
+  // demo.site.1. The Pages site is the landing page at the root with the
+  //        demo under /demo/: pages.yml assembles it after the demo's smoke
+  //        test and uploads out/site, not out/web (which would put the demo
+  //        back at the root and the landing page nowhere).
+  {
+    const wf = read('.github/workflows/pages.yml')
+    const pkg = JSON.parse(read('package.json'))
+    const smokeAt = wf.indexOf('node scripts/demo-smoke.cjs')
+    const siteAt = wf.indexOf('npm run build:site')
+    const pass = /build-site\.cjs/.test(pkg.scripts['build:site'] ?? '') && existsSync(join(ROOT, 'scripts/build-site.cjs')) &&
+      smokeAt >= 0 && siteAt > smokeAt && /path: out\/site/.test(wf) && !/path: out\/web/.test(wf)
+    ok('demo.site.1 pages.yml assembles the landing page and the demo into out/site and uploads that', pass)
+  }
+
+  // demo.site.2. The landing page's three jobs: open the demo, get the app,
+  //        give feedback. Each is a link to a place that exists.
+  {
+    const html = read('site/index.html')
+    const pass = html.includes('href="./demo/"') && html.includes('/releases/latest') &&
+      html.includes('template=feedback.yml') && existsSync(join(ROOT, '.github/ISSUE_TEMPLATE/feedback.yml'))
+    ok('demo.site.2 the landing page links the demo, the latest release and the feedback form', pass)
+  }
+
+  // demo.site.3. The landing page carries no script: it is words, pictures
+  //        and links, and its CSP says so.
+  {
+    const html = read('site/index.html')
+    ok('demo.site.3 the landing page has no script and a CSP without script-src', html !== '' && !/<script/i.test(html) && /default-src 'none'/.test(html) && !/script-src/.test(html))
+  }
+
+  // demo.feedback.1. The demo's strip links the feedback form too.
+  ok('demo.feedback.1 the demo strip links the feedback form', /FEEDBACK_URL\}/.test(read('src/web/demo-chrome.ts')) && read('src/web/demo-chrome.ts').includes('template=feedback.yml'))
+
   // M569 — demo.readme.1. The README links the published demo.
   ok('demo.readme.1 the README links the live demo', read('README.md').includes('https://alexnieves-cs.github.io/terminal-canvas/'))
 
