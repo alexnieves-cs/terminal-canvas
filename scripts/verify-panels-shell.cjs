@@ -3017,11 +3017,13 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       // again when a press has minted nothing for 3 s. A second press that
       // also minted leaves two fresh ids and never returns one, so this cannot
       // turn a double mint green. `pressed` counts the presses for the detail.
-      const pressReview = async (beforeIds, ms) => {
+      // `listIds` MUST be the same read that produced `beforeIds`: the
+      // workspace list holds panels the canvas does not draw (n12 here), so
+      // diffing one against the other "mints" a node nobody pressed for.
+      const pressReview = async (beforeIds, ms, listIds) => {
         const st = { pressed: 0, at: 0 }
         const node = await waitUntil(async () => {
-          const ids = await wc.executeJavaScript(
-            `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+          const ids = await listIds()
           const fresh = ids.filter((id) => !beforeIds.includes(id))
           if (fresh.length > 0) return fresh.length === 1 ? fresh[0] : false
           if (st.pressed === 0 || Date.now() - st.at > 3000) {
@@ -3060,7 +3062,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         // node after it (the press landed while the inspector was re-keying
         // from r90 to `first`). The check still demands exactly one fresh id,
         // so a second press that ALSO minted would read red, not green.
-        const { node } = await pressReview(beforeIds, 10000)
+        const { node } = await pressReview(beforeIds, 10000, panelIds)
         const heading = await wc.executeJavaScript(`(() => {
           const n = document.querySelector('.review-node[data-panel-id=' +
             ${JSON.stringify(JSON.stringify(node))} + ']')
@@ -3207,7 +3209,8 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
             await selectPanel(subjectPanel)
             action107 = await waitUntil(async () => wc.executeJavaScript(
               `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
-            const pressed = await pressReview(idsAfterReload, 30000)
+            const pressed = await pressReview(idsAfterReload, 30000, () => wc.executeJavaScript(
+              `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`))
             minted = pressed.node
             action107 = `${action107} pressed=${pressed.pressed}`
           }
@@ -3493,7 +3496,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           heading: (document.querySelector('.inspector__heading, .context__title, [data-inspector-heading]') || {}).textContent || null,
           tab: (document.querySelector('.context__panel:not([hidden])') || { getAttribute: () => null }).getAttribute('data-context-panel'),
           baseline: ${JSON.stringify(subject ?? null)} === null ? null : await window.canvas.review.baseline(${JSON.stringify(subject ?? '')}).then((b) => b !== null) }))()`)
-        const { node, pressed: clicked } = await pressReview(beforeIds, 12000)
+        const { node, pressed: clicked } = await pressReview(beforeIds, 12000, panelIds)
         // Captured with the node ON SCREEN, so `after` is compared against
         // the state the undo actually acted on rather than against a
         // snapshot from before the subject panel even spawned.
