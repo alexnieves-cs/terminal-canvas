@@ -3006,6 +3006,38 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         if (!el) return false
         el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         return true })()`)
+      // Presses the inspector's review button until exactly ONE node is
+      // minted past `beforeIds`, and returns its id (false past `ms`). Main
+      // went red three runs running on presses that did nothing: 107 found the
+      // button and minted nothing (it was there but DISABLED — `reviewable`
+      // follows the inspector's own baseline read, a beat behind main's — and a
+      // click on a disabled button is dropped without a sound), and 111b read
+      // the button, then clicked a moment later when the pane had re-rendered
+      // it away (clicked=false). So: press only an ENABLED button, and press
+      // again when a press has minted nothing for 3 s. A second press that
+      // also minted leaves two fresh ids and never returns one, so this cannot
+      // turn a double mint green. `pressed` counts the presses for the detail.
+      // `listIds` MUST be the same read that produced `beforeIds`: the
+      // workspace list holds panels the canvas does not draw (n12 here), so
+      // diffing one against the other "mints" a node nobody pressed for.
+      const pressReview = async (beforeIds, ms, listIds) => {
+        const st = { pressed: 0, at: 0 }
+        const node = await waitUntil(async () => {
+          const ids = await listIds()
+          const fresh = ids.filter((id) => !beforeIds.includes(id))
+          if (fresh.length > 0) return fresh.length === 1 ? fresh[0] : false
+          if (st.pressed === 0 || Date.now() - st.at > 3000) {
+            const pressed = await wc.executeJavaScript(`(() => {
+              const b = document.querySelector('[data-inspector-action="review"]')
+              if (!b || b.disabled) return false
+              b.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+              return true })()`)
+            if (pressed) { st.pressed += 1; st.at = Date.now() }
+          }
+          return false
+        }, ms)
+        return { node, pressed: st.pressed }
+      }
 
       // 106. The inspector's button makes a real node beside a real panel,
       //      through main's real baseline. Three clauses, and the id prefix
@@ -3030,14 +3062,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         // node after it (the press landed while the inspector was re-keying
         // from r90 to `first`). The check still demands exactly one fresh id,
         // so a second press that ALSO minted would read red, not green.
-        await clickShell('[data-inspector-action="review"]')
-        let pressedAt = Date.now()
-        const node = await waitUntil(async () => {
-          const ids = await panelIds()
-          const fresh = ids.filter((id) => !beforeIds.includes(id))
-          if (fresh.length === 0 && Date.now() - pressedAt > 3000) { await clickShell('[data-inspector-action="review"]'); pressedAt = Date.now() }
-          return fresh.length === 1 ? fresh[0] : false
-        }, 10000)
+        const { node } = await pressReview(beforeIds, 10000, panelIds)
         const heading = await wc.executeJavaScript(`(() => {
           const n = document.querySelector('.review-node[data-panel-id=' +
             ${JSON.stringify(JSON.stringify(node))} + ']')
@@ -3184,14 +3209,10 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
             await selectPanel(subjectPanel)
             action107 = await waitUntil(async () => wc.executeJavaScript(
               `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
-            await clickShell('[data-inspector-action="review"]')
-            await settle()
-            minted = await waitUntil(async () => {
-              const ids = await wc.executeJavaScript(
-                `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
-              const fresh = ids.filter((id) => !idsAfterReload.includes(id))
-              return fresh.length === 1 ? fresh[0] : false
-            }, 30000)
+            const pressed = await pressReview(idsAfterReload, 30000, () => wc.executeJavaScript(
+              `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`))
+            minted = pressed.node
+            action107 = `${action107} pressed=${pressed.pressed}`
           }
         }
         const finalIds = await wc.executeJavaScript(
@@ -3475,12 +3496,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           heading: (document.querySelector('.inspector__heading, .context__title, [data-inspector-heading]') || {}).textContent || null,
           tab: (document.querySelector('.context__panel:not([hidden])') || { getAttribute: () => null }).getAttribute('data-context-panel'),
           baseline: ${JSON.stringify(subject ?? null)} === null ? null : await window.canvas.review.baseline(${JSON.stringify(subject ?? '')}).then((b) => b !== null) }))()`)
-        const clicked = await clickShell('[data-inspector-action="review"]')
-        const node = await waitUntil(async () => {
-          const ids = await panelIds()
-          const fresh = ids.filter((id) => !beforeIds.includes(id))
-          return fresh.length === 1 ? fresh[0] : false
-        }, 8000)
+        const { node, pressed: clicked } = await pressReview(beforeIds, 12000, panelIds)
         // Captured with the node ON SCREEN, so `after` is compared against
         // the state the undo actually acted on rather than against a
         // snapshot from before the subject panel even spawned.
@@ -3976,20 +3992,38 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           await clickPanel(id)
           // The poll is a 2s tick, so this WAITS rather than sleeping: a fixed
           // sleep here is a flake, not a bound.
+          // Main went red here once with nothing but `false` to read (2026-10-30).
+          // A session that EXISTS is not yet a shell reading its input: a `cd`
+          // typed while the login files still run can be eaten by them, and a
+          // body click that lands mid-respawn selects nothing. So the last read
+          // is kept for the detail line, and past 6 s with the panel still where
+          // it started the click and the `cd` are given again — both are
+          // idempotent, so a second pair can only move the panel to the same place.
+          let last116 = null
+          let retried116 = 0
+          let nudgedAt = Date.now()
           const read = await waitUntil(async () => {
             const r = await wc.executeJavaScript(`(() => {
               const f = (k) => {
                 const el = document.querySelector('[data-inspector-field="' + k + '"] .inspector__value')
                 return el ? el.textContent : null
               }
-              return { live: f('live-cwd'), spawn: f('cwd'), running: f('live-command') }
+              return { selected: [...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id')), live: f('live-cwd'), spawn: f('cwd'), running: f('live-command') }
             })()`)
-            return r.live && r.live.includes('tc panels cd') ? r : false
-          }, 15000)
+            last116 = r
+            if (r.live && r.live.includes('tc panels cd')) return r
+            if (Date.now() - nudgedAt > 6000) {
+              nudgedAt = Date.now()
+              retried116 += 1
+              ptyManager.write(id, "cd '" + moved + "'\n")
+              await clickPanel(id)
+            }
+            return false
+          }, 25000)
           ok('116 the inspector shows where the panel IS, with where it started still beside it',
             read !== false && read.spawn !== null && read.spawn !== read.live &&
               read.running !== null && read.running.length > 0,
-            JSON.stringify(read))
+            JSON.stringify({ id, read, last: last116, retried: retried116 }))
           rmSync(moved, { recursive: true, force: true })
         }
 
