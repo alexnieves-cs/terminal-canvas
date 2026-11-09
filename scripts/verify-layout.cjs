@@ -5358,6 +5358,78 @@ try {
       deleted && quitTake?.how === 'quit' && quitTake.kept === false && quitTake.running.join() === 'q1,q2' && quitTake.at === 7 && again === null,
       JSON.stringify({ emptyTake, windowOnDisk, windowTake, deleted, quitTake, again }))
   } catch (e) { ok('persist.5 (threw)', false, String(e)) }
+  // persist.6 (M651). THE RUN MARKER AND THE CRASH IT PROVES. A killed
+  // process records nothing, so the evidence is a file kept WHILE the app
+  // runs and deleted by a clean quit. Driven as three launches over one
+  // directory: a crash (no quit), then a clean quit, then nothing to report.
+  try {
+    const { mkdtempSync, existsSync, readFileSync, writeFileSync } = require('node:fs')
+    const { tmpdir } = require('node:os')
+    const dir = mkdtempSync(join(tmpdir(), 'tc-run-marker-'))
+    const file = join(dir, 'last-exit.json')
+    const marker = join(dir, 'running.json')
+    let t = 100
+    const open = () => P.createLastExitStore({ file, marker, now: () => t })
+    // Launch 1: alive, two sessions, then killed — nothing else is called.
+    const one = open()
+    const constructedClean = !existsSync(marker)
+    one.alive(true, ['t2', 't1'])
+    const firstBody = readFileSync(marker, 'utf8')
+    t = 200
+    one.alive(true, ['t1', 't2'])
+    const unchangedNotRewritten = readFileSync(marker, 'utf8') === firstBody
+    one.alive(true, ['t1', 't2', 't3'])
+    const firstTake = one.take()
+    // A second instance that loses the lock constructs a store and never
+    // calls alive(): the winner's marker must survive it.
+    open()
+    const survivesLoser = existsSync(marker)
+    // Launch 2: finds the marker. The claim is made by alive(), not before.
+    t = 300
+    const two = open()
+    const beforeAlive = two.take()
+    const twoAgain = open()
+    twoAgain.alive(true, [])
+    const crash = twoAgain.take()
+    const once = twoAgain.take()
+    // …and this launch quits cleanly: the record is written, the marker goes.
+    twoAgain.alive(false, ['t9'])
+    twoAgain.record('quit', false, ['t9'])
+    const markerGone = !existsSync(marker)
+    twoAgain.alive(false, ['t9'])
+    const sealedStaysGone = !existsSync(marker)
+    // Launch 3: a quit, not a crash.
+    const three = open()
+    three.alive(false, [])
+    const quit = three.take()
+    // A quit record outranks a marker left beside it; a malformed marker is no claim.
+    three.record('quit', true, ['q'])
+    writeFileSync(marker, JSON.stringify({ at: 1, kept: true, running: ['x'] }))
+    const both = open(); both.alive(true, [])
+    const outranks = both.take()
+    writeFileSync(marker, '{"at":1,"kept":"yes","running":["x"]}')
+    const bad = open(); bad.alive(true, [])
+    const malformed = bad.take()
+    // The words. One sentence for what came back; its own line for what did not.
+    const ex = { at: 1, how: 'crash', kept: true, running: ['a', 'b'] }
+    const panels = [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }]
+    const allBack = P.reopenLines(P.reopenSummary({ panels, live: new Set(['a', 'b']), lastExit: ex }))
+    const oneLost = P.reopenLines(P.reopenSummary({ panels, live: new Set(['a']), lastExit: ex }))
+    const direct = P.reopenLines(P.reopenSummary({ panels, live: new Set(), lastExit: { ...ex, kept: false } }))
+    ok('persist.6 a run marker is written by alive() (never at construction, so a losing second instance cannot eat it), rewritten only on a change, deleted by a clean quit and not resurrected after it; a marker left behind becomes ONE crash record at the next launch\'s first alive(), a quit record outranks it and a malformed one claims nothing; and the crash words are one sentence for what came back with a separate line for what was lost',
+      constructedClean && unchangedNotRewritten && firstTake === null && survivesLoser && beforeAlive === null &&
+      crash?.how === 'crash' && crash.kept === true && crash.running.join() === 't1,t2,t3' && crash.at === 200 && once === null &&
+      markerGone && sealedStaysGone && quit?.how === 'quit' && quit.running.join() === 't9' &&
+      outranks?.how === 'quit' && malformed === null &&
+      P.parseRunMarker({ at: 1, kept: true, running: [] }) !== null && P.parseRunMarker({ at: 1, kept: true }) === null && P.parseRunMarker(null) === null &&
+      allBack.length === 1 && allBack[0].group === 'crash' && allBack[0].tone === 'info' &&
+      allBack[0].text === 'Terminal Canvas closed unexpectedly last time — your canvas is back as it was last saved, and A and B reconnected, still running' &&
+      oneLost.length === 2 && oneLost[0].group === 'ended' && oneLost[0].tone === 'problem' && oneLost[0].text === 'B ended when the app closed unexpectedly — start again or leave stopped' && oneLost[1].group === 'crash' &&
+      direct.length === 2 && direct[0].group === 'crash' && direct[0].text === 'Terminal Canvas closed unexpectedly last time — your canvas is back as it was last saved' &&
+      direct[1].group === 'stopped' && direct[1].text === 'A and B stopped when the app closed unexpectedly — click one to start it again' &&
+      ![...allBack, ...oneLost, ...direct].some((l) => /you quit|was closed|set to keep running/.test(l.text)),
+      JSON.stringify({ constructedClean, unchangedNotRewritten, survivesLoser, beforeAlive, crash, once, markerGone, sealedStaysGone, quit, outranks, malformed, allBack, oneLost, direct }))
+  } catch (e) { ok('persist.6 (threw)', false, String(e)) }
 }
 
 // M338 — relay.parse.1/.2. THE RELAY TERMINAL ON DISK. `kind: 'relay'` and a

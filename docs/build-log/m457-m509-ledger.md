@@ -159,3 +159,25 @@ From the feature-by-feature audit of 2026-10-30 (report in the project library, 
 | this PR | M619 | `OrchestrationView.tsx` split by part: the 2D graph board and its pieces (`OrchGraphBoard.tsx`, which now owns the lazy `OrchestrationCubes` door), the selected task's detail parts (`OrchDetailParts.tsx`) and the page's reads (`orch-view-hooks.ts`); no behaviour change. Source-text pins read the family through `scripts/lib/orch-view-src.cjs`, so a negative pin cannot go green by the code moving out | `verify:orchestration`, `verify:world`, `verify:rd-w6`; `verify:visual` |
 | this PR | M620 | `palette/commands.ts` (2.7k lines) builds its four biggest sections through `commands/panel-rows.ts`, `new-panel-rows.ts`, `canvas-rows.ts` and `manage-rows.ts`, in the same order; no row changes. Row pins read the family through `scripts/lib/palette-src.cjs` | `verify:palette`, `verify:verbs` closure.v9.1, `verify:swarm`, `verify:tournament`, `verify:cloud`, `verify:borrow`, `verify:learn`, `verify:multiplayer`, `verify:rd-f3`, `verify:rd-l-b`, `verify:rd-l-c` |
 | this PR | M621 | One "how long ago" formatter: `shared/time-ago.ts` `agoShort` (12s/4m/2h/3d, floored) and `agoWords` (just now/12s ago/4 min ago/2 h ago/3 d ago). Nine surfaces that wrote their own now read it. Copy changes on purpose: the board's freshness and the orchestration machine age say `4 min ago` instead of `4m ago`; Learn says `3 d ago` instead of `3 days ago`; the team view says `just now` up to 10s instead of 5s. Any scene that shows those ages changes, so goldens follow only after a person looks | `verify:rail` ago.1–3, boardx.fresh.1 |
+
+## W — Reliability (M650–M654)
+
+Tier 3 of the plan of 2026-11-02 (project library, `2026-11-02-spectacular-plan/`), which Alex approved on 2026-11-09. The reasons, the budgets and the soak's rules are in [docs/reliability.md](../reliability.md).
+
+| PR | Milestone | What | Checks |
+|---|---|---|---|
+| this PR | M650 | Main's last listener (`main/crash-guard.ts`): an uncaught exception or unhandled rejection is recorded, scrubbed, in `crash-log.jsonl`; main keeps running once a window exists and exits with a dialog before one does; a failed boot no longer leaves an app with no window; a crashed renderer is loaded again, bounded | `verify:file` crash.1–crash.3; `verify:reliability` recover.5 |
+| this PR | M651 | The run marker (`running.json`): a launch after a kill, a force quit or a power cut knows it, and the reopen notice says in one sentence what came back. `ExitHow` gains `crash`, which no file can claim | `verify:layout` persist.6; `verify:reliability` recover.1–recover.6 |
+| this PR | M652 | `telemetry.crashReports`, the opt-in toggle for the maintainers' address, off by default. `PROJECT_DSN` is empty until Alex provides one, so it sends nothing and says so | `verify:file` telemetry.6 |
+| this PR | M653 | `verify:reliability`: the built app launched as a child and driven from outside (`scripts/lib/real-app.cjs`). Kill and reopen, a renderer crash, a clean quit; budgets for cold start, frame time at 50 terminals and idle CPU | `verify:reliability` |
+| this PR | M654 | The soak (`scripts/soak.cjs`, `.github/workflows/soak.yml`): weekly on the Mac runner, 20 terminals for 5 hours, red on growth in memory, handles, processes, heap or DOM nodes, or a dead session | the workflow's own run |
+
+Budgets, pinned from the hosted macOS runner (`MEASURE` lines of this PR's `verify` runs):
+
+| Budget | Measured | Limit |
+|---|---:|---:|
+| Cold start, best launch (ms) | 2502 | 8000 |
+| Pan p95, 50 terminals (ms) | 84.6 | 250 |
+| Pinch-zoom p95, 50 terminals (ms) | 332.4 | 1000 |
+| Idle CPU, 50 terminals (% of one core) | 9.2 | 30 |
+
