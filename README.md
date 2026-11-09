@@ -19,7 +19,8 @@
 </p>
 
 <p align="center">
-  <a href="https://alexnieves-cs.github.io/terminal-canvas/"><strong>Live demo</strong></a> ·
+  <a href="https://alexnieves-cs.github.io/terminal-canvas/"><strong>Website</strong></a> ·
+  <a href="https://alexnieves-cs.github.io/terminal-canvas/demo/"><strong>Live demo</strong></a> ·
   <a href="#install">Install</a> ·
   <a href="#what-you-can-do-with-it">Use cases</a> ·
   <a href="#a-look-around">Screens</a> ·
@@ -37,11 +38,14 @@
   Every still below is from the same set; none is a recording of a live session.
 </sub></p>
 
-> **Try it in the browser:** the [live demo](https://alexnieves-cs.github.io/terminal-canvas/)
+> **Try it in the browser:** the [live demo](https://alexnieves-cs.github.io/terminal-canvas/demo/)
 > is the app's own renderer, running on a sample canvas with scripted agents that
 > work, wait for you and finish. Terminals play recordings, and anything that would
 > start a process or write a file says it runs in the app. It is rebuilt from `main`
-> on every merge (`.github/workflows/pages.yml`).
+> on every merge (`.github/workflows/pages.yml`), together with the
+> [landing page](https://alexnieves-cs.github.io/terminal-canvas/) in `site/`.
+> Tried it? [Share feedback](https://github.com/alexnieves-cs/terminal-canvas/issues/new?template=feedback.yml):
+> it is a short GitHub issue form.
 
 > **Status: `v6.0.1`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
@@ -1387,6 +1391,7 @@ price of not killing something.
 | M581 | Handoffs and a shared review queue in the shared workspace doc, judged by the same one table in the app and the collab server: an agent is handed on only by whoever holds it now, taken or judged only in one's own name, and nobody reviews their own result. [Log](docs/build-log/m580-m583-multiplayer.md). |
 | M582 | Main's side: the person's queue and one write in their name (`team:flow`, `team:flow-write`, `team:flow-changed`); words scrubbed before they leave. [Log](docs/build-log/m580-m583-multiplayer.md). |
 | M583 | Needs you shows what was handed to you, the review queue and what you wait on the team for; the palette hands an agent off, offers it to anyone, and asks for a review. [Log](docs/build-log/m580-m583-multiplayer.md). |
+| M630 | The Mac release is signed and notarized when the Apple secrets exist, and unsigned exactly as before when they do not: builder-config takes a `sign` mode (hardened runtime, entitlements, notarize), release.yml decides from the secrets and gates on codesign, Gatekeeper and the stapled ticket. The owner's steps are in docs/release-signing.md. [Log](docs/build-log/m630-mac-signing.md). |
 
 ### What's next — the v10 run (D01–D20)
 
