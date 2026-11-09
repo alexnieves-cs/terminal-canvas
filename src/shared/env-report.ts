@@ -24,11 +24,19 @@ export function isRequiredCli(name: string): name is RequiredCli {
   return (REQUIRED_CLIS as readonly string[]).includes(name)
 }
 
+/**
+ * M643. Whether main found EVIDENCE of a sign-in for an agent CLI: a
+ * credentials file, a keychain item or an API-key variable NAME exists.
+ * `none` is "looked and found nothing", never "signed out"; absent is "did
+ * not look" (main/sign-in-evidence.ts). Existence only: no value crosses.
+ */
+export type SignInEvidence = 'found' | 'none'
+
 export interface EnvReport {
   probedAt: number
   shell: { path: string; ok: boolean; reason?: string }
   pathEntries: string[]
-  clis: Array<{ name: CliName; path: string | null }>
+  clis: Array<{ name: CliName; path: string | null; signIn?: SignInEvidence }>
   tmux: { kind: 'tmux' | 'direct'; reason: string; path: string | null }
   layout: { path: string; backupWritten: boolean }
   /** Sorted key names of the resolved login environment. Names, never values. */

@@ -15,6 +15,8 @@ import { searchPanels } from '../panel-search'
 import { SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from '../scrollback-log'
 import { resolveLinkOpen } from '../link-open'
 import { buildEnvReport, type CliName } from '../env-report'
+import { signInEvidence } from '../sign-in-evidence'
+import { execFileSync } from 'node:child_process'
 import { probeVmRuntimesLive } from '../vm-runtime'
 import { shellProbeOutcome, shellProbeFacts, reprobeShellEnv, whichFromEnv } from '../shell-env'
 import { discoverPreview } from '../preview-discover'
@@ -80,6 +82,22 @@ export function createScrollbackHandlers(stores: Stores) {
  * The app's own environment (the presets' which, the PTYs' env) applies on
  * relaunch — said on the row, so a green re-probe does not read as a fixed spawn.
  */
+/**
+ * M643. Does the login keychain hold an item for this service? Attributes
+ * only: no `-w`, no `-g`, so no password is read and macOS shows no prompt.
+ * Exit 44 is "not found"; anything else (not a Mac, a locked keychain, a
+ * timeout) is no answer, which the caller keeps apart from `none`.
+ */
+function keychainHas(service: string): boolean | undefined {
+  if (process.platform !== 'darwin') return undefined
+  try {
+    execFileSync('/usr/bin/security', ['find-generic-password', '-s', service], { stdio: 'ignore', timeout: 1500 })
+    return true
+  } catch (error) {
+    return (error as { status?: number }).status === 44 ? false : undefined
+  }
+}
+
 export function createEnvReporter(state: MainState, stores: Stores, which: (command: string) => string | null) {
   return async (again: boolean) => {
     const env2 = again ? await reprobeShellEnv() : state.loginEnv
@@ -99,7 +117,9 @@ export function createEnvReporter(state: MainState, stores: Stores, which: (comm
       control: { socket: stores.controlSocketPath, cliPath: join(stores.launcherDir, 'tc') },
       // M107. Which shells were asked and whether one answered — the third state.
       probe: shellProbeFacts(),
-      vm
+      vm,
+      // M643. Existence only (sign-in-evidence.ts): a file, a keychain item, a variable's name.
+      signIn: (name) => signInEvidence(name, { env: env2, home: homedir(), exists: existsSync, keychainHas })
     })
   }
 }

@@ -393,6 +393,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
         {...(envReport === null ? {} : { tmux: { path: envReport.tmux.path } })}
         onHandoff={(_handoff, answers) => completeOnboarding(answers)}
         onSkip={finishOnboarding}
+        onCheckAgain={() => paletteActions.checkReadiness()}
         onCustom={() => { finishOnboarding(); paletteActionsRef.current?.beginSpawnSheet() }}
       />
     )}

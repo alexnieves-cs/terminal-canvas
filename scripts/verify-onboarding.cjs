@@ -348,5 +348,67 @@ try {
   ok('onboarding.markup.4 at rest the primary is disabled and says the sentence is the one missing thing (the summary names the same field); the starter line reads as optional', false, error.message)
 }
 
+// doctor.* — M643 (lane W). The setup doctor: sign-in EVIDENCE (existence
+// only, built in main), the fix line per row, and the card that shows them.
+try {
+  const DOC_OUT = join(ROOT, 'out/verify/sign-in-evidence.cjs')
+  buildSync({ entryPoints: [join(ROOT, 'src/main/sign-in-evidence.ts')], outfile: DOC_OUT, bundle: true, platform: 'node', format: 'cjs', alias: { '@shared': join(ROOT, 'src/shared') } })
+  const E = require(DOC_OUT)
+  const facts = (over = {}) => ({ env: {}, home: '/Users/u', exists: () => false, ...over })
+  const asked = []
+  const none = ['claude', 'codex', 'gemini'].map((n) => E.signInEvidence(n, facts({ exists: (p) => { asked.push(p); return false }, keychainHas: () => false })))
+  ok('doctor.1 evidence is found from a variable NAME, a credentials file or a keychain item; nothing anywhere is `none`; a keychain that did not answer, or a CLI the table does not know, is no answer at all',
+    none.join() === 'none,none,none' &&
+      E.signInEvidence('claude', facts({ env: { ANTHROPIC_API_KEY: 'x' } })) === 'found' &&
+      E.signInEvidence('claude', facts({ keychainHas: () => true })) === 'found' &&
+      E.signInEvidence('claude', facts({ keychainHas: () => undefined })) === undefined &&
+      E.signInEvidence('claude', facts({})) === 'none' &&
+      E.signInEvidence('codex', facts({ exists: (p) => p === '/Users/u/.codex/auth.json' })) === 'found' &&
+      E.signInEvidence('codex', facts({ env: { CODEX_HOME: '/x/' }, exists: (p) => p === '/x/auth.json' })) === 'found' &&
+      E.signInEvidence('gemini', facts({ exists: (p) => p === '/Users/u/.gemini/oauth_creds.json' })) === 'found' &&
+      E.signInEvidence('git', facts({})) === undefined && E.signInEvidence('amp', facts({})) === undefined &&
+      asked.includes('/Users/u/.claude/.credentials.json'),
+    JSON.stringify({ none, asked }))
+  const evidenceSrc = require('node:fs').readFileSync(join(ROOT, 'src/main/sign-in-evidence.ts'), 'utf8')
+  const handlers = require('node:fs').readFileSync(join(ROOT, 'src/main/bootstrap/panel-handlers.ts'), 'utf8')
+  ok('doctor.2 the evidence module reads no file and no secret: it imports only a type, and the keychain is asked for attributes alone (no -w, no -g)',
+    !/readFile|require\(|from 'node:/.test(evidenceSrc) && /import type \{ CliName, SignInEvidence \}/.test(evidenceSrc) &&
+      /\['find-generic-password', '-s', service\]/.test(handlers) && !/find-generic-password'[^\]]*'-[wg]'/.test(handlers) && /status === 44 \? false : undefined/.test(handlers),
+    '')
+  const rep = report({ claude: '/bin/claude', codex: '/bin/codex' })
+  rep.clis = rep.clis.map((c) => c.name === 'claude' ? { ...c, signIn: 'none' } : c.name === 'codex' ? { ...c, signIn: 'found' } : c).concat([{ name: 'gemini', path: null }])
+  const probes = model.probesFromReport(rep)
+  const view = model.agentRows(probes, ['claude', 'codex'])
+  const byId = (id) => view.rows.find((r) => r.id === id)
+  ok('doctor.3 a row says what to do: no sign-in found gets the sign-in line, a missing CLI its install line, a signed-in one nothing; `none` never switches a found agent off and readiness still calls authentication unknown',
+    byId('claude').fix?.kind === 'sign-in' && byId('claude').fix.command === 'claude' && byId('claude').status === 'found · no sign-in found' && byId('claude').enabled === true &&
+      byId('codex').fix === undefined && byId('codex').status === 'found · signed in' &&
+      byId('gemini').fix?.kind === 'install' && byId('gemini').fix.command === model.INSTALL_COMMANDS.gemini &&
+      view.canContinue === true && model.signInCommand('codex') === 'codex login' && model.signInCommand('nope') === null &&
+      model.agentRows(model.probesFromReport(report({ claude: '/bin/claude' })), ['claude']).rows[0].status === 'found' &&
+      read(rep).rows.every((r) => r.authentication === 'unknown'),
+    JSON.stringify(view.rows.map((r) => [r.id, r.status, r.fix?.kind])))
+  const sum = (rows) => model.doctorSummary(rows)
+  const allOut = model.agentRows([{ id: 'claude', path: '/c', signIn: 'none' }], ['claude']).rows
+  const nothing = model.agentRows([{ id: 'claude', path: null }, { id: 'codex', path: null }, { id: 'gemini', path: null }], []).rows
+  const silent = model.agentRows([], []).rows
+  ok('doctor.4 the summary is one sentence with no zero in it: ready names who is signed in, all-signed-out says the first message will ask, nothing found offers a shell, and an unanswered discovery is not "not installed"',
+    sum(view.rows).tone === 'ready' && /Codex CLI is installed and signed in/.test(sum(view.rows).sentence) &&
+      sum(allOut).tone === 'fix' && /no sign-in was found/.test(sum(allOut).sentence) &&
+      sum(nothing).tone === 'fix' && /plain shell/.test(sum(nothing).sentence) &&
+      sum(silent).tone === 'unknown' && !/install/i.test(sum(silent).sentence.split('.')[0]) &&
+      [view.rows, allOut, nothing, silent].every((rows) => !/\b0\b/.test(sum(rows).sentence)),
+    JSON.stringify([view.rows, allOut, nothing, silent].map((rows) => sum(rows))))
+  const card = require('node:fs').readFileSync(join(ROOT, 'src/renderer/onboarding/Onboarding.tsx'), 'utf8')
+  const overlays = require('node:fs').readFileSync(join(ROOT, 'src/renderer/canvas/HostOverlays.tsx'), 'utf8')
+  ok('doctor.5 the card shows the line itself beside Copy, offers Check again through the launcher\'s own re-probe, and still runs nothing',
+    /<code>\{row\.fix\.command\}<\/code>/.test(card) && /data-copy-sign-in/.test(card) && /data-copy-install/.test(card) && /data-doctor-check-again/.test(card) &&
+      /<Onboarding[\s\S]*?onCheckAgain=\{\(\) => paletteActions\.checkReadiness\(\)\}/.test(overlays) &&
+      !/child_process|\bspawn\s*\(|\bexec(?:File|Sync)?\s*\(|pty:create|window\.canvas\.pty/.test(card),
+    '')
+} catch (error) {
+  for (const id of ['doctor.1', 'doctor.2', 'doctor.3', 'doctor.4', 'doctor.5']) ok(`${id} the setup doctor`, false, error.message)
+}
+
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
 if (results.some((r) => !r.pass)) process.exitCode = 1

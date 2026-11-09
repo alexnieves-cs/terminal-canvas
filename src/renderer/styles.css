@@ -13755,4 +13755,25 @@ tr[data-session-row]:focus-within .sessions-world,
 @media (prefers-reduced-motion: reduce) {
   .rd-settings__main .rd-settings__switch, .rd-settings__main .rd-settings__switch::before { transition: none; }
 }
+/* M643. THE SETUP DOCTOR. A row is the agent and its switch; under it, when
+   there is something to do, the sentence and the exact line to paste. */
+.rd-onboard__rows li { flex-direction: column; align-items: stretch; gap: var(--sp-2); }
+.rd-onboard__row-main { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4); }
+.rd-onboard__fix {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md);
+  font-size: var(--t-sm); color: var(--fg-2);
+}
+.rd-onboard__fix-line { display: flex; align-items: center; gap: var(--sp-3); }
+.rd-onboard__fix-line code {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); user-select: all;
+}
+.rd-onboard__fix-line code::before { content: "$ "; color: var(--fg-4); user-select: none; }
+.rd-onboard__rows .rd-onboard__fix-line button { flex: none; padding: var(--sp-1) var(--sp-4); min-width: 9ch; }
+.rd-onboard__doctor { margin: var(--sp-5) 0 0; font-size: var(--t-sm); color: var(--fg); }
+.rd-onboard__doctor[data-doctor="unknown"] { color: var(--fg-2); }
+.rd-onboard__tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.rd-onboard__tools button:disabled { color: var(--fg-4); cursor: default; }
 /* ── /st:W ── */

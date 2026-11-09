@@ -1,4 +1,4 @@
-import type { EnvReport } from './env-report'
+import type { EnvReport, SignInEvidence } from './env-report'
 import type { AgentBackend } from './agent-session'
 import type { RepoStatus } from './review'
 import { shortPath } from './display-path'
@@ -314,7 +314,7 @@ export const ONBOARDING_RAIL = [
 export type OnboardingStepId = typeof ONBOARDING_RAIL[number]['id']
 
 export const AGENTS_STEP_TITLE = 'Which agents live on your canvas?'
-export const AGENTS_STEP_LEAD = 'These were found on your PATH. Turn on the ones you want as presets.'
+export const AGENTS_STEP_LEAD = 'This is what was found on this Mac. Turn on the agents you want; a line under one says how to fix it.'
 export const ONBOARDING_FOOTER = 'You can change all of this later in Settings. Nothing runs until you start it.'
 export const STATE_PREVIEW_CAPTION = 'One colour per state, everywhere. The same words a panel uses.'
 export const CUSTOM_COMMAND = { label: 'Add a custom command…', opens: 'preset-editor' } as const
@@ -333,6 +333,60 @@ export const ONBOARDING_AGENTS = [
 ] as const
 
 export const PLAIN_SHELL = { id: 'shell', label: 'Plain shell', locked: true as const }
+
+/**
+ * M643 (lane W). THE SETUP DOCTOR. What a person types once to sign an agent
+ * in. Copied onto the clipboard like an install command; nothing here runs it.
+ * Claude Code and Gemini sign in on their first interactive launch; Codex has
+ * a verb for it.
+ */
+export const SIGN_IN_COMMANDS: Readonly<Record<string, string>> = {
+  claude: 'claude',
+  codex: 'codex login',
+  gemini: 'gemini'
+}
+
+export function signInCommand(id: string): string | null {
+  return Object.prototype.hasOwnProperty.call(SIGN_IN_COMMANDS, id) ? SIGN_IN_COMMANDS[id] : null
+}
+
+/** One thing the doctor asks a person to do for one agent: a sentence and the line to paste. */
+export interface AgentFix {
+  kind: 'install' | 'sign-in'
+  sentence: string
+  command: string
+}
+
+/**
+ * The fix for a row, or undefined when there is nothing to do or nothing
+ * known. `none` is "no sign-in FOUND" and is worded that way: the CLI may keep
+ * one where main did not look, so this is advice beside a toggle that still
+ * works, never a refusal (main/sign-in-evidence.ts).
+ */
+export function agentFix(row: Pick<CanvasAgentRow, 'id' | 'phase' | 'signIn'>): AgentFix | undefined {
+  if (row.phase === 'missing') {
+    const command = installCommand(row.id)
+    return command === null ? undefined : { kind: 'install', sentence: 'Paste this in a terminal to install it, then Check again.', command }
+  }
+  if (row.phase === 'found' && row.signIn === 'none') {
+    const command = signInCommand(row.id)
+    return command === null ? undefined : { kind: 'sign-in', sentence: 'No sign-in found. Run this once in a terminal and follow its sign-in, then Check again.', command }
+  }
+  return undefined
+}
+
+/** The doctor's one line under the rows: what is ready and what is left, never a zero. */
+export function doctorSummary(rows: readonly CanvasAgentRow[]): { tone: 'ready' | 'fix' | 'unknown'; sentence: string } {
+  const found = rows.filter((row) => row.phase === 'found')
+  const signedOut = found.filter((row) => row.signIn === 'none')
+  const unknown = rows.filter((row) => row.phase === 'unknown')
+  if (found.length === 0 && unknown.length > 0) return { tone: 'unknown', sentence: 'Discovery has not answered yet. Choose Check again, or continue and set agents up later.' }
+  if (found.length === 0) return { tone: 'fix', sentence: 'No agent found yet. Install one with a line below, or continue with a plain shell.' }
+  if (signedOut.length === found.length) return { tone: 'fix', sentence: signedOut.length === 1 ? `${signedOut[0].label} is installed but no sign-in was found. Its first message will ask you to sign in.` : 'These agents are installed but no sign-in was found. Each one\'s first message will ask you to sign in.' }
+  const ready = found.filter((row) => row.signIn === 'found')
+  if (ready.length > 0) return { tone: 'ready', sentence: ready.length === 1 ? `${ready[0].label} is installed and signed in. You are ready to start.` : `${ready.map((row) => row.label).join(' and ')} are installed and signed in. You are ready to start.` }
+  return { tone: 'ready', sentence: found.length === 1 ? `${found[0].label} is installed. Its first message checks sign-in.` : 'Your agents are installed. Each one\'s first message checks sign-in.' }
+}
 
 export function installCommand(id: string): string | null {
   return Object.prototype.hasOwnProperty.call(INSTALL_COMMANDS, id) ? INSTALL_COMMANDS[id] : null
@@ -355,6 +409,8 @@ export interface AgentProbe {
   path: string | null
   version?: string | null
   timedOut?: boolean
+  /** M643. Main's sign-in evidence for an installed CLI; absent when main did not look. */
+  signIn?: SignInEvidence
 }
 
 export interface CanvasAgentRow {
@@ -368,6 +424,10 @@ export interface CanvasAgentRow {
   enabled: boolean
   locked: boolean
   install?: string
+  /** M643. Only on a `found` row, and only when main looked. */
+  signIn?: SignInEvidence
+  /** M643. What to do about this row, when there is something to do. */
+  fix?: AgentFix
 }
 
 export interface AgentStepView {
@@ -391,7 +451,7 @@ export function probesFromReport(report: EnvReport | null): AgentProbe[] {
   return ONBOARDING_AGENTS.flatMap((agent): AgentProbe[] => {
     const cli = report?.clis.find((entry) => entry.name === agent.id)
     if (cli === undefined) return []
-    return [answered ? { id: agent.id, path: cli.path } : { id: agent.id, path: null, timedOut: true }]
+    return [answered ? { id: agent.id, path: cli.path, ...(cli.signIn === undefined ? {} : { signIn: cli.signIn }) } : { id: agent.id, path: null, timedOut: true }]
   })
 }
 
@@ -415,16 +475,21 @@ export function agentRows(probes: readonly AgentProbe[], enabled: readonly strin
     const phase = timedOut || probe === undefined ? 'unknown' : path === undefined ? 'missing' : 'found'
     const version = phase === 'found' && probe?.version !== undefined && probe.version !== null && probe.version.trim() !== '' ? probe.version.trim() : undefined
     const install = installCommand(agent.id) ?? undefined
+    const signIn = phase === 'found' ? probe?.signIn : undefined
+    const fix = agentFix({ id: agent.id, phase, signIn })
     return {
       id: agent.id,
       label: agent.label,
       phase,
-      status: phase === 'found' ? 'found' : phase === 'missing' ? 'not installed' : 'discovery did not answer',
+      // M643. `found` stays the word when main did not look for a sign-in.
+      status: phase === 'found' ? (signIn === 'found' ? 'found · signed in' : signIn === 'none' ? 'found · no sign-in found' : 'found') : phase === 'missing' ? 'not installed' : 'discovery did not answer',
       ...(path === undefined ? {} : { path }),
       ...(version === undefined ? {} : { version }),
       enabled: phase === 'found' && on.has(agent.id),
       locked: false,
-      ...(install === undefined ? {} : { install })
+      ...(install === undefined ? {} : { install }),
+      ...(signIn === undefined ? {} : { signIn }),
+      ...(fix === undefined ? {} : { fix })
     }
   })
   const ready = rows.filter((row) => row.phase === 'found' && row.enabled).length

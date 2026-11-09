@@ -237,7 +237,9 @@ export function attentionPillLine(items: readonly { sentence: string }[] | null 
   const count = n === 1 ? '1 agent needs you' : `${n} agents need you`
   const sentence = (items[0]?.sentence ?? '').trim()
   const parts = [count]
-  if (sentence !== '') parts.push(sentence)
+  // M641. An item with nothing to say beyond its state has the sentence
+  // "needs you", and the pill read "3 agents need you · needs you".
+  if (sentence !== '' && !/^needs you\.?$/i.test(sentence)) parts.push(sentence)
   parts.push('Go ⌘J', '+ New ⌘N')
   return parts.join(' · ')
 }

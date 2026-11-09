@@ -13,7 +13,7 @@
  * report that did not say when it looked would turn that limit into a lie.
  */
 import type { VmProbe } from '../shared/vm-lane'
-import { BINARY_PROBE_TIMEOUT_MS, REPORTED_CLIS, probeWithin, type CliName, type EnvReport } from '../shared/env-report'
+import { BINARY_PROBE_TIMEOUT_MS, REPORTED_CLIS, probeWithin, type CliName, type EnvReport, type SignInEvidence } from '../shared/env-report'
 export { BINARY_PROBE_TIMEOUT_MS, INERT_ENV_REPORT, REPORTED_CLIS, classifyBinaryProbe, probeOutcome, probeWithin, versionWords, type BinaryProbeClass, type CliName, type EnvReport, type ProbeOutcome } from '../shared/env-report'
 
 export interface EnvReportFacts {
@@ -30,6 +30,8 @@ export interface EnvReportFacts {
   probe?: { shells: string[]; timedOut: boolean }
   /** M550. The VM runtimes, probed by `probeVmRuntimes`; absent for a caller that did not ask. */
   vm?: VmProbe
+  /** M643. Sign-in evidence for an INSTALLED agent CLI; absent for a caller that did not look. */
+  signIn?: (name: CliName) => SignInEvidence | undefined
 }
 
 export function buildEnvReport(f: EnvReportFacts): EnvReport {
@@ -40,7 +42,12 @@ export function buildEnvReport(f: EnvReportFacts): EnvReport {
       ? { path: f.shell.path, ok: f.shell.ok }
       : { path: f.shell.path, ok: f.shell.ok, reason: f.shell.reason },
     pathEntries: path === '' ? [] : path.split(':').filter((p) => p !== ''),
-    clis: REPORTED_CLIS.map((name) => ({ name, path: f.which(name) })),
+    clis: REPORTED_CLIS.map((name) => {
+      const path = f.which(name)
+      // Only for a CLI that is there: "no sign-in found" under "not installed" is noise.
+      const signIn = path === null ? undefined : f.signIn?.(name)
+      return signIn === undefined ? { name, path } : { name, path, signIn }
+    }),
     tmux: { kind: f.backend.kind, reason: f.backend.reason, path: f.backend.tmuxPath },
     layout: { path: f.layoutPath, backupWritten: f.backupWritten },
     envKeys: Object.keys(f.env).sort(),
