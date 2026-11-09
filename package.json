@@ -189,7 +189,6 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "esbuild": "0.21.5",
-    "marked": "^16.4.2",
     "pg": "^8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

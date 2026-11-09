@@ -12,9 +12,10 @@
 
    M632. The user guide is docs/guide/*.md, the same files GitHub renders in
    the repository, turned into pages here. One source on purpose: a guide kept
-   twice is a guide that disagrees with itself. Each page is rendered by
-   `marked` into the frame below, and three kinds of link are rewritten,
-   because a path that is right on github.com is wrong on Pages:
+   twice is a guide that disagrees with itself. Each page is parsed by the
+   app's OWN Markdown grammar (see loadGrammar) and written into the frame
+   below, and three kinds of link are rewritten, because a path that is right
+   on github.com is wrong on Pages:
    - a link to another guide page (`review.md#x`) becomes `./review.html#x`;
    - any other relative link leaves the guide, so it points at the file on
      github.com;
@@ -123,8 +124,52 @@ ${body}
 `
 }
 
+/**
+ * The app's own Markdown grammar (src/shared/markdown.ts, with the deck's
+ * `slides` option for pictures and tables), bundled the way ipc-list.cjs
+ * bundles the contract. NOT a Markdown library: verify:deck deck.deps.1
+ * refuses one by name, because this repository renders Markdown with one
+ * small closed grammar and a second renderer is a second set of answers to
+ * "what does this line mean". The price is that the guide is written inside
+ * that grammar: headings to three levels, paragraphs, flat lists, fenced
+ * code, a picture on its own line, pipe tables, and code, bold, italic and
+ * links inline. Anything else comes out as a paragraph of its own source,
+ * which is loud on the page.
+ */
+function loadGrammar() {
+  const { buildSync } = require('esbuild')
+  const out = join(ROOT, 'out', 'verify', 'site-markdown.cjs')
+  mkdirSync(dirname(out), { recursive: true })
+  buildSync({ entryPoints: [join(ROOT, 'src', 'shared', 'markdown.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: out, logLevel: 'error' })
+  delete require.cache[out]
+  return require(out)
+}
+
+/**
+ * Two things GitHub's renderer accepts and the grammar does not, removed
+ * before parsing so the source can stay readable at 100 columns:
+ * - an HTML comment on its own line (the guide:keys markers);
+ * - a list item wrapped onto indented continuation lines, which the grammar
+ *   would end the list at. They are joined back into their item.
+ */
+function normalize(md) {
+  const out = []
+  let inFence = false
+  let inItem = false
+  for (const line of md.split('\n')) {
+    if (/^```/.test(line)) { inFence = !inFence; inItem = false; out.push(line); continue }
+    if (inFence) { out.push(line); continue }
+    if (/^\s*<!--.*-->\s*$/.test(line)) continue
+    const isItem = /^\s*(?:[-*]|\d+[.)])\s+/.test(line)
+    if (inItem && !isItem && /^\s{2,}\S/.test(line)) { out[out.length - 1] += ` ${line.trim()}`; continue }
+    inItem = isItem
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
 function renderGuide() {
-  const { Marked } = require('marked')
+  const { parseMarkdown } = loadGrammar()
   const onDisk = readdirSync(GUIDE).filter((f) => f.endsWith('.md')).sort()
   const named = PAGES.map((p) => p[0]).sort()
   if (onDisk.join() !== named.join()) {
@@ -146,46 +191,50 @@ function renderGuide() {
       if (target.startsWith('..') || !existsSync(join(ROOT, target))) problems.push(`link to ${raw}`)
       return `${REPO}/blob/main/${target}${hash === '' ? '' : `#${hash}`}`
     }
-    const marked = new Marked({
-      gfm: true,
-      renderer: {
-        heading({ tokens, depth }) {
-          const inner = this.parser.parseInline(tokens)
-          return `<h${depth} id="${slug(inner)}">${inner}</h${depth}>\n`
-        },
-        link({ href: to, tokens }) {
-          return `<a href="${esc(href(to))}">${this.parser.parseInline(tokens)}</a>`
-        },
-        image({ href: src, text }) {
-          const target = posix.normalize(posix.join('docs/guide', src))
-          const ref = target.startsWith('verify/visual/goldens/') ? `shots/${target.slice('verify/visual/goldens/'.length)}` : target.startsWith('docs/assets/') ? target.slice('docs/'.length) : null
-          if (ref === null || !copyPicture(ref)) { problems.push(`picture ${src}`); return '' }
-          const size = ref.endsWith('.png') ? pngSize(join(OUT, ref)) : null
-          const dims = size === null ? '' : ` width="${size.width}" height="${size.height}"`
-          return `<figure class="shot"><img src="../${esc(ref)}"${dims} loading="lazy" alt="${esc(text)}" /></figure>`
-        },
+    const inline = (runs) => runs.map((r) =>
+      r.kind === 'text' ? esc(r.text)
+        : r.kind === 'code' ? `<code>${esc(r.text)}</code>`
+          : r.kind === 'bold' ? `<strong>${inline(r.children)}</strong>`
+            : r.kind === 'italic' ? `<em>${inline(r.children)}</em>`
+              : `<a href="${esc(href(r.href))}">${esc(r.text)}</a>`).join('')
+    const text = (runs) => runs.map((r) => r.kind === 'text' || r.kind === 'code' || r.kind === 'link' ? r.text : text(r.children)).join('')
+    const picture = (src, alt) => {
+      const target = posix.normalize(posix.join('docs/guide', src))
+      const ref = target.startsWith('verify/visual/goldens/') ? `shots/${target.slice('verify/visual/goldens/'.length)}` : target.startsWith('docs/assets/') ? target.slice('docs/'.length) : null
+      if (ref === null || !copyPicture(ref)) { problems.push(`picture ${src}`); return '' }
+      const size = ref.endsWith('.png') ? pngSize(join(OUT, ref)) : null
+      const dims = size === null ? '' : ` width="${size.width}" height="${size.height}"`
+      return `<figure class="shot"><img src="../${esc(ref)}"${dims} loading="lazy" alt="${esc(alt)}" /></figure>`
+    }
+    const block = (b) => {
+      switch (b.kind) {
+        case 'heading': return `<h${b.level} id="${slug(text(b.children))}">${inline(b.children)}</h${b.level}>`
+        case 'paragraph': return `<p>${inline(b.children)}</p>`
+        case 'list': { const tag = b.ordered ? 'ol' : 'ul'; return `<${tag}>\n${b.items.map((item) => `<li>${inline(item)}</li>`).join('\n')}\n</${tag}>` }
+        case 'code': return `<pre><code>${esc(b.text)}</code></pre>`
+        case 'image': return picture(b.src, b.alt)
         // A wide table scrolls inside its own box instead of pushing the page sideways on a phone.
-        table(token) {
-          const cell = (c, tag) => `<${tag}>${this.parser.parseInline(c.tokens)}</${tag}>`
-          const head = `<tr>${token.header.map((c) => cell(c, 'th')).join('')}</tr>`
-          const rows = token.rows.map((r) => `<tr>${r.map((c) => cell(c, 'td')).join('')}</tr>`).join('\n')
-          return `<div class="docs__table"><table><thead>${head}</thead><tbody>\n${rows}\n</tbody></table></div>\n`
-        }
+        case 'table': return `<div class="docs__table"><table><thead><tr>${b.header.map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>\n${b.rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('\n')}\n</tbody></table></div>`
+        default: return ''
       }
-    })
-    // A picture alone in a paragraph is a figure; <p><figure> is not valid HTML.
-    const body = marked.parse(md).replace(/<p>(<figure class="shot">.*?<\/figure>)<\/p>/g, '$1')
+    }
+    const blocks = parseMarkdown(normalize(md), { slides: true })
+    const body = blocks.map(block).join('\n')
     if (problems.length > 0) {
       console.error(`docs/guide/${file}: ${problems.join('; ')} resolves to nothing in the repository`)
       process.exit(1)
     }
-    if (/<script/i.test(body)) {
-      console.error(`docs/guide/${file} carries a script; the site has none and its CSP would refuse it`)
+    // The grammar has no raw HTML, so a tag or a stray marker in the source
+    // reaches the page as its own text. Fail here instead of publishing it.
+    const leaked = blocks.filter((b) => b.kind === 'paragraph').map((b) => text(b.children)).find((t) => /^\s*(?:<[a-z!/]|\||```|#{1,6}\s|!\[)/i.test(t))
+    if (leaked !== undefined) {
+      console.error(`docs/guide/${file} has a block outside the site's Markdown grammar: ${JSON.stringify(leaked.slice(0, 80))}`)
       process.exit(1)
     }
     const title = (md.match(/^# (.+)$/m) ?? ['', 'Terminal Canvas'])[1]
-    const firstLine = (md.split('\n\n').find((p) => !p.startsWith('#') && !p.startsWith('!') && !p.startsWith('<')) ?? '').replace(/\s+/g, ' ').replace(/[`*]|\[([^\]]+)\]\([^)]*\)/g, '$1').trim()
-    writeFileSync(join(OUT, 'docs', `${name}.html`), frame({ title, description: firstLine.slice(0, 200), name, body }))
+    const first = blocks.find((b) => b.kind === 'paragraph')
+    const description = first === undefined ? title : text(first.children).replace(/\s+/g, ' ').trim().slice(0, 200)
+    writeFileSync(join(OUT, 'docs', `${name}.html`), frame({ title, description, name, body }))
   }
 }
 

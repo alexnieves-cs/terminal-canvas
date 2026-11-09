@@ -11,16 +11,17 @@ Terminal Canvas runs on macOS. The download is built for Apple Silicon (M1 and l
 ## If macOS refuses to open it
 
 Releases are not signed with an Apple Developer ID yet, so macOS blocks the first launch. It says
-either *"Terminal Canvas is damaged"* or *"cannot be opened because the developer cannot be
-verified"*. Either of these gets past it:
+either *"Terminal Canvas is damaged"* or
+*"cannot be opened because the developer cannot be verified"*.
+Either of these gets past it:
 
 - Open **System Settings → Privacy & Security**, scroll to the notice about the blocked app and
   choose **Open Anyway**. On macOS 14 and earlier you can right-click the app and choose **Open**.
-- Or clear the quarantine flag in a terminal:
+- Or clear the quarantine flag in a terminal, with the command below.
 
-  ```sh
-  xattr -dr com.apple.quarantine /Applications/Terminal\ Canvas.app
-  ```
+```sh
+xattr -dr com.apple.quarantine /Applications/Terminal\ Canvas.app
+```
 
 Only do this because you have read the source or trust its author. The app runs whatever commands
 you give it, by design.

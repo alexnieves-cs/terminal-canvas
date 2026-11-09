@@ -18,7 +18,7 @@ Tier 1 of the 2026-11-02 plan (items 1.1, 1.3, 1.4 and the comparison page from 
   Getting started, Verification), `docs/milestones.md` (the table;
   `milestones.1` reads it there and refuses a stray row in the README).
 - **The user guide.** `docs/guide/*.md`, readable on github.com and rendered
-  by `scripts/build-site.cjs` (with `marked`, a dev dependency) into `/docs/`
+  by `scripts/build-site.cjs` (with the app's own Markdown grammar, `src/shared/markdown.ts`; `verify:deck` `deck.deps.1` refuses a Markdown library) into `/docs/`
   on the Pages site, in the landing page's frame, with no script. The build
   fails on a guide page it does not name and on a link that resolves to
   nothing. `verify:demo` `demo.docs.1` makes the first comparison in the chain.
