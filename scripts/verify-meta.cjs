@@ -826,6 +826,22 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ webviewTag, stripsPreload, noNode, srcGate, permission, guestDeny }))
 }
 
+// browser.2 (the 2026-11-09 audit). THE SHELL WINDOW'S OWN NEW-WINDOW DOOR.
+// `shell.openExternal` hands any scheme to the OS, and this handler is the one
+// caller that does not pass through link-open.ts's http(s) rule. Removing the
+// gate has no symptom (a web link still opens), so the source text is the check:
+// the handler tests the url for http(s) before the open, and always denies.
+{
+  const src = stripComments(read('src/main/bootstrap/window.ts') ?? '')
+  const at = src.indexOf('window.webContents.setWindowOpenHandler(')
+  const body = at < 0 ? '' : src.slice(at, at + 400)
+  const gated = body.replace(/\s+/g, ' ').includes('if (/^https?:/i.test(url)) void shell.openExternal(url)')
+  const denies = /return\s*\{\s*action:\s*'deny'\s*\}/.test(body)
+  const opens = (body.match(/shell\.openExternal\(/g) ?? []).length
+  ok('browser.2 the shell window hands a new-window url to the OS only when it is http(s), and denies the window either way',
+    gated && denies && opens === 1, JSON.stringify({ gated, denies, opens }))
+}
+
 // M112 — telemetry.3. THE MODULES THAT HOLD BYTES NEVER MEET THE SDK. A
 // Sentry import in the env builder, the PTY manager, the credential store or
 // the scrollback log is a second exit for exactly the data the scrubber
