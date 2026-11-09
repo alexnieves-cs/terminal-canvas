@@ -10,7 +10,17 @@
 # Unsigned on purpose for 6.0.0 (the owner's call, 2026-10-21): builder-config
 # pins `identity: null`, and verify:package checks that pin. The release body
 # says how to open an unsigned app; the job also records what `codesign`
-# makes of the bundle, so the signing decision at 6.1 starts from a fact.
+# makes of the bundle.
+#
+# M630: signed and notarized WHEN THE APPLE SECRETS EXIST, unsigned otherwise.
+# The "Signing mode" step decides once, from the secrets alone, and everything
+# after reads its output: the DMG step sets TC_MAC_SIGN=1 (the only switch
+# builder-config honours), the check step turns codesign, Gatekeeper and the
+# stapled ticket into a GATE, and the release notes drop the Open Anyway
+# steps. No secrets (a fork, or before the owner adds them) is today's unsigned
+# build, unchanged. A HALF set is red, never a quiet fall back to unsigned: a
+# release that was meant to be signed must not ship without it. The secrets
+# and how to make them: docs/release-signing.md.
 #
 # Run by hand (workflow_dispatch), or on a PR that touches the packaging, it
 # does everything except publish, so the pipeline is proved without minting a
@@ -100,6 +110,43 @@ jobs:
       - name: Package config checks
         run: npm run verify:package
 
+      # M630. Signed iff the certificate AND one notarization credential set
+      # are present. Secrets cannot be read in `if:`, so they come in as env
+      # and the decision leaves as an output.
+      - name: Signing mode
+        id: sign
+        env:
+          CERT: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          any=""; for v in "$CERT" "$CERT_PASSWORD" "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID" "$API_KEY" "$API_KEY_ID" "$API_ISSUER"; do [ -n "$v" ] && any=1; done
+          if [ -z "$any" ]; then
+            echo "No Apple secrets: building UNSIGNED (docs/release-signing.md says how to turn signing on)."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$CERT" ] || [ -z "$CERT_PASSWORD" ]; then
+            echo "::error::Some Apple secrets are set but MAC_CERT_P12_BASE64 / MAC_CERT_PASSWORD are not. Add both, or remove the rest to build unsigned."
+            exit 1
+          fi
+          if [ -n "$API_KEY" ] && [ -n "$API_KEY_ID" ] && [ -n "$API_ISSUER" ]; then
+            notary=api
+          elif [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            notary=appleid
+          else
+            echo "::error::The certificate is set but no complete notarization set is: APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID, or APPLE_API_KEY_P8 + APPLE_API_KEY_ID + APPLE_API_ISSUER."
+            exit 1
+          fi
+          echo "Signing with the Developer ID certificate; notarizing with: $notary"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          echo "notary=$notary" >> "$GITHUB_OUTPUT"
+
       # Builds, packages a --dir bundle and launches it. The gate.
       - name: verify:packaged
         env:
@@ -109,15 +156,50 @@ jobs:
       # The DMG itself. `--publish never`: the release step below is the only
       # thing that talks to GitHub, so a failed upload cannot leave half a
       # release behind with electron-builder's own naming.
-      - name: Build the DMG
+      - name: Build the DMG (unsigned)
+        if: steps.sign.outputs.signed != 'true'
         env:
           # Unsigned by decision; stop electron-builder hunting the keychain
           # for an identity the runner does not have.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --config electron-builder.config.cjs --mac --publish never
 
+      # M630. CSC_LINK takes the base64 .p12 as-is; electron-builder imports
+      # it into a throwaway keychain, signs every Mach-O in the bundle (node-pty
+      # and spawn-helper in app.asar.unpacked included) with the hardened
+      # runtime, submits the .app to Apple's notary service, waits, staples the
+      # ticket, then builds the DMG around the stapled app. Expect it to take
+      # several minutes longer than the unsigned build.
+      - name: Build the DMG (signed and notarized)
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          TC_MAC_SIGN: '1'
+          CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          NOTARY: ${{ steps.sign.outputs.notary }}
+          ID: ${{ secrets.APPLE_ID }}
+          ID_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          # Only the chosen set reaches electron-builder: given both, it would
+          # pick one by its own precedence, not ours.
+          if [ "$NOTARY" = api ]; then
+            key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+            printf '%s\n' "$API_KEY" > "$key"
+            export APPLE_API_KEY="$key" APPLE_API_KEY_ID="$API_KEY_ID" APPLE_API_ISSUER="$API_ISSUER"
+          else
+            export APPLE_ID="$ID" APPLE_APP_SPECIFIC_PASSWORD="$ID_PASSWORD" APPLE_TEAM_ID="$TEAM_ID"
+          fi
+          npx electron-builder --config electron-builder.config.cjs --mac --publish never
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8
+
       - name: Checksums and a codesign note
         id: files
+        env:
+          SIGNED: ${{ steps.sign.outputs.signed }}
         run: |
           cd release
           ls -la
@@ -125,9 +207,21 @@ jobs:
           shasum -a 256 "$dmg" > SHA256SUMS.txt
           cat SHA256SUMS.txt
           app=$(ls -d mac*/*.app | head -1)
-          # Not a gate: the build is unsigned by decision. What macOS will
-          # make of it is written down so nobody has to guess.
-          { codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true; } | tee codesign.txt
+          if [ "$SIGNED" = true ]; then
+            # M630. A GATE when signed: the seal holds, Gatekeeper accepts the
+            # app as a notarized Developer ID app, and the ticket is stapled
+            # (so it opens offline on first launch). Any of the three failing
+            # means users would see the warning signing exists to remove.
+            set -o pipefail
+            { codesign --verify --deep --strict --verbose=2 "$app" 2>&1
+              codesign -dv --verbose=2 "$app" 2>&1 | grep -E '^(Authority|TeamIdentifier|Runtime)'
+              spctl --assess --type execute --verbose=2 "$app" 2>&1
+              xcrun stapler validate "$app" 2>&1; } | tee codesign.txt
+          else
+            # Not a gate: the build is unsigned by decision. What macOS will
+            # make of it is written down so nobody has to guess.
+            { codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true; } | tee codesign.txt
+          fi
           echo "dmg=release/$dmg" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
@@ -144,7 +238,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DMG: ${{ steps.files.outputs.dmg }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
         run: |
+          if [ "$SIGNED" = true ]; then
+          cat > notes.md <<EOF
+          ## Install
+
+          1. Download \`$(basename "$DMG")\` below (Apple silicon) and open it.
+          2. Drag **Terminal Canvas** into Applications and open it. The app is signed with an Apple Developer ID and notarized by Apple, so it opens without a warning.
+
+          Check the download against \`SHA256SUMS.txt\`: \`shasum -a 256 -c SHA256SUMS.txt\`.
+
+          The packaged app passed \`verify:packaged\` on the build runner, and its signature, Gatekeeper assessment and stapled notarization ticket were checked, before this release was created.
+          EOF
+          else
           cat > notes.md <<EOF
           ## Install
 
@@ -160,6 +267,7 @@ jobs:
 
           The packaged app passed \`verify:packaged\` on the build runner before this release was created.
           EOF
+          fi
           # The version's own notes, under the install steps, when the repo has them.
           notes="docs/release-notes/${TAG#v}.md"
           if [ -f "$notes" ]; then { echo; tail -n +2 "$notes"; } >> notes.md; fi

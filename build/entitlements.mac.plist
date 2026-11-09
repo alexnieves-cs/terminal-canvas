@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  M630. The hardened-runtime entitlements a SIGNED build carries (an unsigned
+  build carries none: build/builder-config.cjs names this file only when
+  signing). Notarization requires the hardened runtime, and the hardened
+  runtime refuses, by default, everything below. Each key is here because
+  something real breaks without it, and none of them fails loudly:
+
+  allow-jit, allow-unsigned-executable-memory
+      V8. Without them Electron's renderer and main crash at launch, the same
+      for every Electron app; electron-builder's own template carries both.
+  disable-library-validation
+      node-pty's .node binary and its spawn-helper are loaded out of
+      app.asar.unpacked. electron-builder re-signs them with our team, but a
+      dependency that ships a prebuilt binary signed by someone else would
+      fail to dlopen with no error the canvas can show: a terminal that never
+      opens.
+  automation.apple-events, device.audio-input, device.camera
+      A terminal host is the "responsible process" for everything typed into
+      it. macOS attributes a child's Apple Events, microphone and camera use
+      to the APP, and under the hardened runtime an app without the
+      entitlement gets a silent denial: `osascript` in a Terminal Canvas pane
+      would fail where the same line works in Terminal.app. The matching
+      usage strings live in builder-config's extendInfo.
+
+  The same file is the inherit file, so helper processes get the same set.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <key>com.apple.security.device.camera</key>
+  <true/>
+</dict>
+</plist>

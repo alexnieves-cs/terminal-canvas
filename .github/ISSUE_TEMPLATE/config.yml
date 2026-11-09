@@ -1,0 +1,11 @@
+# The chooser at /issues/new/choose. The three templates in this folder, plus
+# these links for people who came to ask "where do I try it" or "how do I
+# install it" rather than to report something.
+blank_issues_enabled: true
+contact_links:
+  - name: Try the live demo
+    url: https://alexnieves-cs.github.io/terminal-canvas/demo/
+    about: The app's interface in your browser, with scripted agents. Nothing to install.
+  - name: Install and getting started
+    url: https://github.com/alexnieves-cs/terminal-canvas/blob/main/docs/getting-started.md
+    about: The download, the Gatekeeper step for the unsigned build, and a first task.

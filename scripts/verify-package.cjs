@@ -149,6 +149,64 @@ console.log('\n' + '='.repeat(60))
   ok('icon.1 the mac icon is named and exists', typeof icon === 'string' && /\.icns$/.test(icon) && onDisk, JSON.stringify({ icon, onDisk }))
 }
 
+// sign.* (M630). Signing and notarization are a MODE, off by default. The
+// unsigned path is check 8's; these pin the signed one, which only the release
+// job runs and only when the Apple secrets exist, so a regression here would
+// otherwise surface as a failed notarization on release day or, worse, a
+// notarized app whose terminals cannot open.
+{
+  const { existsSync, readFileSync } = require('node:fs')
+  const { join } = require('node:path')
+  const signed = buildConfig({ sign: true })
+  const mac = signed.mac ?? {}
+
+  // Default is unsigned: a caller that passes nothing gets check 8's build.
+  ok('sign.1 signing is off unless asked for',
+    buildConfig({}).mac.identity === null && buildConfig({ sign: false }).mac.identity === null &&
+      !buildConfig().mac.hardenedRuntime && !buildConfig().mac.notarize,
+    JSON.stringify(buildConfig().mac))
+
+  // Signed: the identity key is ABSENT (CSC_LINK supplies the certificate),
+  // never null, which would silently produce an unsigned app that then fails
+  // notarization with "not signed".
+  ok('sign.2 a signed build has no null identity and runs hardened and notarized',
+    !Object.prototype.hasOwnProperty.call(mac, 'identity') &&
+      mac.hardenedRuntime === true && mac.notarize === true,
+    JSON.stringify({ identity: mac.identity, hardenedRuntime: mac.hardenedRuntime, notarize: mac.notarize }))
+
+  // The entitlements file exists and carries the keys whose absence fails
+  // silently: V8 cannot JIT, node-pty cannot load.
+  const file = mac.entitlements
+  const path = typeof file === 'string' ? join(__dirname, '..', file) : ''
+  const text = path && existsSync(path) ? readFileSync(path, 'utf8') : ''
+  const need = [
+    'com.apple.security.cs.allow-jit',
+    'com.apple.security.cs.allow-unsigned-executable-memory',
+    'com.apple.security.cs.disable-library-validation',
+    'com.apple.security.automation.apple-events'
+  ]
+  const missing = need.filter((k) => !text.includes(`<key>${k}</key>`))
+  ok('sign.3 the entitlements file exists and is inherited by helpers',
+    text !== '' && missing.length === 0 && mac.entitlementsInherit === file,
+    JSON.stringify({ file, inherit: mac.entitlementsInherit, missing }))
+
+  // Apple Events without a usage string are refused outright under the
+  // hardened runtime, whatever the entitlement says.
+  ok('sign.4 the usage strings ride along with the entitlements',
+    typeof mac.extendInfo?.NSAppleEventsUsageDescription === 'string',
+    JSON.stringify(mac.extendInfo))
+
+  // Everything else is the same app: signing changes HOW it is sealed, not
+  // what is in it (asarUnpack, files, appId, targets).
+  const base = buildConfig()
+  ok('sign.5 signing changes nothing but the mac signing keys',
+    JSON.stringify(signed.asarUnpack) === JSON.stringify(base.asarUnpack) &&
+      JSON.stringify(signed.files) === JSON.stringify(base.files) &&
+      signed.appId === base.appId &&
+      JSON.stringify(mac.target) === JSON.stringify(base.mac.target),
+    '')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

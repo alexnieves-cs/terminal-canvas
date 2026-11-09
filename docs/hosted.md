@@ -4,7 +4,7 @@ Lane Q (M590–M594). The whole app on a server, opened from any browser. There 
 no Mac in the loop: the server runs the app's own main process, terminals and
 agents run on the server, and the tab draws the same renderer the Mac app draws.
 
-This is not the [live demo](https://alexnieves-cs.github.io/terminal-canvas/)
+This is not the [live demo](https://alexnieves-cs.github.io/terminal-canvas/demo/)
 (lane N). The demo has scripted agents and recorded terminals and needs no
 server. The hosted version is the real app. Its shells are real shells, so it
 sits behind a sign-in token.
