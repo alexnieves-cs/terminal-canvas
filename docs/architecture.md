@@ -1,0 +1,494 @@
+# Architecture
+
+Three processes and one shared contract, with the IPC diagram `verify:meta` 14 checks against `src/shared/ipc-contract.ts`. Moved here from the README in M632; [architecture-map.md](architecture-map.md) is the module-by-module companion.
+
+## The shape
+
+The main process owns every PTY; the renderer never spawns a process.
+
+```
+renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list   -->  main
+                       machine:sample
+                       layout:load / layout:save
+                       session:backend / session:last-exit
+                       preset:list / preset:rename / preset:delete
+                       preset:set-default / preset:spawn-by-id / preset:save-panel
+                       preset:set-worktree
+                       worktree:list / worktree:remove / worktree:reveal
+                       scrollback:tail / scrollback:clear / scrollback:search
+                       prompt:list / prompt:save / prompt:delete
+                       template:list / template:save / template:delete
+                       preset:template
+                       settings:list / settings:set
+                       canvas:request-reset / dialog:confirm
+                       agent:acknowledge
+                       workspace:list / workspace:create / workspace:rename
+                       workspace:delete / workspace:activate
+                       workspace:merged / workspace:move-panels
+                       review:panel / review:baseline / review:at
+                       review:diff / review:commit / review:discard
+                       review:across / review:identity / git:status
+                       git:root
+                       credential:list / credential:set / credential:delete
+                       credential:verify
+                       auth:login / auth:logout / auth:sessions
+                       auth:use / auth:status
+                       presence:local / presence:rosters
+                       team:list / team:observe
+                       team:asks / team:ask-answer
+                       team:flow / team:flow-write
+                       canvas:op / canvas:shared-view
+                       workspace:share / workspace:shares
+                       workspace:open-share / workspace:share-member
+                       workspace:share-members
+                       text:open / text:close / text:update
+                       relay:spawn / relay:attach / relay:detach / relay:input
+                       relay:resize / relay:control / relay:kill / relay:list / relay:view
+                       github:list / broker:audit
+                       jira:list / jira:transitions
+                       jira:comment / jira:transition
+                       file:open / file:read / file:close / file:write
+                       file:create
+                       fs:list
+                       toolbox:read / toolbox:permissions
+                       diagnostics:sample / diagnostics:export
+                       export:panel-text / export:canvas-png
+                       export:deck-pdf / deck:export-pptx / tool:generate
+                       export:flowchart / export:night-film / film:night
+                       memory:list / memory:add / vault:read
+                       watcher:create / watcher:run / watcher:stop
+                       watcher:dispose / watcher:list
+                       env:report / tmux:adoptable / link:open / ledger:list / ledger:usage / ledger:timeline / ledger:event
+                       check:output / combine:run / lane:merge / lane:radar
+                       tonight:start / tonight:stop / tonight:status
+                       vm:lanes / vm:lanes-changed
+                       tournament:start / tournament:stop / tournament:status
+                       cloud:list / cloud:dispatch / cloud:refresh / cloud:forget / cloud:merge / cloud:radar
+                       learn:read / learn:record / learn:propose / learn:decide / learn:prove
+                       combine:inputs / combine:integrate / combine:receipts
+                       job:list / job:recover
+                       agent:cancel-queued / agent:terminate
+                       agent:queue-edit / agent:send-correction
+                       task:evidence / task:evidence-index / task:export-handoff
+                       setup:preflight / recipe:history
+                       setup:read / setup:save / setup:prepare
+                       editor:open / recipe:list / recipe:save / recipe:delete
+                       spawn:sheet / spawn:recent / spawn:recent-used
+                       agent:create / agent:send / agent:interrupt / agent:dispose
+                       agent:answer / agent:list / agent:transcript / agent:import
+                       agent:clipboard-image
+                       attachment:clipboard-file
+                       agent:grants / agent:revoke-grants
+                       snapshot:list / snapshot:restore
+                       agent:auto-start / agent:auto-stop
+                       teammate:list / teammate:save / teammate:delete
+                       teammate:choose-place
+                       routine:list / routine:save / routine:delete / routine:run
+                       browser:read
+                       preview:discover / preview:capture
+                       asset:put / asset:choose
+                       node:fetch
+                       portable:export / portable:import
+                       pack:read / pack:add / pack:export / preset:mark-reviewed
+                       pack:sample / github:publish
+                       board:lane / board:lane-status
+                       board:open-pr / board:comment-pr
+                       board:repositories
+                       shelf:list / shelf:save
+                       plugin:details
+                       skill:write / skill:create / skill:rename / skill:delete
+                       skill:trail
+                       agent:pool-start / agent:pool-stop
+                       update:check
+                       image:read / starter:prepare
+                       docx:import / flowchart:read / world:status / world:retry
+                       fork:turns / fork:branch
+renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
+                       agent:state / session:live / session:host / subagent:state
+                       file:changed / usage:panel / attention:jump
+                       session:recover
+                       settings:changed / spawn:open-sheet
+                       agent:event (batched ~16ms) / watcher:state / vault:changed
+                       presence:remote / team:observed / canvas:shared
+                       team:asks-changed / team:flow-changed
+                       auth:changed
+                       text:remote
+                       relay:data / relay:state
+                       world:events / world:connection (the real agent feed, and SIMULATE_AGENTS)
+                       routine:fire
+                       canvas:tidy / canvas:flip
+                       canvas:feedback
+                       board:add
+                       pool:mint / pool:event / boot:progress / cloud:changed
+main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
+                       canvas:counts / canvas:model / canvas:reset / canvas:plan
+                       preset:spawn / preset:default / preset:capture
+```
+
+The invoke direction is the load-bearing part. Preset and prompt mutations, the
+workspace verbs and the review reads are all renderer→main because main is the
+only process that can answer them: only main can resolve an absent `command`
+into the user's real login shell, only main owns the reset confirmation dialog,
+and only main can reach a git binary. The four `credential:*` channels are that
+argument at its strongest and are the only ones on this list defined as much by
+what they do **not** carry: main holds the encrypted store, and none of the four
+ever returns a stored secret — there is deliberately no `credential:get`, and
+`credential:verify` sends the token to the service and hands back only what the
+service said. A renderer-side reconstruction of any of
+them would drift from main's answer silently, and the two would then disagree
+only in the cases nobody tests.
+
+The three `auth:*` channels follow the same rule for the Terminal Canvas account (a
+Supabase session signed in through GitHub; setup in [docs/accounts.md](accounts.md)):
+the session lives in the same encrypted store under `supabase:github:<id>`, and the
+channels answer with who is signed in, never with a token.
+
+`canvas:counts` is the one event that runs the other way: main sends it and the renderer
+replies on an ephemeral `canvas:counts:reply:<timestamp>` channel that is invented per call
+and deliberately not part of the declared contract below.
+
+`src/shared/ipc-contract.ts` is the single source of truth for that surface and
+is imported by all three processes.
+
+On the renderer side, a panel has two separate lifetimes. A **session** — the xterm
+`Terminal` and the PTY behind it — is created once and disposed once, in a module-level
+registry (`src/renderer/session/session-registry.ts`) that lives outside React. The React
+**view** (`src/renderer/components/TerminalPanel.tsx`) is mounted and unmounted freely as
+panels scroll on and off screen, and owns nothing. A pure function
+(`src/renderer/canvas/lod.ts`) decides which panels are worth a live terminal versus a cheap
+card, based on viewport, focus, and a fixed budget of live WebGL contexts — culling a panel
+never kills its process; only the registry's `dispose(id)` (explicit panel
+close) and `disposeAll` do that — and since M4c a renderer teardown does neither, because
+it has to leave the tmux session running (see `Canvas.tsx`).
+
+### Things that are non-obvious
+
+A fuller version of this list — every load-bearing invariant in the codebase,
+each recorded next to the silent failure that follows from undoing it — lives in
+[`CLAUDE.md`](../CLAUDE.md), which is the project's engineering decisions log
+rather than tool configuration.
+
+**Login-shell PATH.** macOS GUI apps are launched by launchd, so they inherit a
+bare PATH and none of your dotfile exports — `claude` and `codex` work in
+Terminal but come back "command not found" in the app. `src/main/shell-env.ts`
+resolves the real environment once at startup via `$SHELL -ilc env` and uses it
+for every PTY.
+
+**Output batching.** `pty:data` is flushed on a ~16ms timer rather than per
+read. An agent TUI repainting its frame emits thousands of reads per second;
+unbatched, that floods the renderer's event loop and the UI locks up. Measured
+on 16.4 MB of `find` output: 33,198 PTY reads collapse to 105 IPC messages, a
+316x reduction.
+
+**Sessions survive their renderer, but not the app.** `Cmd+R` and `Cmd+W`
+destroy the page without running React cleanup, so the renderer never sends
+`pty:kill`. Since M4c each panel's process lives in a tmux session on a private
+socket (`-L terminal-canvas`) and what `node-pty` holds is a tmux *client*, so a
+renderer teardown detaches rather than kills and the next page's `pty:create`
+hits `new-session -A` and lands back in the running agent. Quitting the app
+tears everything down by default; with the `session.keepOnQuit` setting on
+it detaches instead of killing, and the next launch's reconciliation — which
+already reattaches every session whose panel the layout knows — brings the
+agents back. With no tmux installed the app falls back to spawning directly,
+says so in the HUD, and behaves exactly as it did before M4c.
+
+**One transform, not N layouts.** The canvas is a single `.world` element
+carrying `transform: translate(...) scale(...)`; panels are positioned once in
+world coordinates and never recomputed. This is not only a performance choice.
+A CSS `scale()` on an ancestor is invisible to `getComputedStyle` and
+`ResizeObserver` — which are exactly what xterm's `FitAddon` consults — so
+zooming cannot change a panel's cols/rows. The alternative, computing each
+panel's pixel size per frame, would reflow the running shell on every zoom
+gesture.
+
+The same transform-blindness is why pointer coordinates are wrong under zoom:
+`getBoundingClientRect()` is transform-aware while `dimensions.css.cell.width`
+is not, so under `scale(k)` xterm hit-tests a column `k` times the true one.
+M4a corrects this at the source: `src/renderer/components/xterm-pointer.ts`
+intercepts mouse events on `document` in the capture phase and re-dispatches
+them with `clientX`/`clientY` rewritten so the offset xterm computes is already
+in CSS pixels. `getMouseReportCoords` shares that helper, so mouse-reporting
+TUIs are corrected by the same change.
+
+**Restored panels are dormant.** A relaunch reads `layout.json` and puts every
+panel's geometry and stacking back, but a restored panel is a card reading
+"click to start" until you click it — no PTY is spawned and no WebGL context
+is created for it just because it is on screen. Panning across a fully
+restored twelve-panel canvas spawns zero processes; clicking one card wakes
+that panel and it behaves exactly like a fresh one from then on. This is what
+stops a relaunch from re-launching every agent that happened to be open when
+you quit.
+
+**`Cmd+K` is the one surface that takes the keyboard away.** Everywhere else in
+this app a bare keystroke belongs to the agent — canvas shortcuts all require
+`Cmd` precisely so a TUI never loses a key. The palette inverts that: it opens a
+text field, and while it is open bare keys are its own. It spawns from a preset,
+renames/deletes/re-defaults one, jumps the camera to any panel by name, inserts a
+saved or project prompt into the panel it captured, and saves the current terminal
+selection as a new prompt. Two consequences are worth knowing. Jumping to a panel
+frames it but never *wakes* it, so a keyboard tour of a restored canvas still
+spawns nothing. And the panel the commands act on is the one that had focus when
+the palette **opened** — DOM focus moves to the input, but the app's idea of the
+focused panel deliberately does not, so the panel stays live and stays the target.
+Rows that lead somewhere — `Manage presets…`, `Manage settings…` — open on `→` as
+well as `Enter`, and `←` comes back out, alongside the `Escape` that already did.
+Both arrows act only from the edges of what you have typed (right from the end,
+left from the start), so they never take the caret away from an in-progress query.
+
+**Prompts come from two places, and only one of them is writable.** Saved prompts
+live in `layout.json` alongside the panels; project prompts are read live from
+`.claude/commands/*.md` under the focused panel's cwd — the same files Claude Code
+reads, so they version-control with the repository and work outside this app.
+Nothing here ever writes into `.claude/`: authoring a file someone will commit is a
+decision to ask for, not a side effect of "save". Two prompts with the same name
+from the two sources stay two rows, each labelled with its source.
+
+**A packaged build is a separate installation.** `productName` is `Terminal Canvas`, and
+`app.getPath('userData')` derives from the app's name — so the packaged app has its own
+`layout.json`, its own presets and prompts, and its own tmux socket
+(`terminal-canvas-app`), none of which the `npm run dev` build can see. The first launch
+therefore opens on one fresh panel rather than on your dev canvas; that is the two
+installations being separate, not data loss. The socket half is not cosmetic:
+`before-quit` calls `shutdown()`, which is `kill-server`, so a shared socket would mean
+quitting either build destroyed the other build's running agents.
+
+**A panel's border reports what its agent is doing, and the bell needs your CLI's
+cooperation.** Every panel gets a colour from a small state machine — starting,
+busy, idle after a quiet stretch, or "wants you" after a real terminal bell — fed
+by the same PTY bytes the terminal already renders, so nothing new is spawned to
+watch it. The bell precondition is honest, not automatic: it only rings if the
+CLI running inside the panel is actually configured to emit one. Claude Code's
+own notification channel defaults to `auto`, which does not always mean "ring a
+bell" — so a panel that never rings may simply have a CLI that was never asked
+to. Two things about the detector are worth knowing if you go looking for a
+transcript reader or a title-based indicator instead: it never inspects the
+agent's own output for meaning, only for a BEL byte and the absence of further
+bytes, and under the bundled tmux backend the agent's window-title escape
+sequence never reaches this app at all — tmux consumes it for its own pane
+title before this app's PTY layer ever sees it, so it was never a candidate
+signal on that path in the first place.
+
+**A panel that wants you and is off screen gets an arrow, and `Cmd+J` visits
+it.** A small arrow appears at the edge of the viewport, pointing toward any
+panel that is both `wants-you` and out of view — a panel merely scrolled
+half off screen gets no arrow, because a pip for something already visible
+is noise. `Cmd+J` (`Shift+Cmd+J` to go backward) steps through the waiting
+panels oldest-first and frames each one, the same `centreOn` the panel
+switcher uses. It deliberately does not acknowledge what it lands you on:
+focus is still the only thing that clears `wants-you`, so a panel you jumped
+to keeps its amber border until you actually click into it, and the arrow
+that brought you there is one you can trust. The design for this milestone
+named five surfaces for getting a user's attention — the edge arrows, the
+jump key, an OS notification, a dock badge, and a sound. Only the first two
+shipped. The other three need main-process or asset-level plumbing this repo
+has no automated way to exercise — nothing here can drive a real
+`Notification`, read `app.dock`, or confirm a sound actually played — and
+landing three surfaces this codebase cannot verify under the same green
+`npm run verify` as the two it can would be coverage that reads as proof
+and isn't. They remain unbuilt, not merely undocumented.
+
+**Multiple named workspaces, switching without killing anything.** The
+canvas is no longer one persisted set of panels but a keyed collection of
+them — "startup", "school", whatever names fit — switched from the command
+palette's `Workspaces` section. A switch is a second boot: the outgoing
+canvas is written into the workspace being left, the incoming one is read
+back exactly as it would be at launch, and every derived piece of renderer
+state (the undo stack, the id counter, the camera, the selection) is
+re-derived rather than carried across. What does NOT happen on a switch is
+any process dying — a hidden workspace's panels lose their DOM and keep
+their tmux sessions, the same "two lifetimes, not one" split M4c already
+relies on for a reload, now paying out at the scale of a whole canvas
+instead of one culled panel. A workspace's row in the palette shows how many
+of its panels are currently waiting for you, even while it is hidden.
+
+Three things this milestone's design considered and deliberately did not
+build. All three landed in M18, and one of the three reasons recorded here was
+simply wrong — which is worth stating plainly, because a reason written down
+and never corrected is exactly what a file like this one exists to prevent.
+**A merged, all-in-one view across every workspace** was recorded as the case
+that would try to exceed `LIVE_BUDGET` — a cap on live WebGL contexts that is
+global, not per-workspace. That is not the obstacle. The global cap is the
+*answer*: tiering keeps deciding which panels are live, and a merged view with
+four hundred panels in it spends exactly the eight slots a single canvas
+does. The real obstacle was **coordinates**: every workspace lays its panels
+out in the same world space, clustered wherever that canvas's own camera has
+been, so two workspaces' panels overlap by construction, and `cascadeCentre`
+cannot help because it separates panels within one array. M18's answer is
+lanes — a per-workspace translation applied for display only. **Moving a panel
+from one workspace to another** was blocked on rubber-band selection not
+existing; M18 built the marquee first and then the move on top of it, in that
+order. M26 completed #52 with additive shift-click and origin-based group
+drag. **A keyboard shortcut for switching
+workspaces** was left unassigned on the grounds that picking a chord then would
+be a guess dressed up as a decision. That reason was sound and it expired: a
+milestone of using workspaces is the evidence it was waiting for, and
+`Cmd+Shift+[` / `Cmd+Shift+]` are now the chords — matched on `event.code` and
+not on `event.key`, because Shift rewrites the printed character and a `'}'`
+test works perfectly for whoever has a US layout and does nothing at all for
+everyone else.
+
+**The chrome is a second view over the palette, not a second implementation.**
+Until M8a the app was almost entirely chords and a hidden `Cmd+K`, and a first
+launch showed a canvas with no visible way in. The shell — a top bar, a
+collapsible rail, a collapsible inspector, with the canvas as the grid's middle
+cell — added no verb of its own at first: the New panel button routes through
+`preset:spawn-by-id` (only main can resolve an absent `command` into your real
+login shell), the zoom cluster calls `useViewport`'s own named verbs so `+` and
+`⌘=` are provably the same gesture, and Search and the gear open the palette,
+the gear landing directly in its `Settings` scope because settings rows are
+hidden at rest. Every control is deliberately **unfocusable**: each one
+`preventDefault`s its own mousedown so DOM focus never leaves the terminal's
+hidden textarea, which is what keeps the app's central promise — bare keys
+reach the agent — true on the very first click. Both side regions collapse to a
+sliver with `⌘\` (rail) and `⇧⌘\` (inspector), and the choice persists like any
+other setting — through the same `preferences` map every other setting uses, so
+each side also gets a palette row for free and toggling it there moves the frame
+immediately rather than at the next launch. The collapse is a discrete width
+change with no animation on purpose, though the reason is smaller than it first
+looks: nothing in the renderer watches the canvas host's size, so an animated
+collapse would not re-tier anything — it would re-render the edge-indicator
+layer on every frame of the transition, which is a real but modest cost in the
+one layer built to absorb it.
+
+**The inspector explains a panel; restart is the one verb the shell adds.** The
+right-hand pane answers "what is this panel, actually" — the resolved command
+and cwd main really spawned, the pid, the exit code, the agent's state, and a
+badge when the session survived a reload rather than being started fresh. It
+deliberately shows the LINKS rather than the answer: the resolved command and
+what the panel's own spec asked for are separate fields, because a panel
+labelled `login shell` is only explicable if you can see both that the spec
+asked for nothing and that your shell is `/bin/zsh`. With nothing selected it
+summarises the canvas instead — how many panels, how many running, how many
+waiting on you — using the same "running" predicate the reset dialog names, so
+the two can never disagree. Its act half is four verbs — rename, save as preset,
+close, restart — each aimed at the SELECTED panel rather than the focused one,
+and each routed through the same actions the palette and the rail use rather
+than reaching into the session registry itself.
+
+**Restart is dispose-and-re-ensure at the same panel id** — the same rect, the
+same spec, a fresh process. Under tmux that means the session is genuinely
+destroyed and a new one started, not reattached to: `new-session -A` would
+happily attach to the surviving session, so the destroy is awaited before the
+respawn, and the pane's process id is the only observable that tells a real
+restart from a reattach (`verify:pty-manager` 20 asserts exactly that). It
+clears the panel's agent state first, so a restarted panel cannot inherit the
+previous process's "needs you" glow, and it asks for no confirmation — the
+process it ends is precisely the one you asked to replace. Restart is offered
+for any panel that has started, including one that has already exited, which is
+most of why the verb exists.
+
+**A reattached panel now says so.** M6a made main probe `has-session` before
+every spawn specifically to know whether a panel's session survived, then
+carried that fact with nothing rendering it for two milestones. The inspector's
+badge is the reader, and it closes M6a's one outstanding success criterion.
+
+**A review node is a panel that is not a terminal.** M9a taught main to answer
+"what has this agent changed" — a `git stash create` snapshot taken the first
+time a panel spawns in a repository, and a diff against it on demand — and put
+the answer in the inspector's Changes section. M9b makes that answer a thing on
+the canvas. `Panel` is now a discriminated union: a terminal panel and a review
+node are two kinds of the same shape, sharing a rect, a z, a title and every
+gesture that acts on one (drag, resize, close, select, the rail row, the panel
+switcher), and differing in exactly what they render and what they own. You
+open one from the inspector's Changes heading, or from the palette's
+`Open review of <panel>` row (findable by typing "review changes"), on a panel
+that has started inside a repository.
+
+**It costs no `LIVE_BUDGET` slot and no WebGL context.** `Canvas.tsx` partitions
+the panel array before tiering, so a node never reaches `assignTiers` or the
+session registry at all — it holds no `PanelSession`, spawns no PTY, opens no
+xterm, and cannot evict a running agent to make room for itself. That is
+structural rather than a rule something obeys: there is no code path from a
+review node to `registry.ensure`, so the eight live terminals you had before
+opening a review are the eight you still have after. Opening five reviews of
+five panels costs five DOM subtrees and nothing else.
+
+**It outlives the panel it reviews.** A node stores its subject — the repository
+root, the baseline sha, and a label snapshotted from the panel's own chrome —
+and asks main a question addressed by that baseline rather than by a panel id.
+Main drops a panel's baseline the moment its session is killed, so a node that
+asked "review panel n7" would go blank at exactly the moment a review of
+finished work is most useful: you close the agent, and the record of what it
+did closes with it. Ask by baseline and the node keeps answering — after the
+panel is closed, and after a relaunch.
+
+**What a node shows.** A summary line (how many files, how many lines added and
+removed), the repository root, a note when the answer cannot be attributed to
+one agent (two panels sharing a checkout) or when git declined to open the
+repository at all, and the list of changed files. Click a file and its hunks
+expand in place, one file at a time — fetching every file's diff up front is
+megabytes of text inside the world layer for a node you may only glance at.
+Hunks are added, removed and context lines only: file headers, the `diff --git`
+preamble and the no-newline marker are meta and never rendered as changes. A
+node re-reads on its own when its subject's agent goes idle, and on the refresh
+control in its header; it does not watch the filesystem (pull, not push), so a
+change made outside a panel needs that click.
+
+**A review node can now commit what it is showing.** M9c adds one verb to the
+node: type a message, press Enter, and the files the node lists become a real
+commit in that repository. It is an ordinary commit — your `pre-commit` hook
+runs, and there is no `--no-verify` and no flag that could become one, because a
+tool that quietly skipped a repository's own checks would be worth less than one
+that refused. A hook that rejects the commit is reported as a refusal carrying
+the hook's own output verbatim, which is a different answer from "this did not
+run at all": the two have different fixes, and the split is by which call failed
+rather than by guessing at git's wording.
+
+**Your own index is never written while the commit is assembled.** The files are
+staged into a scratch index outside the repository, the commit is made against
+that, and your `.git/index` is byte-identical the whole way through — so an
+agent running `git add` in that repository at the same moment cannot collide
+with a commit it did not ask for. What the commit does have to touch is the index
+afterwards, and that is the half that is easy to get wrong by leaving it alone:
+once HEAD moves and the index does not, the index still describes the previous
+tree, and the agent's own `git status` reports phantom deletions for files that
+were just committed. So the committed paths are brought back in step by their
+exact blob shas — never by re-reading the working tree, which would stage an
+edit the agent made in the interval behind its back — and only those paths, so
+anything you had staged yourself survives.
+
+**Afterwards the node reads clean, because its baseline advances.** A node diffs
+the working tree against the snapshot it holds, and committing does not change
+the working tree — so without the advance the node would report the same files
+forever and a second press would commit them again. Committing moves its
+baseline to the commit it just made. It is not undoable, and it deliberately does
+not pretend to be: `Cmd+Z` leaves it alone rather than restoring a baseline that
+would make the node report work already in history.
+
+**Where a commit cannot be attributed, the button is visible and refuses.** Two
+panels sharing one checkout produce a `shared` reading, and committing there
+would put another agent's work under this node's message — so the control stays
+on screen, disabled, saying exactly that. Hiding it would make "not supported
+here" look identical to "not built yet". There is no amend, no branch, no remote
+and no per-file selection: the commit takes every file the node's answer
+contains, not only the ones that fit on screen.
+
+**Every workspace at once, and panels that can move between them.** M18 is the
+three things M7's design named and deliberately left. `Cmd+Shift+A` merges every
+workspace into one canvas, each in its own labelled lane, with every terminal
+still live and every session untouched. Getting there needed one correction:
+M7 recorded the obstacle as `LIVE_BUDGET`, the global cap on live WebGL
+contexts, and that was the wrong reason. The cap is the answer, not the problem
+— tiering goes on deciding which panels are worth a live terminal, and a merged
+view of four hundred panels spends the same eight slots a single canvas does.
+The real obstacle was coordinates: every workspace stores its panels in the
+same world space, clustered wherever its own camera has been, so two workspaces
+overlap by construction and nothing had ever kept them apart. Lanes are a
+per-workspace translation computed on the way to the screen and never written
+back, which is why the merged view is read-only geometry: you can read a foreign
+panel, scroll it, click into it and type at its agent, but you cannot drag,
+resize or close it, because a lane offset saved into `layout.json` is a
+well-formed file with wrong coordinates in it.
+
+**A rubber-band selection, and moving it somewhere else.** Dragging from empty
+canvas sweeps a marquee — starting only where the hit test found nothing, so
+clicking a card still selects that card rather than rubber-banding past it — and
+the resulting selection is what the palette's *Move to workspace* rows act on,
+into an existing canvas or a brand-new one you name. A move is a records
+operation: no process is disposed, no session restarted, and the moved panel's
+pid on the other side is the same pid it had before. It costs one thing, stated
+rather than hidden — the undo stack is cleared, exactly as a workspace switch
+already clears it, because leaving it standing meant one `Cmd+Z` could step back
+to a state predating the move and dispose an agent that by then belonged to
+another canvas. Earlier gestures stop being undoable after a move; that is the
+price of not killing something.

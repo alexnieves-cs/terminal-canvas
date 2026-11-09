@@ -97,10 +97,10 @@ main     --send-->   board:add                                                  
 main     --send-->   pool:mint (ephemeral reply) / pool:event                     --> renderer
 ```
 
-**This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this
-one.** It has drifted before, silently and for several milestones — nine channels
+**This diagram is a COPY, and `verify:meta` 14 pins the one in `docs/architecture.md` (in
+`README.md` until M632), not this one.** It has drifted before, silently and for several milestones — nine channels
 (`jira:*`, `fs:list`, `file:write`, `file:create`, `machine:sample`, `diagnostics:*`)
-shipped, were checked against the README by the suite, and were still missing here.
+shipped, were checked against the pinned diagram by the suite, and were still missing here.
 When adding a channel, edit BOTH; `src/shared/ipc-contract.ts` is the only authority
 either one answers to.
 
