@@ -13757,6 +13757,43 @@ tr[data-session-row]:focus-within .sessions-world,
   .guide { animation: none; }
   .guide__dots li, .guide__next { transition: none; }
 }
+/* M645. STATE TEXT IS INKED, NOT PAINTED. A tone is a paint colour: it is
+   tuned to read as a dot, a rim and a 10% wash, and as small text on the
+   light ground it fell short (needs you, #9f762c on the card: 3.55 to 1;
+   idle in the Sessions chip: 2.96). Text in a tone takes the tone pulled
+   towards the ink, so it stays the state's hue and clears 4.5 to 1 in both
+   themes; the dot, the rim and the wash keep the pure tone. Derived here
+   from --tone, so the colour still comes only from the Tone. */
+.sessions-state,
+.sessions-card__sentence { color: color-mix(in oklab, var(--tone) 68%, var(--fg)); }
+/* And a selected palette row's hint sits on the accent wash, where --fg-3
+   measured 4.15 to 1 in dark; it steps up one ink. */
+.palette__row--selected .palette__hint { color: var(--fg-2); }
+/* M645. THE REVIEW PAGE, LAID OUT. M605 gave it a bar, tabs and an empty
+   state and no rules of its own, so the title sat on the window's edge, the
+   two tabs split the full width in half like a settings pane, and the empty
+   sentence ran edge to edge at body size beside an unpadded button. It now
+   reads like Sessions, its sibling page: a padded bar with the title, tabs
+   sized to their words under it, and an empty state that is a short, quiet
+   paragraph with its one way forward, set where the eye lands. */
+.review-host__bar { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-3); padding: var(--sp-6) var(--sp-7) 0; }
+.review-host__title { margin: 0; font: 600 var(--t-lg)/1.2 var(--font-ui); letter-spacing: -0.01em; color: var(--fg); }
+.review-host__bar > .tabs { padding: 0; }
+.review-host__bar > .tabs > .tab { flex: none; padding-inline: var(--sp-5); }
+.review-host__empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-5); max-width: 56ch; margin: var(--sp-8) var(--sp-7); }
+.review-host__empty > p { margin: 0; color: var(--fg-2); font-size: var(--t-md); line-height: 1.5; }
+.review-host__list { list-style: none; margin: 0; padding: var(--sp-5) var(--sp-7); display: flex; flex-direction: column; gap: var(--sp-3); overflow: auto; }
+.review-host__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name go" "why go" "affects go"; column-gap: var(--sp-6); row-gap: var(--sp-1); align-items: center; padding: var(--sp-5) var(--sp-6); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); max-width: 880px; }
+.review-host__name { grid-area: name; font-weight: 600; color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-host__why { grid-area: why; color: var(--fg-2); font-size: var(--t-sm); }
+.review-host__affects { grid-area: affects; color: var(--fg-3); font: var(--t-sm) var(--font-mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-host__row > button { grid-area: go; }
+/* M645. Sessions' second button is the primary's quiet sibling. It had only
+   a font, so it drew the platform's square bordered button beside a rounded
+   filled one. Same height, radius and type as "+ New session"; a hairline
+   and no fill, so the primary stays the one filled thing in the bar. */
+.sessions-host__orch { border: 1px solid var(--line-strong); border-radius: var(--r-md); background: transparent; color: var(--fg); font-size: var(--t-sm); font-weight: 500; padding: calc(var(--sp-2) - 1px) var(--sp-4); cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
+.sessions-host__orch:hover { background: var(--s-3); }
 /* ── /st:W ── */
 
 

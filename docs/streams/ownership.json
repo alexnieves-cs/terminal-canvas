@@ -180,7 +180,9 @@
       "src/main/sign-in-evidence.ts",
       "src/shared/first-canvas-guide.ts",
       "src/renderer/onboarding/FirstCanvasGuide.tsx",
-      "src/renderer/onboarding/guide-store.ts"
+      "src/renderer/onboarding/guide-store.ts",
+      "src/renderer/primitives/focus-guard-stops.ts",
+      "scripts/verify-a11y.cjs"
     ]
   }
 }
