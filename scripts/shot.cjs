@@ -1648,7 +1648,11 @@ app.whenReady().then(async () => {
       // 1024x647 (Stream A's verify:visual run, #32). Offscreen there, sized
       // by a device-metrics override below — panels-harness.cjs's answer to
       // the same clamp.
-      offscreen: SHOT_OFFSCREEN
+      // Electron 43.8 paints an offscreen surface at ITS OWN scale factor, 1
+      // unless this says otherwise; the emulated metrics below no longer
+      // raise it, and every capture came back 720x340 against 1440x679
+      // goldens (#89's first run). Both are set, so either rule gives 2x.
+      offscreen: SHOT_OFFSCREEN ? { deviceScaleFactor: Number(process.env.TC_SHOT_SCALE) || 1 } : false
     }
   })
   // M162. The goldens are 1440x865 CONTENT captures. A 900px-tall window is
