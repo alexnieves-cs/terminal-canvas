@@ -82,7 +82,7 @@ const tokens = createPanelTokens()
 let everHadWindow = false
 const crashGuard = installCrashGuard({
   proc: process,
-  log: createCrashLog({ file: join(app.getPath('userData'), 'crash-log.jsonl') }),
+  log: createCrashLog({ file: () => join(app.getPath('userData'), 'crash-log.jsonl') }),
   now: () => Date.now(),
   version: app.getVersion(),
   paths: () => ({ userData: app.getPath('userData'), home: app.getPath('home') }),
@@ -98,8 +98,10 @@ const crashGuard = installCrashGuard({
 // Only the app's own window: a browser pane's guest is a `webview`, and its
 // node already says "crashed" and offers the reload itself.
 app.on('render-process-gone', (_event, contents, details) => {
-  crashGuard.report('renderer-gone', new Error(`${contents.getType()} renderer gone: ${details.reason} (exit ${details.exitCode})`))
-  if (contents.getType() !== 'window' || contents.isDestroyed()) return
+  // getType() throws on a destroyed webContents, so that is asked first.
+  const type = contents.isDestroyed() ? 'destroyed' : contents.getType()
+  crashGuard.report('renderer-gone', new Error(`${type} renderer gone: ${details.reason} (exit ${details.exitCode})`))
+  if (type !== 'window') return
   if (crashGuard.shouldReload(details.reason)) contents.reload()
 })
 app.on('child-process-gone', (_event, details) => {

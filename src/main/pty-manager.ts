@@ -1068,6 +1068,7 @@ export class PtyManager {
       this.transcriptPaths.delete(panelId)
       this.forceResend.delete(panelId)
       this.transcriptDecoders.delete(panelId)
+      this.sessionsChanged()
       return
     }
     session.killed = true
@@ -1100,6 +1101,9 @@ export class PtyManager {
     this.transcriptDecoders.delete(panelId)
     this.sessions.delete(panelId)
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
+    // M651. A killed session's own onExit returns early (`killed`), so the
+    // run marker would go on naming a panel a person closed.
+    this.sessionsChanged()
   }
 
   /**
@@ -1137,6 +1141,9 @@ export class PtyManager {
       }
       this.sessions.delete(session.panelId)
     }
+    // M651. On the direct backend a detach ends the processes; the marker
+    // must stop naming them (on tmux `list()` still answers with them).
+    this.sessionsChanged()
     // A reload's fresh PtyManager would start with an empty lastLive anyway,
     // but THIS manager survives a detach and keeps running — so without this
     // clear, pollLive dedupes every reattached panel against its stale

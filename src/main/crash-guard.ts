@@ -65,6 +65,8 @@ export interface CrashRecord {
 /** A stack is evidence, not a transcript: enough frames to find the line. */
 const STACK_MAX = 4000
 const MESSAGE_MAX = 1000
+/** What the scrubber is handed at most; the kept strings are cut AFTER it runs. */
+const SCRUB_INPUT_MAX = 200_000
 /** Records kept on disk; older ones fall off the front. */
 export const CRASH_LOG_MAX = 100
 /** Records written per minute before a storm is only counted. */
@@ -99,10 +101,14 @@ export function crashRecord(kind: CrashKind, reason: unknown, ctx: { now: number
     name = 'NonError'
     message = 'a value that could not be described'
   }
-  const n = scrubText(name.slice(0, 200), ctx.paths)
-  const m = scrubText(message.slice(0, MESSAGE_MAX), ctx.paths)
-  const s = scrubText(stack.slice(0, STACK_MAX), ctx.paths)
-  return { at: ctx.now, kind, phase: ctx.phase, name: n.text, message: m.text, stack: s.text, version: ctx.version, redactions: n.count + m.count + s.count }
+  // SCRUB, THEN CUT — never the other way. A cut first can end inside a key's
+  // envelope or halfway through a token, and the half that is left no longer
+  // matches the rule that would have removed it. The input is bounded first
+  // only against a pathological megabyte message, far above either limit.
+  const n = scrubText(name.slice(0, SCRUB_INPUT_MAX), ctx.paths)
+  const m = scrubText(message.slice(0, SCRUB_INPUT_MAX), ctx.paths)
+  const s = scrubText(stack.slice(0, SCRUB_INPUT_MAX), ctx.paths)
+  return { at: ctx.now, kind, phase: ctx.phase, name: n.text.slice(0, 200), message: m.text.slice(0, MESSAGE_MAX), stack: s.text.slice(0, STACK_MAX), version: ctx.version, redactions: n.count + m.count + s.count }
 }
 
 export interface CrashLog {
@@ -110,13 +116,17 @@ export interface CrashLog {
 }
 
 /** Never throws: a full disk is how some of these crashes start. */
-export function createCrashLog(opts: { file: string; max?: number }): CrashLog {
+export function createCrashLog(opts: { file: string | (() => string); max?: number }): CrashLog {
   const max = opts.max ?? CRASH_LOG_MAX
   return {
     append(record) {
       try {
-        appendFileSync(opts.file, `${JSON.stringify(record)}\n`)
-        keepNewestLines(opts.file, max)
+        // Resolved per write when given as a function: main retargets
+        // userData after the guard is installed (the fixture switch), and a
+        // path captured at install would write into the real profile.
+        const file = typeof opts.file === 'function' ? opts.file() : opts.file
+        appendFileSync(file, `${JSON.stringify(record)}\n`)
+        keepNewestLines(file, max)
       } catch { /* the console line the guard prints is the record that remains */ }
     }
   }
@@ -164,9 +174,11 @@ export function installCrashGuard(deps: CrashGuardDeps): CrashGuard {
     return times.length
   }
 
-  const report = (kind: CrashKind, reason: unknown): CrashRecord | null => {
+  // `always` is for the events that END the process: a storm of strays must
+  // never be what keeps a fatal failure from being recorded and acted on.
+  const report = (kind: CrashKind, reason: unknown, always = false): CrashRecord | null => {
     const now = deps.now()
-    if (within(written, now) >= RECORD_LIMIT) {
+    if (!always && within(written, now) >= RECORD_LIMIT) {
       suppressed += 1
       return null
     }
@@ -186,8 +198,9 @@ export function installCrashGuard(deps: CrashGuardDeps): CrashGuard {
   }
 
   deps.proc.on('uncaughtException', (reason) => {
-    const record = report('uncaught-exception', reason)
-    if (!deps.booted()) die(record)
+    const boot = !deps.booted()
+    const record = report('uncaught-exception', reason, boot)
+    if (boot) die(record)
   })
   // Never fatal on its own, in either phase: a stray rejection during boot
   // (a probe that timed out, an account refresh) is not the boot failing.
@@ -195,8 +208,17 @@ export function installCrashGuard(deps: CrashGuardDeps): CrashGuard {
   deps.proc.on('unhandledRejection', (reason) => { report('unhandled-rejection', reason) })
 
   return {
-    report,
-    bootFailed(reason) { die(report('boot-failure', reason)) },
+    report: (kind, reason) => report(kind, reason),
+    // The boot's promise can reject AFTER the window exists (the sequence
+    // goes on past it: the launcher, the menu bar, the cloud lanes). That is
+    // a degraded app with a window and maybe reattached agents, and rule 2
+    // holds: record it and keep running. Only a failure with no window ends
+    // the process.
+    bootFailed(reason) {
+      const boot = !deps.booted()
+      const record = report('boot-failure', reason, true)
+      if (boot) die(record)
+    },
     shouldReload(reason) {
       if (!RELOAD_REASONS.has(reason)) return false
       const now = deps.now()

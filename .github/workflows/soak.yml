@@ -47,6 +47,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# It reads the repository and uploads an artifact; nothing else.
+permissions:
+  contents: read
+
 jobs:
   soak:
     name: soak
@@ -85,10 +89,15 @@ jobs:
             minutes="${SOAK_MINUTES_INPUT:-300}"
           fi
           # Digits only, then the cap: an input is text someone typed.
-          case "$minutes" in ''|*[!0-9]*) minutes=300 ;; esac
+          # Four digits at most before any arithmetic: a longer run of digits
+          # overflows the shell's test, which then reads as "not greater".
+          case "$minutes" in ''|*[!0-9]*|?????*) minutes=300 ;; esac
           if [ "$minutes" -gt 330 ]; then minutes=330; fi
+          if [ "$minutes" -lt 1 ]; then minutes=1; fi
           panels="${SOAK_PANELS_INPUT:-20}"
-          case "$panels" in ''|*[!0-9]*) panels=20 ;; esac
+          case "$panels" in ''|*[!0-9]*|????*) panels=20 ;; esac
+          if [ "$panels" -gt 60 ]; then panels=60; fi
+          if [ "$panels" -lt 1 ]; then panels=1; fi
           export TC_SOAK_MINUTES="$minutes" TC_SOAK_PANELS="$panels"
           # caffeinate: a display that sleeps stops painting the window, and a
           # renderer that is not painting is not the renderer being soaked.

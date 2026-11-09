@@ -2831,14 +2831,16 @@ await (async () => {
       const cyclic = {}; cyclic.self = cyclic
       const odd = [undefined, 'a plain string', { code: 7 }, cyclic, null].map((v) => F.crashRecord('unhandled-rejection', v, { now: 5, version: '6.0.1', phase: 'boot', paths }))
       const long = F.crashRecord('uncaught-exception', new Error('x'.repeat(50000)), { now: 5, version: '6.0.1', phase: 'running', paths })
+      // Scrub, then cut: a token that straddles the cut must not leave its head behind.
+      const straddle = F.crashRecord('uncaught-exception', new Error('y'.repeat(970) + ' ' + token), { now: 5, version: '6.0.1', phase: 'running', paths })
       const s = JSON.stringify(r)
       pass = r.kind === 'uncaught-exception' && r.phase === 'running' && r.at === 5 && r.version === '6.0.1' && r.redactions >= 1 &&
         !s.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !s.includes('/Users/alex') && r.stack.includes('<userData>/x.js') && r.message.includes('<home>/proj') &&
         odd.every((o) => o.name === 'NonError' && typeof o.message === 'string' && o.message !== '') && odd[0].message === 'undefined' && odd[1].message === 'a plain string' && odd[2].message === '{"code":7}' &&
-        long.message.length <= 1000
-      detail = JSON.stringify({ r, odd: odd.map((o) => o.message), longLen: long.message.length })
+        long.message.length <= 1000 && straddle.message.length <= 1000 && !straddle.message.includes('sk-ant-api03') && straddle.redactions >= 1
+      detail = JSON.stringify({ r, odd: odd.map((o) => o.message), longLen: long.message.length, straddleTail: straddle.message.slice(-40) })
     }
-    ok('crash.1 a crash record keeps the kind, phase, time and version, replaces the userData and home paths and a token in the message and the stack with a count, turns a non-Error (undefined, a string, an object, a cycle, null) into words without throwing, and bounds the message', pass, detail)
+    ok('crash.1 a crash record keeps the kind, phase, time and version, replaces the userData and home paths and a token in the message and the stack with a count, turns a non-Error (undefined, a string, an object, a cycle, null) into words without throwing, and bounds the message AFTER scrubbing so a token across the cut leaves nothing behind', pass, detail)
   }
 
   // crash.2 — the policy. After boot nothing is fatal; during boot an
@@ -2858,14 +2860,23 @@ await (async () => {
       const failed = rig(1)
       failed.guard.bootFailed(new Error('whenReady body threw'))
       const returned = run.guard.report('child-gone', new Error('GPU process gone: crashed (exit 5)'))
+      // The boot's promise rejecting AFTER the window exists is not fatal…
+      const lateBoot = rig()
+      lateBoot.guard.bootFailed(new Error('the menu bar threw after the window was up'))
+      // …and a storm of strays before it must not swallow a real boot failure.
+      const stormy = rig(1)
+      for (let i = 0; i < F.RECORD_LIMIT + 5; i++) stormy.proc.emit('unhandledRejection', new Error(`stray ${i}`))
+      stormy.guard.bootFailed(new Error('and then the boot failed'))
       pass = run.rows.length === 3 && run.fatal.length === 0 && run.rows[0].kind === 'uncaught-exception' && run.rows[1].kind === 'unhandled-rejection' && run.rows.every((r) => r.phase === 'running') &&
         run.said.length === 3 && /^\[crash\] uncaught-exception \(running\): Error: late throw/.test(run.said[0]) &&
         afterStray === 0 && boot.fatal.length === 1 && boot.fatal[0].kind === 'uncaught-exception' && boot.rows.length === 3 && boot.rows.every((r) => r.phase === 'boot') &&
         failed.fatal.length === 1 && failed.fatal[0].kind === 'boot-failure' && failed.fatal[0].message === 'whenReady body threw' &&
-        returned !== null && returned.kind === 'child-gone'
-      detail = JSON.stringify({ run: run.rows.map((r) => r.kind), runFatal: run.fatal.length, afterStray, bootFatal: boot.fatal.map((r) => r.kind), failed: failed.fatal.map((r) => r.kind) })
+        returned !== null && returned.kind === 'child-gone' &&
+        lateBoot.fatal.length === 0 && lateBoot.rows.length === 1 && lateBoot.rows[0].kind === 'boot-failure' && lateBoot.rows[0].phase === 'running' &&
+        stormy.fatal.length === 1 && stormy.fatal[0].message === 'and then the boot failed' && stormy.rows.some((r) => r.kind === 'boot-failure')
+      detail = JSON.stringify({ lateBoot: lateBoot.fatal.length, stormy: stormy.fatal.map((r) => r.kind), run: run.rows.map((r) => r.kind), runFatal: run.fatal.length, afterStray, bootFatal: boot.fatal.map((r) => r.kind), failed: failed.fatal.map((r) => r.kind) })
     }
-    ok('crash.2 once a window exists an uncaught exception and an unhandled rejection are recorded and said and main keeps running; before one exists an exception or the boot\'s own failure ends the process through fatal exactly once, and a stray rejection alone does not', pass, detail)
+    ok('crash.2 once a window exists an uncaught exception and an unhandled rejection are recorded and said and main keeps running; before one exists an exception or the boot\'s own failure ends the process through fatal exactly once (even after a storm of strays), a stray rejection alone does not, and a boot that rejects after the window exists is recorded without ending anything', pass, detail)
   }
 
   // crash.3 — the bounds. A storm is counted, not written; a renderer that
