@@ -976,12 +976,14 @@ export class PtyManager {
       // direct backend returns null and node-pty's own code stands.
       const real = this.getBackend().exitCodeFor(spec.panelId)
       this.send(IPC_EVENTS.PTY_EXIT, { panelId: spec.panelId, exitCode: real ?? exitCode, signal })
+      this.sessionsChanged()
     })
 
     console.log(
       `[pty] spawned ${command} pid=${proc.pid} panel=${spec.panelId} ` +
         `${spec.cols}x${spec.rows} cwd=${cwd}`
     )
+    this.sessionsChanged()
 
     return {
       panelId: spec.panelId,
@@ -1705,6 +1707,20 @@ export class PtyManager {
    * root publishes boot progress from this. Null in every harness.
    */
   onBootReattach: (() => void) | null = null
+
+  /**
+   * M651. The set of panels with a session may have changed: one spawned, or
+   * one's process exited. The composition root keeps the run marker current
+   * from this (`last-exit.ts`) instead of polling `list()`, which on tmux is
+   * a subprocess per ask. Null in every harness; a listener that throws must
+   * not take a spawn or an exit down with it.
+   */
+  onSessionsChanged: (() => void) | null = null
+
+  private sessionsChanged(): void {
+    if (this.onSessionsChanged === null) return
+    try { this.onSessionsChanged() } catch { /* the marker reports its own failures */ }
+  }
 
   private send(channel: string, payload: unknown): void {
     if (channel === IPC_EVENTS.AGENT_STATE) {

@@ -2770,6 +2770,138 @@ await (async () => {
   rmSync(dir, { recursive: true, force: true })
 }
 
+// telemetry.6 (M652). THE OPT-IN TOGGLE, AND THE ADDRESS IT DOES NOT HAVE YET.
+// Five facts, each one a way the toggle could send something a person did not
+// agree to: off is off; on with no project address is off BY NAME (never a
+// silent on); a person's own DSN wins and is final, valid or not (a typo must
+// not reroute bytes to the project); a dump never rides the toggle; and the
+// committed constant and the setting's own sentence agree about whether
+// anything is sent.
+{
+  const can = typeof F.telemetryPlan === 'function' && typeof F.PROJECT_DSN === 'string' && Array.isArray(F.SETTINGS_FOR_TELEMETRY)
+  const read = (m) => (id) => m[id]
+  const PROJECT = 'https://feed1234@crash.example.org/7'
+  const off = can ? F.telemetryPlan(read({ 'telemetry.crashReports': false }), PROJECT) : null
+  const truthy = can ? F.telemetryPlan(read({ 'telemetry.crashReports': 'true' }), PROJECT) : null
+  const noAddress = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true }), '') : null
+  const badAddress = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true }), 'http://not-https@x/1') : null
+  const on = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true, 'telemetry.nativeCrashes': true }), PROJECT) : null
+  const own = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true, 'telemetry.sentryDsn': 'https://abc123@o1.ingest.sentry.io/42' }), PROJECT) : null
+  const typo = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true, 'telemetry.sentryDsn': 'htps://oops' }), PROJECT) : null
+  const shipped = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true })) : null
+  const row = can ? F.SETTINGS_FOR_TELEMETRY.find((d) => d.id === 'telemetry.crashReports') : null
+  const saysNothingSent = !!row && /nothing is sent/.test(row.description)
+  ok('telemetry.6 the crash-report toggle is boolean, off by default and never planWritable; off (or a non-boolean) sends nothing, on with no project address is off by name, a person\'s own DSN is final whether valid or a typo, a native dump never rides the toggle, and the description says "nothing is sent" exactly while PROJECT_DSN is empty',
+    can && !!row && row.type === 'boolean' && row.default === false && row.planWritable === undefined &&
+      off.on === false && off.reason === 'no-dsn' && truthy.on === false &&
+      noAddress.on === false && noAddress.reason === 'no-project-dsn' && badAddress.on === false && badAddress.reason === 'no-project-dsn' &&
+      on.on === true && on.dsn === PROJECT && on.to === 'project' && on.nativeCrashes === false &&
+      own.on === true && own.to === 'own' && own.dsn === 'https://abc123@o1.ingest.sentry.io/42' &&
+      typo.on === false && typo.reason === 'malformed-dsn' &&
+      (F.PROJECT_DSN === '' ? shipped.on === false && shipped.reason === 'no-project-dsn' && saysNothingSent : shipped.on === true && !saysNothingSent),
+    can ? JSON.stringify({ off, truthy, noAddress, on, own, typo, shipped, project: F.PROJECT_DSN === '' ? 'empty' : 'set', saysNothingSent }) : 'telemetry not exported')
+}
+
+// crash.* (M650). THE MAIN PROCESS'S LAST LISTENER, under plain node: an
+// emitter stands in for `process`, an array for the disk.
+{
+  const { EventEmitter } = require('node:events')
+  const can = typeof F.installCrashGuard === 'function' && typeof F.crashRecord === 'function' && typeof F.createCrashLog === 'function'
+  const paths = { userData: '/Users/alex/Library/Application Support/Terminal Canvas', home: '/Users/alex' }
+  const token = 'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij'
+  const rig = (bootedAt = 0) => {
+    const proc = new EventEmitter()
+    const rows = []
+    const fatal = []
+    const said = []
+    let now = 1000
+    let booted = bootedAt === 0
+    const guard = F.installCrashGuard({ proc, log: { append: (r) => rows.push(r) }, now: () => now, version: '6.0.1', paths: () => paths, booted: () => booted, fatal: (r) => fatal.push(r), say: (l) => said.push(l) })
+    return { proc, rows, fatal, said, guard, tick: (ms) => { now += ms }, boot: () => { booted = true } }
+  }
+
+  // crash.1 — the record. Scrubbed, counted, bounded, and never a second throw.
+  {
+    let pass = false
+    let detail = 'crash guard not exported'
+    if (can) {
+      const err = new Error(`spawn failed for ${paths.home}/proj with ${token}`)
+      err.stack = `Error: spawn failed\n    at run (${paths.userData}/x.js:1:2)\n    at ${paths.home}/proj/y.js:3:4`
+      const r = F.crashRecord('uncaught-exception', err, { now: 5, version: '6.0.1', phase: 'running', paths })
+      const cyclic = {}; cyclic.self = cyclic
+      const odd = [undefined, 'a plain string', { code: 7 }, cyclic, null].map((v) => F.crashRecord('unhandled-rejection', v, { now: 5, version: '6.0.1', phase: 'boot', paths }))
+      const long = F.crashRecord('uncaught-exception', new Error('x'.repeat(50000)), { now: 5, version: '6.0.1', phase: 'running', paths })
+      const s = JSON.stringify(r)
+      pass = r.kind === 'uncaught-exception' && r.phase === 'running' && r.at === 5 && r.version === '6.0.1' && r.redactions >= 1 &&
+        !s.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !s.includes('/Users/alex') && r.stack.includes('<userData>/x.js') && r.message.includes('<home>/proj') &&
+        odd.every((o) => o.name === 'NonError' && typeof o.message === 'string' && o.message !== '') && odd[0].message === 'undefined' && odd[1].message === 'a plain string' && odd[2].message === '{"code":7}' &&
+        long.message.length <= 1000
+      detail = JSON.stringify({ r, odd: odd.map((o) => o.message), longLen: long.message.length })
+    }
+    ok('crash.1 a crash record keeps the kind, phase, time and version, replaces the userData and home paths and a token in the message and the stack with a count, turns a non-Error (undefined, a string, an object, a cycle, null) into words without throwing, and bounds the message', pass, detail)
+  }
+
+  // crash.2 — the policy. After boot nothing is fatal; during boot an
+  // exception and the boot's own failure are, once; a stray rejection never is.
+  {
+    let pass = false
+    let detail = 'crash guard not exported'
+    if (can) {
+      const run = rig()
+      run.proc.emit('uncaughtException', new Error('late throw'))
+      run.proc.emit('unhandledRejection', 'late rejection')
+      const boot = rig(1)
+      boot.proc.emit('unhandledRejection', new Error('a probe timed out'))
+      const afterStray = boot.fatal.length
+      boot.proc.emit('uncaughtException', new Error('threw while wiring'))
+      boot.guard.bootFailed(new Error('and the boot rejected too'))
+      const failed = rig(1)
+      failed.guard.bootFailed(new Error('whenReady body threw'))
+      const returned = run.guard.report('child-gone', new Error('GPU process gone: crashed (exit 5)'))
+      pass = run.rows.length === 3 && run.fatal.length === 0 && run.rows[0].kind === 'uncaught-exception' && run.rows[1].kind === 'unhandled-rejection' && run.rows.every((r) => r.phase === 'running') &&
+        run.said.length === 3 && /^\[crash\] uncaught-exception \(running\): Error: late throw/.test(run.said[0]) &&
+        afterStray === 0 && boot.fatal.length === 1 && boot.fatal[0].kind === 'uncaught-exception' && boot.rows.length === 3 && boot.rows.every((r) => r.phase === 'boot') &&
+        failed.fatal.length === 1 && failed.fatal[0].kind === 'boot-failure' && failed.fatal[0].message === 'whenReady body threw' &&
+        returned !== null && returned.kind === 'child-gone'
+      detail = JSON.stringify({ run: run.rows.map((r) => r.kind), runFatal: run.fatal.length, afterStray, bootFatal: boot.fatal.map((r) => r.kind), failed: failed.fatal.map((r) => r.kind) })
+    }
+    ok('crash.2 once a window exists an uncaught exception and an unhandled rejection are recorded and said and main keeps running; before one exists an exception or the boot\'s own failure ends the process through fatal exactly once, and a stray rejection alone does not', pass, detail)
+  }
+
+  // crash.3 — the bounds. A storm is counted, not written; a renderer that
+  // keeps dying is not reloaded forever; a clean exit is not a crash.
+  {
+    let pass = false
+    let detail = 'crash guard not exported'
+    if (can) {
+      const storm = rig()
+      for (let i = 0; i < F.RECORD_LIMIT + 30; i++) storm.proc.emit('uncaughtException', new Error(`tick ${i}`))
+      const duringStorm = { rows: storm.rows.length, suppressed: storm.guard.suppressed() }
+      storm.tick(61_000)
+      storm.proc.emit('uncaughtException', new Error('a minute later'))
+      const reload = rig()
+      const grants = []
+      for (let i = 0; i < F.RELOAD_LIMIT + 2; i++) grants.push(reload.guard.shouldReload('crashed'))
+      reload.tick(61_000)
+      const later = reload.guard.shouldReload('oom')
+      const notCrashes = ['clean-exit', 'killed', 'something-new'].map((r) => reload.guard.shouldReload(r))
+      const dir = mkdtempSync(join(tmpdir(), 'tc-crash-log-'))
+      const file = join(dir, 'crash-log.jsonl')
+      const log = F.createCrashLog({ file, max: 3 })
+      for (let i = 0; i < 5; i++) log.append(F.crashRecord('uncaught-exception', new Error(`e${i}`), { now: i, version: 'v', phase: 'running', paths }))
+      const kept = readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l).message)
+      let threw = false
+      try { F.createCrashLog({ file: join(dir, 'no-such-dir', 'x.jsonl') }).append(F.crashRecord('uncaught-exception', new Error('e'), { now: 1, version: 'v', phase: 'running', paths })) } catch { threw = true }
+      rmSync(dir, { recursive: true, force: true })
+      pass = duringStorm.rows === F.RECORD_LIMIT && duringStorm.suppressed === 30 && storm.rows.length === F.RECORD_LIMIT + 1 &&
+        grants.filter(Boolean).length === F.RELOAD_LIMIT && grants.slice(F.RELOAD_LIMIT).every((g) => g === false) && later === true &&
+        notCrashes.every((g) => g === false) && kept.join() === 'e2,e3,e4' && !threw
+      detail = JSON.stringify({ duringStorm, after: storm.rows.length, grants, later, notCrashes, kept, threw })
+    }
+    ok('crash.3 a storm past the per-minute limit is counted rather than written and recording resumes a minute later; a crashed renderer is granted a bounded number of reloads a minute and a clean exit or a kill none; the log keeps its newest records and an unwritable log never throws', pass, detail)
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
