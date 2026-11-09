@@ -80,7 +80,7 @@ function SettingLine({ row }: { row: SettingRow }): JSX.Element {
           <button type="button" aria-pressed={row.value === true} onClick={() => write(true)}>Full</button>
         </span>
       ) : row.type === 'boolean' ? (
-        <button type="button" className="rd-settings__switch" role="switch" aria-checked={row.value === true} aria-pressed={row.value === true} aria-label={`${row.label}, ${shownValue(row)}`} onClick={() => write(row.value !== true)}>{shownValue(row)}</button>
+        <button type="button" className="rd-settings__switch" role="switch" aria-checked={row.value === true} aria-label={`${row.label}, ${shownValue(row)}`} onClick={() => write(row.value !== true)}>{shownValue(row)}</button>
       ) : row.type === 'enum' && (row.values?.length ?? 0) > 0 ? (
         <select className="rd-settings__select" aria-label={row.label} value={String(row.value)} onChange={(event) => write(event.target.value)}>
           {(row.values ?? []).map((value) => <option key={value} value={value}>{shownValue({ id: row.id, type: 'enum', value })}</option>)}
