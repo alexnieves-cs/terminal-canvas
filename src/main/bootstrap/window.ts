@@ -101,9 +101,15 @@ export function createWindow(state: MainState, stores: Stores): void {
     console.warn(`[window] blocked navigation to ${url}`)
   })
 
-  // Never let a link navigate the shell window itself.
+  // Never let a link navigate the shell window itself. And only the web leaves:
+  // `shell.openExternal` hands ANY scheme to the OS (file:, smb:, an app's own
+  // URL handler), so a `window.open` from the renderer with a non-web url would
+  // launch whatever is registered for it. link:open already refuses everything
+  // but http(s) (link-open.ts); this is the same rule on the one door that does
+  // not pass through it.
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
+    else console.warn(`[window] refused to open ${url}: http(s) only`)
     return { action: 'deny' }
   })
 

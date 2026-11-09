@@ -406,13 +406,40 @@ const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + 
     JSON.stringify(out))
 }
 
+// redact.5. The 2026-11-09 audit's shapes. Stripe's separator is an
+//      underscore, so the `sk-` rule never reached it; Google, GitLab, npm and
+//      Hugging Face keys had no rule at all; and a DSN's password left whole.
+//      Each is replaced by its own kind-named placeholder with no tail leaked,
+//      and a URL keeps its scheme, user and host so the line still reads.
+{
+  const fn = typeof U.redactSecrets === 'function' ? U.redactSecrets : null
+  // Built from parts so no scanner reads this file as holding a live key.
+  const samples = {
+    stripe: ['sk', 'live', 'abcdefghijklmnopqrstuvwx0123'].join('_'),
+    google: 'AIza' + 'SyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW',
+    gitlab: 'glpat-' + 'abcdefghij0123456789',
+    npm: 'npm_' + 'abcdefghijklmnopqrstuvwxyz0123456789',
+    hf: 'hf_' + 'abcdefghijklmnopqrstuvwxyzABCDEFGH'
+  }
+  const dsn = 'postgres://app:s3cr3t-Passw0rd@db.example.com:5432/main'
+  const text = `${Object.values(samples).join('\n')}\n${dsn}`
+  const out = fn ? fn(text) : null
+  const leaked = out ? Object.values(samples).filter((t) => out.text.includes(t.slice(-12))) : ['unrun']
+  ok('redact.5 stripe, google, gitlab, npm and hugging face keys each leave as a kind-named placeholder, and a URL loses its password but keeps its scheme, user and host',
+    out !== null && out.count === 6 && leaked.length === 0 &&
+      /\[redacted stripe/.test(out.text) && /\[redacted google/.test(out.text) && /\[redacted gitlab/.test(out.text) &&
+      /\[redacted npm/.test(out.text) && /\[redacted hugging face/.test(out.text) &&
+      out.text.endsWith('postgres://app:[redacted]@db.example.com:5432/main') && !out.text.includes('s3cr3t'),
+    JSON.stringify({ out, leaked }))
+}
+
 // redact.3. Ordinary developer text is untouched: a 40-hex git sha, a UUID, a
 //      path, a URL with no token, a short "token" word. Over-matching is its
 //      own failure — an export that redacts a commit sha is an export nobody
 //      can act on.
 {
   const fn = typeof U.redactSecrets === 'function' ? U.redactSecrets : null
-  const text = 'commit 3f2a1b4c5d6e7f8091a2b3c4d5e6f708192a3b4c\nid 123e4567-e89b-12d3-a456-426614174000\n/Users/x/repo/token.ts https://example.com/path?x=1\nthe token was rotated'
+  const text = 'commit 3f2a1b4c5d6e7f8091a2b3c4d5e6f708192a3b4c\nid 123e4567-e89b-12d3-a456-426614174000\n/Users/x/repo/token.ts https://example.com/path?x=1\nthe token was rotated\ngit@github.com:owner/repo.git http://localhost:5173/a@b skip_live_reload npm_config_cache'
   const out = fn ? fn(text) : null
   ok('redact.3 ordinary text — a sha, a UUID, a path, a URL, the word token — is untouched with count 0',
     out !== null && out.count === 0 && out.text === text, JSON.stringify(out))

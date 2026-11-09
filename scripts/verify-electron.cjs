@@ -55,7 +55,7 @@ const ACCEPTED = [
   { check: 'AUXCLICK_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: 'new BrowserWindow(',
     why: 'the renderer is file: and never navigates (drop-guard.ts); a middle-click has no target' },
   { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: 'shell.openExternal(url)',
-    why: 'the link:open door — main decides after resolveOpen, the renderer opens nothing' },
+    why: "the shell window's window-open handler: every new window is denied, and only an http(s) url is handed to the OS (meta browser.2)" },
   { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/bootstrap/panel-handlers.ts', sample: 'shell.openExternal(r.url)',
     why: "the browser pane's Open in browser; the url is the guest's own getURL()" },
   { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/bootstrap/account-handlers.ts', sample: 'shell.openExternal(url)',
