@@ -459,7 +459,10 @@ export function createStores(state: MainState): Stores {
   const brokerAudit = createBrokerAudit({ file: join(userData, 'broker-audit.jsonl') })
   const decisionAudit = createDecisionAudit({ file: join(userData, 'decision-audit.jsonl') })
   // Brief #20. Read and deleted HERE, at construction — see last-exit.ts.
-  const lastExit = createLastExitStore({ file: join(userData, 'last-exit.json') })
+  // M651. The marker beside it is only READ behind the single-instance gate
+  // (index.ts's first `alive`), never here: this line runs in a losing
+  // instance too, and the winner's marker is on disk the whole time it runs.
+  const lastExit = createLastExitStore({ file: join(userData, 'last-exit.json'), marker: join(userData, 'running.json') })
   // M316. Built here, before any pool can start — see job-store.ts.
   const jobs = createJobStore({ file: join(userData, 'jobs.json') })
   // M556–M560 (lane K). `session` reads state.agents at USE (context.ts's

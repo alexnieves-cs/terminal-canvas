@@ -10,6 +10,7 @@ An index. Every rule in this repository exists because the obvious version fails
 | [docs/architecture-map.md](docs/architecture-map.md) | You need to know what a seam is and who owns it. Module-by-module. |
 | [docs/product-rules.md](docs/product-rules.md) | You are touching UI, copy, tokens or goldens. The face/rest/path/metrics rules and what a restyle may not touch. |
 | [docs/verify-suites.md](docs/verify-suites.md) + [table](docs/verify-suite-table.md) | Adding or debugging a check. Five rules that fail silently if unknown live in the first. |
+| [docs/reliability.md](docs/reliability.md) | You are touching crash handling, the reopen notice, telemetry, a perf budget or the soak. What breaks, what the app does, and how a budget is re-pinned. |
 | [docs/milestone-history.md](docs/milestone-history.md) | You need the run-by-run story. |
 | `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md); and the canvas remade + flowcharts (M388–M396, by its [run prompt](docs/superpowers/specs/2026-09-29-canvas-revamp-flowchart-prompt-opus55.md)), ledger [m388-m396](docs/build-log/m388-m396-ledger.md); and the daily-loop run (M397–M410, by its [run prompt](docs/superpowers/specs/2026-09-30-ux-critique-run-prompt-gpt61-sol.md)), ledger [m397-m410](docs/build-log/m397-m410-ledger.md). Work numbered past a ledger's range is logged per milestone beside them in `docs/build-log/` (`ls` it; [milestone-history](docs/milestone-history.md) has the story). The redesign (M435–M456) is its own run, ledger [m435-m456](docs/build-log/m435-m456-ledger.md). **The streams run (M457–M509) is the live one:** five parallel streams by its [run book](docs/streams/RUN.md), ledger [m457-m509](docs/build-log/m457-m509-ledger.md). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
 | [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. Entries marked DONE or declined live in [-closed](docs/ideas-backlog-closed.md) under the same number. |
@@ -85,7 +86,7 @@ branch's changes reach — derived from each suite's script, entries and `src`'s
 changed file no suite reads printed as UNMAPPED — and says on every run that it is not the
 gate; `--list` shows the selection without running it.
 
-Outside the chain, all real Electron: `npm run shot` (a PNG per scene of the real renderer for a
+Outside the chain, all real Electron: `npm run soak` (the built app with terminals printing for hours, red on growth; weekly on the Mac runner, `.github/workflows/soak.yml`), `npm run shot` (a PNG per scene of the real renderer for a
 fresh-context critic), `verify:visual` (those scenes against committed goldens;
 `UPDATE_GOLDENS=1` only after LOOKING), `verify:packaged` (a pre-release gate).
 

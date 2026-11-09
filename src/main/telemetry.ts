@@ -20,19 +20,52 @@
 import { redactSecrets } from '../shared/redact'
 import type { SettingValue } from '../shared/settings-schema'
 
+/**
+ * M652. WHERE THE OPT-IN TOGGLE SENDS, AND IT IS EMPTY ON PURPOSE.
+ *
+ * `telemetry.crashReports` is a person saying "yes, tell the maintainers when
+ * this crashes". That needs an address the maintainers own, and there is not
+ * one yet: no Sentry or GlitchTip project has been created for this app. Until
+ * a DSN is written HERE, turning the toggle on sends nothing, and both the
+ * setting's own description and the startup line say so (`no-project-dsn`) —
+ * a switch that claimed to report and silently did not would be the exact
+ * failure this repository's rules exist to prevent.
+ *
+ * When one is added: it goes in this constant and nowhere else, it must pass
+ * the `DSN` shape below, and the setting's description loses its last clause
+ * in the same change (`verify:file telemetry.6` holds the two together).
+ * A DSN is not a secret — it can only submit events — so a literal is right.
+ */
+export const PROJECT_DSN = ''
+
 export type TelemetryPlan =
-  | { on: false; reason: 'no-dsn' | 'malformed-dsn' }
-  | { on: true; dsn: string; nativeCrashes: boolean }
+  | { on: false; reason: 'no-dsn' | 'malformed-dsn' | 'no-project-dsn' }
+  | { on: true; dsn: string; nativeCrashes: boolean; to: 'own' | 'project' }
 
 /** `https://<key>@<host>/<project>` — Sentry's own shape, nothing looser. */
 const DSN = /^https:\/\/[A-Za-z0-9]+@[A-Za-z0-9.-]+(:\d+)?\/\d+$/
 
-export function telemetryPlan(read: (id: string) => SettingValue | undefined): TelemetryPlan {
+/**
+ * The order of the arms is the rule. A person's OWN DSN is asked about first
+ * and is final either way: valid, reports go to their project and nowhere
+ * else (they chose a destination; the toggle does not add a second one);
+ * malformed, the answer is `malformed-dsn` and NOT a fall-through to the
+ * project's — a typo in a field must never change where bytes go. Only with
+ * that field empty does the toggle decide, and it is `=== true`: absent, a
+ * string, anything else is off. A native dump — process memory — never rides
+ * the toggle: the sentence a person agreed to says "the error and where in
+ * the code it happened", and a dump is neither.
+ */
+export function telemetryPlan(read: (id: string) => SettingValue | undefined, projectDsn: string = PROJECT_DSN): TelemetryPlan {
   const raw = read('telemetry.sentryDsn')
   const dsn = typeof raw === 'string' ? raw.trim() : ''
-  if (dsn === '') return { on: false, reason: 'no-dsn' }
-  if (!DSN.test(dsn)) return { on: false, reason: 'malformed-dsn' }
-  return { on: true, dsn, nativeCrashes: read('telemetry.nativeCrashes') === true }
+  if (dsn !== '') {
+    if (!DSN.test(dsn)) return { on: false, reason: 'malformed-dsn' }
+    return { on: true, dsn, nativeCrashes: read('telemetry.nativeCrashes') === true, to: 'own' }
+  }
+  if (read('telemetry.crashReports') !== true) return { on: false, reason: 'no-dsn' }
+  if (!DSN.test(projectDsn)) return { on: false, reason: 'no-project-dsn' }
+  return { on: true, dsn: projectDsn, nativeCrashes: false, to: 'project' }
 }
 
 export interface ScrubPaths {
@@ -49,10 +82,21 @@ function scrubString(s: string, paths: ScrubPaths): string {
   // Guarded on non-empty: split('') on an empty string explodes it into one
   // element per character, which join('<userData>') would then interleave
   // through the whole string — an empty path is skipped, not replaced.
+  return scrubText(s, paths).text
+}
+
+/**
+ * M650. The same scrub, with its count, for the one other place an error's
+ * words are kept: `crash-guard.ts`'s on-disk record. Exported from HERE so
+ * the path replacement and the secret rules cannot drift between what is
+ * written locally and what may be sent, and so `redactSecrets` keeps its
+ * named caller list (`verify:verbs gate.2`) — this module is on it.
+ */
+export function scrubText(s: string, paths: ScrubPaths): { text: string; count: number } {
   let out = s
   if (paths.userData) out = out.split(paths.userData).join('<userData>')
   if (paths.home) out = out.split(paths.home).join('<home>')
-  return redactSecrets(out).text
+  return redactSecrets(out)
 }
 
 function scrubFrame(f: unknown, paths: ScrubPaths): Dict | null {

@@ -140,7 +140,9 @@
     "verify:film": "node scripts/verify-film.cjs",
     "verify:vm": "node scripts/verify-vm.cjs",
     "verify:learn": "node scripts/verify-learn.cjs",
-    "verify:host": "node scripts/verify-host.cjs"
+    "verify:host": "node scripts/verify-host.cjs",
+    "verify:reliability": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-reliability.cjs",
+    "soak": "node scripts/soak.cjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",

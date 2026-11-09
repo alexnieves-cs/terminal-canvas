@@ -1,5 +1,5 @@
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { parseLastExit, type ExitHow, type LastExit } from '../shared/persistence'
+import { parseLastExit, parseRunMarker, type LastExit } from '../shared/persistence'
 
 /**
  * Brief #20. Which panels had a session when the window last went away —
@@ -26,11 +26,21 @@ export interface LastExitStore {
    * seals; `window` (macOS keeps the app alive) is held in memory for the
    * window that reopens in this same process.
    */
-  record(how: ExitHow, kept: boolean, running: readonly string[]): void
+  record(how: 'quit' | 'window', kept: boolean, running: readonly string[]): void
+  /**
+   * M651. This run is alive, with these sessions. The FIRST call reads what
+   * the previous run left (a marker nobody cleared is a crash, handed out by
+   * `take`); every call rewrites the marker, and only when it changed. Call it
+   * behind the single-instance gate and before the window exists.
+   */
+  alive(kept: boolean, running: readonly string[]): void
 }
 
-export function createLastExitStore(opts: { file: string; now?: () => number }): LastExitStore {
+export function createLastExitStore(opts: { file: string; marker?: string; now?: () => number }): LastExitStore {
   const now = opts.now ?? Date.now
+  const marker = opts.marker
+  let began = false
+  let lastMarker = ''
   let pending: LastExit | null = null
   try {
     pending = parseLastExit(JSON.parse(readFileSync(opts.file, 'utf8')))
@@ -52,6 +62,29 @@ export function createLastExitStore(opts: { file: string; now?: () => number }):
         writeFileSync(opts.file, JSON.stringify(r))
       } catch (error) {
         console.warn('[last-exit] could not record the quit', error)
+      }
+      // After the record, so a death between the two lines leaves BOTH files
+      // and the next launch reads a quit (the record outranks the marker).
+      if (marker !== undefined) try { unlinkSync(marker) } catch { /* never written */ }
+    },
+    alive(kept, running) {
+      if (marker === undefined || sealed) return
+      if (!began) {
+        began = true
+        let left: ReturnType<typeof parseRunMarker> = null
+        try { left = parseRunMarker(JSON.parse(readFileSync(marker, 'utf8'))) } catch { /* absent or unreadable: no evidence, no claim */ }
+        if (left !== null && pending === null) pending = { ...left, how: 'crash' }
+      }
+      // `at` is left out of the comparison and refreshed only on a change: a
+      // marker rewritten every tick for a new timestamp would be a disk write
+      // every few seconds for the life of the app, to record nothing.
+      const body = JSON.stringify({ kept, running: [...running].sort() })
+      if (body === lastMarker) return
+      try {
+        writeFileSync(marker, JSON.stringify({ at: now(), kept, running: [...running].sort() }))
+        lastMarker = body
+      } catch (error) {
+        console.warn('[last-exit] could not write the run marker', error)
       }
     }
   }
