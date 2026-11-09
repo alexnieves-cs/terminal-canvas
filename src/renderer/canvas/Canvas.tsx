@@ -203,6 +203,7 @@ import { skillEditorFocused } from '../skills/editor-focus'
 import { adoptedRunId, isSettledHandoff, recordOrchEvent} from '../orchestration/orch-record'
 import { useSharedCanvas } from '../shared-canvas/useSharedCanvas'
 import { useRosterNames } from '../presence/useRosterNames'
+import { labOn } from '../labs/useLabs'
 
 
 
@@ -3396,6 +3397,9 @@ export function Canvas({
     if (host === null) return
     const ground = target === host || target.classList.contains('world') || target.classList.contains('canvas__aura')
     if (!ground) return
+    // M642. Simple hides the doors that MINT a flowchart shape, and a stray
+    // double-click on the ground was the easiest of them to hit by accident.
+    if (!labOn('flowcharts')) return
     const bounds = host.getBoundingClientRect()
     const world = screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewportRef.current)
     const made = flowchart.addShape('process', '', world)

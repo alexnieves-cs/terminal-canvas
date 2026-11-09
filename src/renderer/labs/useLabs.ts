@@ -46,7 +46,7 @@ const snapshot = (): ReadonlySet<LabId> => off
 
 /** The labs that are off right now. A new Set only when the answer changes, so it is a stable memo key. */
 export function useLabsOff(): ReadonlySet<LabId> {
-  return useSyncExternalStore(subscribe, snapshot)
+  return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
 /** Whether one lab's doors are shown. */
@@ -64,7 +64,7 @@ const fullSnapshot = (): boolean => full
 
 /** M642. Whether the product is in Full mode (Simple is the default). */
 export function useFullMode(): boolean {
-  return useSyncExternalStore(subscribe, fullSnapshot)
+  return useSyncExternalStore(subscribe, fullSnapshot, fullSnapshot)
 }
 
 /** M642. The one write: the View menu's item and nothing else calls it. Settings and the palette write the row themselves. */

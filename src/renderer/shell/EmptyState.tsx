@@ -6,6 +6,7 @@ import { STARTER_LAYOUTS } from '@shared/lineups'
 import { blankTaskVerb } from '../palette/start-work'
 import { shortcutById } from '@shared/shortcuts'
 import { shellControl } from './shell-control'
+import { useLab } from '@renderer/labs/useLabs'
 
 /**
  * M177. ONE SHAPE for every empty state: the kind's glyph, the sentence from
@@ -68,6 +69,7 @@ export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt
   const agent = shortcutById('new-agent')
   const shell = shortcutById('new-shell')
   const minimap = emptyState('minimap')
+  const flowcharts = useLab('flowcharts')
   return (
     <div className="rd-empty" data-rd-empty="">
       <div className="rd-empty__card">
@@ -106,7 +108,8 @@ export function BlankCanvas({ workspace, repo, onStart, onQuick, onLayout, adopt
             card's main action and competed with Start task. */}
         <ul className="rd-empty__hints">
           {EMPTY_CANVAS_GESTURES.map((hint) => <li key={hint.id}>{hint.text}</li>)}
-          <li className="rd-empty__ghost">{GHOST_TARGET}</li>
+          {/* M642. The flowchart gesture is off in Simple, so its hint is too. */}
+          {flowcharts && <li className="rd-empty__ghost">{GHOST_TARGET}</li>}
         </ul>
       </div>
       <p className="rd-empty__minimap" data-empty-state="minimap">{minimap.sentence}</p>
