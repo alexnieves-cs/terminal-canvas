@@ -11,6 +11,10 @@ const { mkdtempSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { buildSync } = require('esbuild')
 const { app, BrowserWindow } = require('electron')
+// M642. The suites exercise the Full product (the World scenes, the
+// tournament and shape rows); Simple is pinned by verify:palette full.*.
+// Read by main's settings:list, so it must be set before any handler runs.
+process.env.TC_FULL ??= '1'
 
 // M4b: main.tsx now awaits window.canvas.layout.load() before React ever
 // mounts, so a window with no ipcMain handler for it does not just fail one

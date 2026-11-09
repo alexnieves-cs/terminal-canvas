@@ -13648,3 +13648,111 @@ tr[data-session-row]:focus-within .sessions-world,
 .palette__band { padding: var(--sp-4) var(--sp-6) var(--sp-1); font-weight: 600; border-top: 1px solid var(--line); }
 .palette__list > .palette__band:first-child { border-top: 0; }
 /* ── /st:U ── */
+/* ── st:W ── */
+/* M641 (lane W). THE PAGE SWITCH'S THUMB DREW A DISC. M601 made the switch
+   `position: static` so it could sit in the bar's flow, which took away the
+   containing block the sliding thumb (M512) is drawn against: the thumb then
+   measured itself against the whole top bar and came out 51px tall behind a
+   24px tab, a round halo on every page of the app. The switch is the thumb's
+   box again; `relative` keeps it in the flow exactly where `static` had it. */
+.shell__top .shell__center-toggle { position: relative; left: auto; top: auto; }
+/* M641. A terminal's rim strip is ONE line. The path and the branch wrapped
+   onto a second line above the frame (a hyphen is a break opportunity) and
+   ran into the group label and each other. Clamped to their first line with
+   an ellipsis; a clamp keeps the box's width exactly what wrapping gave it,
+   so nothing on the strip moves (the strip is laid out around the north
+   port, M397 A4 and M609). */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__path, .pf__branch) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  max-height: var(--sp-6);
+  line-height: var(--sp-6);
+}
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__duration { white-space: nowrap; line-height: var(--sp-6); }
+/* M641. AND THE STATE WORD IS READABLE. On a default-size terminal the strip
+   squeezed `working` down to its four-character floor (it read "w") and the
+   name to "Claude — l…", while the path, the branch and the summary, which
+   mostly repeat the name's folder, kept their room. The rest layer is the
+   name and one state (CLAUDE.md, the density layers); where the work lives
+   is the contextual layer. So at rest the three are not laid out at all, and
+   the path arrives with the controls (hover, focus, selected) in whatever
+   room the name and the word leave it. The branch and the summary stay off
+   the strip: with the controls out there is no room for them that is not a
+   two-letter stub, and the inspector says both in full. The word yields
+   before the name (ten to one), and M410's 22ch cap still bounds a state
+   that is a sentence. The strip is absolutely positioned over the
+   frame (the frame rule), so none of this refits xterm. */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__path, .pf__branch, .pf__summary) { display: none; }
+.pf--kind-terminal:has(.panel__slot):hover .pf__chrome .pf__path,
+.pf--kind-terminal:has(.panel__slot):focus-within .pf__chrome .pf__path,
+.panel--selected.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__path { display: -webkit-box; flex: 0 100000 auto; min-width: 0; }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { flex-shrink: 10; }
+/* M641. SETTINGS IN SECTIONS, WITH REAL CONTROLS. A heading per section, a
+   switch that looks like one (the word On/Off stays as its label), a select
+   for a choice among several, and a field for a number or a path. */
+.rd-settings__section + .rd-settings__section { margin-top: var(--sp-6); }
+.rd-settings__section-title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.rd-settings__hint { max-width: 60ch; }
+.rd-settings__main .rd-settings__switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border-radius: var(--r-full);
+  background: var(--s-4);
+  color: transparent;
+  font-size: 0;
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.rd-settings__main .rd-settings__switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-full);
+  background: var(--fg-3);
+  transition: transform var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.rd-settings__main .rd-settings__switch[aria-checked="true"] { background: var(--iris-dim); border-color: var(--iris); }
+.rd-settings__main .rd-settings__switch[aria-checked="true"]::before { transform: translateX(16px); background: var(--iris); }
+.rd-settings__choice { display: inline-flex; flex: none; padding: 2px; gap: 2px; border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-2); }
+.rd-settings__main .rd-settings__choice button { border: 0; background: transparent; border-radius: var(--r-full); color: var(--fg-2); padding: var(--sp-1) var(--sp-5); }
+.rd-settings__main .rd-settings__choice button[aria-pressed="true"] { background: var(--iris-dim); color: var(--fg); box-shadow: inset 0 0 0 1px var(--iris); }
+.rd-settings__row[data-setting-mode] { padding-block: var(--sp-5); }
+.rd-settings__row[data-setting-mode] .rd-settings__name { font-weight: 600; }
+.rd-settings__row[data-setting-mode] .rd-settings__hint { font-weight: 400; }
+.rd-settings__select,
+.rd-settings__input {
+  flex: none;
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--fg);
+  background: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+.rd-settings__field { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); flex: none; }
+.rd-settings__input { width: 22ch; }
+.rd-settings__input--number { width: 9ch; text-align: right; font-variant-numeric: tabular-nums; }
+.rd-settings__input[aria-invalid="true"] { border-color: var(--state-needs); }
+.rd-settings__field .rd-settings__refusal { margin: 0; color: var(--state-needs); font-size: var(--t-xs); }
+.rd-settings__select:focus-visible,
+.rd-settings__input:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .rd-settings__main .rd-settings__switch, .rd-settings__main .rd-settings__switch::before { transition: none; }
+}
+/* ── /st:W ── */

@@ -6,6 +6,7 @@ import type { LastExit } from '../shared/persistence'
 import { INERT_JOBS, type JobHandlers } from './job-recovery'
 import type { RelayClient } from './relay/relay-client'
 import { RELAY_SESSION_ID } from '../shared/relay-protocol'
+import { FULL_SETTING } from '../shared/labs'
 import { INERT_TASKS, type TaskHandlers } from './task-evidence'
 import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
@@ -1307,7 +1308,11 @@ export function registerIpcHandlers(
       description: def.description,
       keywords: [...def.keywords],
       type: def.type,
-      value: layoutStore.getSetting(def.id),
+      // M642. The harnesses exercise the Full product (the World scenes, the
+      // tournament and shape rows), so they launch with TC_FULL=1 and an
+      // UNTOUCHED `labs.full` reads on. A person's own choice always wins,
+      // and nothing is written: this is a default, not a stored value.
+      value: def.id === FULL_SETTING && !(def.id in layoutStore.preferences()) && process.env.TC_FULL === '1' ? true : layoutStore.getSetting(def.id),
       persisted: def.id in layoutStore.preferences(),
       category: def.category,
       // Passed through so the palette can reject an out-of-range edit before

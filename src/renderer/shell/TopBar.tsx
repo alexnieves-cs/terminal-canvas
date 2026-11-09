@@ -8,7 +8,7 @@ import { LiveStatus } from './LiveStatus'
 import { AccountMenu } from '../account/AccountMenu'
 import { initialsOf } from '../account/account-model'
 import type { Accounts } from '../account/useAccounts'
-import { useLab } from '@renderer/labs/useLabs'
+import { setFullMode, useFullMode, useLab } from '@renderer/labs/useLabs'
 import { sessionCountLabel, sessionsBadgeLabel, useAttentionCensus } from '@renderer/canvas/command-pill'
 import { useAttentionQueue } from '@renderer/session/useAttentionQueue'
 
@@ -92,6 +92,7 @@ export function TopBar({
   // session someone already signed in is what EXISTS, though, and the lab
   // never hides what acts on that: signed in, the menu (and its Sign out) stays.
   const accountsShown = useLab('accounts')
+  const fullMode = useFullMode()
   const signedIn = (accountsProp?.sessions.length ?? 0) > 0
   const accounts = accountsShown || signedIn ? accountsProp : undefined
   // The default preset if it can actually run, otherwise the first that can.
@@ -272,6 +273,15 @@ export function TopBar({
               >
                 <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
                 Orchestrate
+              </MenuCheckboxItem>
+              {/* M642. Simple and Full, where the other "what do I see" switches
+                  are. The same row is Settings' first and a palette row. */}
+              <MenuCheckboxItem checked={fullMode} onSelect={() => setFullMode(!fullMode)}
+                title={fullMode ? 'Back to Simple: put away the 3D World, tournaments, flowchart shapes and the night film' : 'Show everything: the 3D World, tournaments, flowchart shapes and the night film'}
+                data-view-full
+              >
+                <span className="shell__view-check">{fullMode && <Check />}</span>
+                Full mode
               </MenuCheckboxItem>
             </div>
           </MenuContent>
