@@ -15,7 +15,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <a href="#prerequisites"><img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS-lightgrey.svg"></a>
   <img alt="Electron app" src="https://img.shields.io/badge/built%20with-Electron-47848f.svg">
-  <img alt="Version 6.0.1" src="https://img.shields.io/badge/version-6.0.1-5edce6.svg">
+  <img alt="Version 6.1.0" src="https://img.shields.io/badge/version-6.1.0-5edce6.svg">
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
   <a href="#a-look-around">Screens</a> ·
   <a href="docs/getting-started.md">Getting started</a> ·
   <a href="#keyboard">Keyboard</a> ·
-  <a href="docs/release-notes/6.0.0.md">6.0 release notes</a>
+  <a href="docs/release-notes/6.1.0.md">6.1 release notes</a>
 </p>
 
 <p align="center">
@@ -47,14 +47,14 @@
 > Tried it? [Share feedback](https://github.com/alexnieves-cs/terminal-canvas/issues/new?template=feedback.yml):
 > it is a short GitHub issue form.
 
-> **Status: `v6.0.1`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v6.1.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story;
 > what it cannot prove is listed, by item, at the end
 > of [docs/load-bearing.md](docs/load-bearing.md). The DMG on the release
 > page is the one that passed `verify:packaged` on the macOS runner
-> ([notes](docs/release-notes/6.0.1.md)).
+> ([notes](docs/release-notes/6.1.0.md)).
 
 ## Why
 
