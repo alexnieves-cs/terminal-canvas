@@ -12,6 +12,8 @@ import './demo.css'
 
 export const REPO_URL = 'https://github.com/alexnieves-cs/terminal-canvas'
 export const RELEASES_URL = `${REPO_URL}/releases/latest`
+/** The feedback form (.github/ISSUE_TEMPLATE/feedback.yml), pre-picked so a visitor lands on it. */
+export const FEEDBACK_URL = `${REPO_URL}/issues/new?template=feedback.yml`
 
 /** What a door does, said the way the notice says it. Unnamed doors fall back to the generic line. */
 const DOOR_WORDS: Record<string, string> = {
@@ -56,6 +58,7 @@ export function installDemoChrome(doc: Document = document): { notice(door: stri
   strip.innerHTML =
     '<span class="tc-demo-strip__what"><b>Live demo.</b> Scripted agents on a sample canvas; terminals are recordings.</span>' +
     `<a class="tc-demo-strip__get" href="${RELEASES_URL}" target="_blank" rel="noopener">Get the Mac app</a>` +
+    `<a class="tc-demo-strip__src" href="${FEEDBACK_URL}" target="_blank" rel="noopener">Feedback</a>` +
     `<a class="tc-demo-strip__src" href="${REPO_URL}" target="_blank" rel="noopener">Source</a>`
   const toast = doc.createElement('div')
   toast.className = 'tc-demo-notice'

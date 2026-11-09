@@ -1,6 +1,6 @@
 {
   "name": "terminal-canvas",
-  "version": "6.0.1",
+  "version": "6.1.0",
   "description": "An infinite-canvas workspace where every node is a live terminal running a coding agent CLI.",
   "main": "./out/main/index.js",
   "author": "Alex Nieves",
@@ -21,6 +21,7 @@
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "build:web": "vite build -c vite.web.config.ts",
+    "build:site": "node scripts/build-site.cjs",
     "dev:web": "vite -c vite.web.config.ts",
     "build:host": "node scripts/build-host.cjs",
     "host": "node out/host/host.cjs",

@@ -1,5 +1,5 @@
-# Lane N (M568). The browser demo, published to GitHub Pages on every push
-# to main, and BUILT (never published) on every pull request, so a change
+# Lane N (M568). The Pages site, published on every push to main: the
+# landing page (site/) at the root and the browser demo under /demo/, and BUILT (never published) on every pull request, so a change
 # that breaks the web target is red on the PR rather than on the next deploy.
 #
 # Ubuntu, not macOS: the demo is the renderer and a fake bridge, with no
@@ -49,10 +49,14 @@ jobs:
         run: npm install --no-save --ignore-scripts playwright-core@1.55.0
       - name: Smoke-test the demo
         run: node scripts/demo-smoke.cjs
+      # The landing page at the root, the demo copied under /demo/. It fails
+      # on a landing-page link to a file the site does not have.
+      - name: Assemble the site
+        run: npm run build:site
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:
-          path: out/web
+          path: out/site
 
   # Publishing is opt-in: the deploy runs only once the repository variable
   # PAGES_ENABLED is 'true' (Settings → Secrets and variables → Actions →
