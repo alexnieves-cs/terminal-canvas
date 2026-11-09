@@ -93,7 +93,8 @@ const config = buildConfig()
     `present=${Object.prototype.hasOwnProperty.call(mac, 'identity')} value=${String(mac.identity)}`)
 }
 
-// 9. Both artifacts, one architecture. `dir` is the plain .app verify:packaged
+// 9. Both artifacts, one architecture PER BUILD (M631: the Intel DMG is a
+// second run of this config with TC_MAC_ARCH=x64, see arch.*). `dir` is the plain .app verify:packaged
 // launches; dmg is the one worth keeping.
 {
   const targets = config.mac?.target ?? []
@@ -147,6 +148,62 @@ console.log('\n' + '='.repeat(60))
   const icon = config.mac?.icon
   const onDisk = typeof icon === 'string' && existsSync(join(__dirname, '..', icon))
   ok('icon.1 the mac icon is named and exists', typeof icon === 'string' && /\.icns$/.test(icon) && onDisk, JSON.stringify({ icon, onDisk }))
+}
+
+// arch.* (M631). The Intel build is the same config with one word changed,
+// asked for through TC_MAC_ARCH at the entry point and nowhere else.
+{
+  const { MAC_DIR } = require('../build/builder-config.cjs')
+  const entry = require.resolve('../electron-builder.config.cjs')
+  const load = (arch) => {
+    const before = process.env.TC_MAC_ARCH
+    if (arch === undefined) delete process.env.TC_MAC_ARCH; else process.env.TC_MAC_ARCH = arch
+    delete require.cache[entry]
+    try { return require(entry) } finally {
+      if (before === undefined) delete process.env.TC_MAC_ARCH; else process.env.TC_MAC_ARCH = before
+      delete require.cache[entry]
+    }
+  }
+  const archesOf = (c) => c.mac.target.flatMap((t) => t.arch ?? [])
+
+  ok('arch.1 the entry point builds arm64 unless TC_MAC_ARCH says otherwise',
+    archesOf(load(undefined)).every((a) => a === 'arm64') && archesOf(load('x64')).every((a) => a === 'x64'),
+    JSON.stringify({ unset: archesOf(load(undefined)), x64: archesOf(load('x64')) }))
+
+  // A typo must be red, never an arm64 app in an Intel-named DMG.
+  let refused = false
+  try { load('x86') } catch { refused = true }
+  ok('arch.2 an unknown architecture is refused, not defaulted', refused)
+
+  // Everything but the arch is the same app.
+  const strip = (c) => JSON.stringify({ ...c, mac: { ...c.mac, target: null } })
+  ok('arch.3 the Intel build differs from arm64 in its targets only',
+    strip(load('x64')) === strip(load(undefined)))
+
+  // verify:packaged and release.yml find the bundle through this table.
+  ok('arch.4 every architecture names its bundle directory',
+    MAC_DIR.arm64 === 'mac-arm64' && MAC_DIR.x64 === 'mac' && typeof MAC_DIR.universal === 'string',
+    JSON.stringify(MAC_DIR))
+}
+
+// cask.* (M631). The Homebrew cask points at the VERSIONLESS DMG names, which
+// exist only because release.yml's publish job copies them. Rename one side
+// alone and `brew install` 404s on the next release, with no suite to say so.
+{
+  const { readFileSync } = require('node:fs')
+  const { join } = require('node:path')
+  const root = join(__dirname, '..')
+  const cask = readFileSync(join(root, 'Casks', 'terminal-canvas.rb'), 'utf8')
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'release.yml'), 'utf8')
+  const repo = require('../package.json').repository.url.replace(/^git\+/, '').replace(/\.git$/, '')
+
+  ok('cask.1 the cask downloads the names the release job uploads',
+    cask.includes(`${repo}/releases/latest/download/Terminal-Canvas-#{arch}.dmg`) &&
+      /arch arm: "arm64", intel: "x64"/.test(cask) &&
+      workflow.includes('"Terminal-Canvas-$arch.dmg"') && /for arch in arm64 x64;/.test(workflow))
+
+  ok('cask.2 the cask installs the app the config names',
+    cask.includes(`app "${config.productName}.app"`) && cask.includes(config.appId))
 }
 
 // sign.* (M630). Signing and notarization are a MODE, off by default. The
