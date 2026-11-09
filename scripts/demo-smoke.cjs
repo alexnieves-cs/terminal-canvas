@@ -90,7 +90,12 @@ const ok = (id, pass, detail) => {
     await page.keyboard.type('ledger')
     await page.waitForTimeout(800)
     await page.keyboard.press('Escape')
-    await page.getByText('Sessions', { exact: true }).first().click()
+    // By its name span, not by exact text: the tab's label holds the "needs
+    // you" badge inside the same element, so an exact-text match exists only
+    // while the scripted cast shows no badge. The click then waited for the
+    // cast to loop (17 s here, 21 s on the runner, past the 30 s timeout on a
+    // slow one), which is why this step went red on some runs and not others.
+    await page.locator('.shell__center-name', { hasText: 'Sessions' }).first().click()
     await page.waitForTimeout(800)
     await page.getByText('Canvas', { exact: true }).first().click()
     await page.waitForTimeout(500)

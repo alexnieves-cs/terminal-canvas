@@ -70,9 +70,18 @@ module.exports = [
       // Held still, unlike the full move: under reduced motion nothing in the
       // world bobs or breathes, so the page CAN hold still, and on the Mac
       // runner it sometimes captured before the 3D layer's first frame (4.4%
-      // off the golden at mid-fade). Hold-still waits that frame out.
+      // off the golden at mid-fade). Hold-still did not wait that frame out
+      // (main, 2026-10-30: 4.38% again); the paint wait below does.
       // What the frame holds, in the log: the golden is one of two pictures
       // 4.4% apart, and a run's diff image is not always reachable.
+      // A blank 3D layer holds perfectly still too, so hold-still alone let
+      // the scene paint one of two pictures: the world before its first
+      // frame (blank, 4.4% off) or after. The intent is the cross-fade
+      // INTO the world, so wait for the layer to paint, the way the
+      // orchestration scenes wait for theirs (kit.paintedWithin, M463).
+      let painted = false
+      for (let i = 0; i < 40 && !(painted = await k.paintedWithin('.world-view canvas', 0.01)); i++) await sleep(150)
+      if (!painted) throw new Error('rd-world-transition-rm: the world layer never painted under reduced motion')
       const look = await k.js(`(() => { const c = document.querySelector('.canvas'); const gl = [...document.querySelectorAll('canvas')].filter((x) => !x.closest('.canvas')); return { host: c ? c.style.opacity : null, layers: gl.map((x) => x.width + 'x' + x.height + '@' + (x.closest('[style*=opacity]')?.style.opacity ?? '-')), robots: document.querySelectorAll('[data-world-card], .world-card').length } })()`)
       console.log('[shot] rd-world-transition-rm: ' + JSON.stringify(look))
       await k.shot('rd-world-transition-rm')
