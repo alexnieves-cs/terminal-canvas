@@ -19,7 +19,8 @@
     "P": "M580-M589",
     "Q": "M590-M599",
     "U": "M600-M614",
-    "V": "M615-M629"
+    "V": "M615-M629",
+    "W": "M640-M649"
   },
   "shared_writable": [
     "docs/build-log/m457-m509-ledger.md",
@@ -174,6 +175,12 @@
       "src/main/broker-refusal.ts",
       "src/shared/guards.ts",
       "src/main/atomic-file.ts"
+    ],
+    "W": [
+      "src/main/sign-in-evidence.ts",
+      "src/shared/first-canvas-guide.ts",
+      "src/renderer/onboarding/FirstCanvasGuide.tsx",
+      "src/renderer/onboarding/guide-store.ts"
     ]
   }
 }
