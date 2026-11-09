@@ -294,6 +294,22 @@ const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + 
     u ? `turns=${u.turns} output=${u.totals.output}` : 'no change reported')
 }
 
+// M660 — usage.blocks.1. Claude Code writes one line per content block, each
+//     repeating its message's usage under the same message.id (measured: 140
+//     assistant lines for 76 API calls in a real transcript). A message counts
+//     ONCE, however many lines carry it and however the reads split them; a
+//     line without an id still counts on its own, as before.
+{
+  const withId = (id, content) => rec({ message: { id, model: 'claude-opus-5', content: [{ type: content }], usage: { input_tokens: 2, output_tokens: 1095, cache_creation_input_tokens: 1491, cache_read_input_tokens: 120118 } } })
+  const st = U.createUsageState()
+  grow(st, 'n1', withId('msg_a', 'thinking') + '\n' + withId('msg_a', 'tool_use') + '\n')
+  const again = grow(st, 'n1', withId('msg_a', 'tool_use') + '\n')
+  const u = grow(st, 'n1', withId('msg_b', 'text') + '\n' + rec() + '\n')
+  ok('usage.blocks.1 a message split over several block lines counts once; a repeat read adds nothing; a line with no id still counts',
+    again === undefined && u && u.turns === 3 && u.totals.output === 1095 * 3 && u.totals.cacheRead === 120118 * 3,
+    u ? `turns=${u.turns} output=${u.totals.output} again=${again === undefined}` : 'no change reported')
+}
+
 // 18. The DEDUPE: a read that added nothing returns undefined rather than a
 //     fresh equal object. Without it every tick sends a message describing a
 //     fact that changes once per agent turn — invisible on screen, and

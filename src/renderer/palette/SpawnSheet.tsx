@@ -416,7 +416,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
             onClick={(e) => { e.preventDefault(); onCancel() }}>Cancel</button>
           <button type="button" className="sheet__button is-primary" data-sheet-submit
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-            onClick={(e) => { e.preventDefault(); submit() }}>{chosenTemplate === undefined ? 'Create panel' : `Create ${chosenTemplate.template.nodes.length} panels`}</button>
+            onClick={(e) => { e.preventDefault(); submit() }}>{chosenTemplate === undefined ? 'Create panel' : (chosenTemplate.template.nodes.length === 1 ? 'Create 1 panel' : `Create ${chosenTemplate.template.nodes.length} panels`)}</button>
         </div>
       </div>
     </div>

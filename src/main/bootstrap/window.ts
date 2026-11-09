@@ -108,8 +108,11 @@ export function createWindow(state: MainState, stores: Stores): void {
   // but http(s) (link-open.ts); this is the same rule on the one door that does
   // not pass through it.
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) void shell.openExternal(url)
-    else console.warn(`[window] refused to open ${url}: http(s) only`)
+    // M660. A failed open (no default browser) is a warning, never an
+    // unhandled rejection in main; a refused url is logged by its start only,
+    // since a `data:` url can be megabytes.
+    if (/^https?:/i.test(url)) void shell.openExternal(url).catch((error: unknown) => console.warn(`[window] could not open ${url}: ${String(error)}`))
+    else console.warn(`[window] refused to open ${url.slice(0, 80)}: http(s) only`)
     return { action: 'deny' }
   })
 

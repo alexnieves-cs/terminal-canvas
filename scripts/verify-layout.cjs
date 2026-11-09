@@ -444,6 +444,33 @@ const CANVAS = {
     `panels=${onDisk.panels.length}`)
 }
 
+// M660. The notes pinned to those panels ride with `layout` too. initial()
+// withholds them when the box is off, so a save that wrote them back
+// ungated deleted every stored note on the first camera pan. And reset()
+// drops the groups with the panels they name.
+{
+  const path = tmp()
+  const panel = { id: 'p1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] }
+  const note = { id: 'a1', text: 'keep me', anchor: { kind: 'world', x: 10, y: 20 } }
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.save({ panels: [panel], groups: [{ id: 'g1', label: 'g', colour: 'blue', panelIds: ['p1'] }], annotations: [note], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+  store.flushSync()
+  store.setSetting('layout', false)
+  const handed = store.initial()
+  store.save({ ...handed, camera: { x: 50, y: 0, scale: 1 } })
+  store.flushSync()
+  const kept = JSON.parse(readFileSync(path, 'utf8')).workspaces[0]
+  store.setSetting('layout', true)
+  store.reset()
+  store.flushSync()
+  const after = JSON.parse(readFileSync(path, 'utf8')).workspaces[0]
+  ok('layout-gate.1 layout restore off keeps the stored notes; reset drops the groups with the panels',
+    handed.annotations === undefined && (kept.annotations ?? []).length === 1 && kept.annotations[0].text === 'keep me' &&
+      after.panels.length === 0 && (after.groups ?? []).length === 0,
+    JSON.stringify({ handed: handed.annotations, kept: kept.annotations, groups: after.groups }))
+}
+
 /* ---- M5a presets: format ---- */
 
 /** A minimal valid preset, so each check can vary exactly one field. */

@@ -127,7 +127,7 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
     d.setPanels(() => { d.commitHistory(next); return next })
     const out = r.status.entrants.filter((e) => e.state === 'stuck')
     const racing = r.status.entrants.length - out.length
-    return { kind: 'ran', note: `${racing} agents on ${item.key ?? item.title}; \`${r.status.check}\` picks the winner${out.length === 0 ? '' : ` · ${out.map((e) => `${e.label}: ${e.reason ?? 'refused'}`).join('; ')}`}` }
+    return { kind: 'ran', note: `${racing} agent${racing === 1 ? '' : 's'} on ${item.key ?? item.title}; \`${r.status.check}\` picks the winner${out.length === 0 ? '' : ` · ${out.map((e) => `${e.label}: ${e.reason ?? 'refused'}`).join('; ')}`}` }
   }
 
   const pick = async (entrantId: string | undefined): Promise<VerbOutcome> => {

@@ -30,7 +30,7 @@ export function visibleColumns(facts: readonly SessionFact[]): ReadonlySet<Colum
   return shown
 }
 
-function samplesOf(id: string, activity: readonly number[]): readonly number[] {
+function useSamples(id: string, activity: readonly number[]): readonly number[] {
   const live = useMachineSeries(id)
   if (live.length >= 2) return live.map((sample) => sample.cpuPercent)
   return activity
@@ -46,7 +46,7 @@ function Row({ row, cols, theme, selected, open, onToggle, onOpen, onShowInWorld
   onOpen: (id: string) => void
   onShowInWorld: (id: string) => void
 }): JSX.Element {
-  const samples = samplesOf(row.id, row.activity)
+  const samples = useSamples(row.id, row.activity)
   // M496. World is one of the cut list's hidden surfaces (`labs.world`).
   const worldShown = useLab('world')
   const cost = row.costUsd !== null && row.costUsd > 0 ? formatUsd(row.costUsd) : ''

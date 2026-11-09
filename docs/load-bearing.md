@@ -3851,8 +3851,42 @@ and filtering on its basename — M22's atomic-rename rule, which is how every e
 agent writes a file — and handed a DIRECTORY it reads it as a file and refuses. The
 commonest trigger of all is "anything under src", so a directory is watched recursively
 instead. The first version armed every path through `FileWatchers`: the node armed, showed
-its trigger phrase, and never ran once. A git trigger is a FILE watch on `.git/HEAD`, whose
-rewrite is what a branch change, a checkout and a commit have in common.
+its trigger phrase, and never ran once.
+
+**A git trigger watches the COMMIT HEAD names, never the text of `.git/HEAD`
+(`main/git-head-watch.ts`, M660).** It was a file watch on `.git/HEAD` on the belief that a
+commit rewrites it. It does not: HEAD reads `ref: refs/heads/main` before a commit and after,
+since a commit moves the ref HEAD points at, so "when the branch moves" fired on a checkout and
+never on a commit. A linked worktree failed outright, because its `.git` is a FILE and
+`.git/HEAD` does not exist. The watch now resolves HEAD to a commit (loose ref, then
+packed-refs, the worktree's git dir then the common one), watches the common git dir
+recursively, and fires when that commit changes. `verify:file githead.1/.2`.
+
+**A watcher's failed spawn emits `error` and never `exit` (`watch-handlers.ts`, M660).**
+The handler wrote the message into the tail and waited for an exit that a missing command
+never sends, so the node read `running` for good and Stop did nothing. A spawn with no pid now
+exits 127. The same file decodes stdout/stderr per stream (`setEncoding`), so a character split
+across two reads is not two replacement marks.
+
+**No interval may exceed `TIMER_MAX_MS` (`shared/watch-trigger.ts`, M660).** Node stores a
+timer's delay in a signed 32-bit int and replaces a longer one with 1ms, so a routine of
+50,000 minutes or a watcher `every 1000h` fired every millisecond (a routine starts a fresh chat
+each time). The palette parse and `routineRefusal` refuse past it, the layout parse clamps a
+stored one, and both arming sites check again.
+
+**A Claude Code transcript repeats one message's usage on every content block
+(`main/usage-accumulator.ts`, M660).** Claude Code writes one JSONL line per block (thinking,
+text, each tool_use), each carrying the same `message.id` and the same `usage`; a real
+transcript measured 140 assistant lines for 76 API calls. Summing lines overstated a terminal
+panel's tokens, cost and turns about 1.8x, and the budget that pauses work read the inflated
+figure. The accumulator counts a message once by its id (adding only what grew, should a later
+line carry more). The chat path already knew this (`agent-session.ts`: "the per-block records
+repeat one message's usage"). `verify:usage usage.blocks.1`.
+
+**`restore.layout` off must withhold AND preserve the notes too (`layout-store.ts` doSave,
+M660).** `initial()` hands the renderer no annotations when the box is off, the same as panels,
+but `save()` wrote annotations back ungated, so the first camera pan deleted every stored note,
+the exact "discard on launch" the panels rule beside it refuses. `verify:layout layout-gate.1`.
 
 **`watcher:create` is IDEMPOTENT at an id, because the node arms itself on every mount.** A
 workspace switch back, a React re-key and a renderer reload each re-create the same watcher;

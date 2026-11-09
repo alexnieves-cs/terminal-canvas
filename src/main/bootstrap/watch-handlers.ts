@@ -1,11 +1,11 @@
-import { join } from 'node:path'
 import { statSync } from 'node:fs'
 import { spawn as spawnChild } from 'node:child_process'
 import { watch as fsWatch, type FSWatcher } from 'node:fs'
 import { resolveCwd } from '../pty-manager'
 import { FileWatchers } from '../file-watch'
 import { createWatchRunner, type WatchSpawnSpec, type WatchHandlers } from '../watch-runner'
-import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../../shared/watch-trigger'
+import { TIMER_MAX_MS, TIMER_MAX_WORD, WATCH_TIMER_MIN_MS, type WatchTrigger } from '../../shared/watch-trigger'
+import { watchGitHead, type GitHeadWatch } from '../git-head-watch'
 import { IPC_EVENTS } from '../../shared/ipc-contract'
 import type { WatcherHandlers } from '../ipc'
 import { readyContents } from './context'
@@ -41,6 +41,7 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
   const watchFileWatchers = new FileWatchers()
   const watchDirWatchers = new Map<string, FSWatcher>()
   const watchTimers = new Map<string, NodeJS.Timeout>()
+  const watchGitWatchers = new Map<string, GitHeadWatch>()
   const watchTriggers = new Map<string, WatchTrigger>()
 
   const watchRunner = createWatchRunner({
@@ -49,14 +50,30 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
       // stdout and stderr into ONE tail, in arrival order: a failing command
       // says why on stderr and what it was doing on stdout, and two separate
       // streams in a 340px body would interleave wrongly anyway.
-      child.stdout?.on('data', (chunk: Buffer) => handlers.onData(chunk.toString('utf8')))
-      child.stderr?.on('data', (chunk: Buffer) => handlers.onData(chunk.toString('utf8')))
+      // M660. Decoded per stream, so a character split across two reads
+      // arrives whole instead of as two replacement marks.
+      child.stdout?.setEncoding('utf8')
+      child.stderr?.setEncoding('utf8')
+      child.stdout?.on('data', (chunk: string) => handlers.onData(chunk))
+      child.stderr?.on('data', (chunk: string) => handlers.onData(chunk))
       // `error` is a spawn failure (ENOENT for a command that is not there),
       // which must reach the same exit arm rather than vanishing: a watcher
       // that shows `working` forever because its command does not exist is
-      // this milestone's worst silent failure.
-      child.on('error', (error: Error) => handlers.onData(`${error.message}\n`))
-      child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => handlers.onExit(code, signal))
+      // this milestone's worst silent failure. M660: it did vanish — a
+      // failed spawn emits `error` and never `exit`, so the message landed
+      // and the state stayed `running` for good. A spawn that never started
+      // (no pid) now exits 127, the shell's own "command not found".
+      let exited = false
+      const exit = (code: number | null, signal: NodeJS.Signals | null): void => {
+        if (exited) return
+        exited = true
+        handlers.onExit(code, signal)
+      }
+      child.on('error', (error: Error) => {
+        handlers.onData(`${error.message}\n`)
+        if (child.pid === undefined) exit(127, null)
+      })
+      child.on('exit', exit)
       return { kill: (sig?: string) => { try { child.kill((sig ?? 'SIGTERM') as NodeJS.Signals) } catch { /* already gone */ } } }
     },
     now: () => Date.now(),
@@ -78,6 +95,8 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
     watchFileWatchers.close(id)
     const dir = watchDirWatchers.get(id)
     if (dir !== undefined) { dir.close(); watchDirWatchers.delete(id) }
+    const git = watchGitWatchers.get(id)
+    if (git !== undefined) { git.close(); watchGitWatchers.delete(id) }
     const timer = watchTimers.get(id)
     if (timer !== undefined) { clearInterval(timer); watchTimers.delete(id) }
     watchTriggers.delete(id)
@@ -114,6 +133,12 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
       if (!isDir) return { ok: false, reason: `no such directory: ${req.cwd}` }
       if (req.command.trim() === '') return { ok: false, reason: 'a watcher needs a command to run' }
+      // M660. Checked BEFORE the runner learns the watcher: a refusal that
+      // came after `add` left a watcher the canvas was told does not exist.
+      if (req.armed !== false && req.trigger.kind === 'timer') {
+        if (req.trigger.everyMs < WATCH_TIMER_MIN_MS) return { ok: false, reason: `the shortest interval is ${WATCH_TIMER_MIN_MS / 1000}s` }
+        if (req.trigger.everyMs > TIMER_MAX_MS) return { ok: false, reason: TIMER_MAX_WORD }
+      }
       // Idempotent at an id: a restored canvas re-creates every watcher it
       // holds, and a second arm on the same id would double every trigger —
       // one save, two runs, forever, with nothing on screen saying why.
@@ -125,7 +150,27 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
       // is a pause, not a delete — the node says which it is.
       if (req.armed === false) return { ok: true }
       const trigger = req.trigger
-      if (trigger.kind === 'path' || trigger.kind === 'git-ref') {
+      if (trigger.kind === 'git-ref') {
+        // M660. The commit HEAD names, watched through the git dir — see
+        // git-head-watch.ts for why `.git/HEAD`'s own text never moved on a
+        // commit, and why a linked worktree had no `.git/HEAD` to watch.
+        const root = resolveCwd(trigger.root)
+        let w: GitHeadWatch | null
+        try {
+          w = watchGitHead(root, () => watchRunner.fire(req.id), (error) => {
+            disarmWatch(req.id)
+            readyContents(state)?.send(IPC_EVENTS.WATCHER_STATE, { id: req.id, ...(watchRunner.stateOf(req.id) ?? { status: 'not-started' as const, tail: '', pending: false }), disarmed: `stopped watching ${root}: ${error.message}` })
+          })
+        } catch (error) {
+          disarmWatch(req.id)
+          return { ok: false, reason: `could not watch ${root}: ${String(error)}` }
+        }
+        if (w === null) {
+          disarmWatch(req.id)
+          return { ok: false, reason: `${root} is not a git working tree — nothing to watch` }
+        }
+        watchGitWatchers.set(req.id, w)
+      } else if (trigger.kind === 'path') {
         // A file and a DIRECTORY are watched differently, and getting this
         // wrong is silent: `FileWatchers` watches a file by watching its
         // parent and filtering on its basename (M22's atomic-rename rule,
@@ -133,10 +178,8 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
         // handed a directory it reads it as a file and refuses. A directory
         // is watched recursively instead — the commonest trigger of all is
         // "anything under src".
-        //
-        // A git trigger is a FILE watch on `.git/HEAD`, whose rewrite is what
-        // a branch change, a checkout and a commit have in common.
-        const target = trigger.kind === 'path' ? resolveCwd(trigger.path) : join(resolveCwd(trigger.root), '.git', 'HEAD')
+
+        const target = resolveCwd(trigger.path)
         let isDirTarget = false
         try { isDirTarget = statSync(target).isDirectory() } catch { isDirTarget = false }
         if (isDirTarget) {
@@ -165,7 +208,6 @@ export function createWatchWiring(state: MainState, stores: Stores): WatchWiring
           }
         }
       } else if (trigger.kind === 'timer') {
-        if (trigger.everyMs < WATCH_TIMER_MIN_MS) return { ok: false, reason: `the shortest interval is ${WATCH_TIMER_MIN_MS / 1000}s` }
         const timer = setInterval(() => watchRunner.fire(req.id), trigger.everyMs)
         // Never keep the app alive for a watcher: quitting with a timer armed
         // must exit, not wait for the next tick.

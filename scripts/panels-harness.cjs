@@ -114,6 +114,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
+  watchGitHead,
   createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers, unreviewedPresetReason, publish, parsePublishRequest, createFlowchartFiles,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
@@ -1241,10 +1242,16 @@ app.whenReady().then(async () => {
   const watchRunner = createWatchRunner({
     spawn: (spec, handlers) => {
       const child = require('node:child_process').spawn(spec.command, [...spec.args], { cwd: spec.cwd, shell: false })
-      child.stdout?.on('data', (chunk) => handlers.onData(chunk.toString('utf8')))
-      child.stderr?.on('data', (chunk) => handlers.onData(chunk.toString('utf8')))
-      child.on('error', (error) => handlers.onData(`${error.message}\n`))
-      child.on('exit', (code, signal) => handlers.onExit(code, signal))
+      // M660. Mirrors watch-handlers.ts: decoded per stream, and a spawn
+      // that never started (no pid) exits 127 instead of running forever.
+      child.stdout?.setEncoding('utf8')
+      child.stderr?.setEncoding('utf8')
+      child.stdout?.on('data', (chunk) => handlers.onData(chunk))
+      child.stderr?.on('data', (chunk) => handlers.onData(chunk))
+      let exited = false
+      const exit = (code, signal) => { if (exited) return; exited = true; handlers.onExit(code, signal) }
+      child.on('error', (error) => { handlers.onData(`${error.message}\n`); if (child.pid === undefined) exit(127, null) })
+      child.on('exit', exit)
       return { kill: (sig) => { try { child.kill(sig ?? 'SIGTERM') } catch { /* gone */ } } }
     },
     now: () => Date.now(),
@@ -1267,9 +1274,14 @@ app.whenReady().then(async () => {
       watchRunner.add({ id: req.id, cwd: expandTilde(req.cwd), command: req.command, args: req.args, trigger: req.trigger })
       // The same pause main honours: known, runnable by hand, nothing armed.
       if (req.armed === false) return { ok: true }
-      if (req.trigger.kind === 'path' || req.trigger.kind === 'git-ref') {
+      if (req.trigger.kind === 'git-ref') {
+        // M660. Mirrors watch-handlers.ts: the commit HEAD names.
+        const w = watchGitHead(expandTilde(req.trigger.root), () => watchRunner.fire(req.id), () => {})
+        if (w === null) return { ok: false, reason: `${req.trigger.root} is not a git working tree — nothing to watch` }
+        watchDirWatchers.set(req.id, w)
+      } else if (req.trigger.kind === 'path') {
         // The same file-vs-directory split main makes, and for its reason.
-        const target = req.trigger.kind === 'path' ? expandTilde(req.trigger.path) : join(expandTilde(req.trigger.root), '.git', 'HEAD')
+        const target = expandTilde(req.trigger.path)
         let isDirTarget = false
         try { isDirTarget = statSync(target).isDirectory() } catch { isDirTarget = false }
         if (isDirTarget) {
