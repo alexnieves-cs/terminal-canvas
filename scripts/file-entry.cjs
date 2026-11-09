@@ -49,6 +49,9 @@ module.exports = {
   ...require('../src/main/browser-read.ts'),
   /* M112. Telemetry's decision and its scrubber: pure over injected paths. */
   ...require('../src/main/telemetry.ts'),
+  // M650. The crash guard: pure over an injected process, log and clock.
+  ...require('../src/main/crash-guard.ts'),
+  SETTINGS_FOR_TELEMETRY: require('../src/shared/settings-schema.ts').SETTINGS,
   /* M114. The lane: pure over injected origin/subdir readers, a fake gate and a fake worktree manager. */
   ...require('../src/main/board-repo.ts'),
   ...require('../src/main/board-lane.ts'),
