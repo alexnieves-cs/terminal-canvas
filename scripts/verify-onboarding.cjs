@@ -410,5 +410,47 @@ try {
   for (const id of ['doctor.1', 'doctor.2', 'doctor.3', 'doctor.4', 'doctor.5']) ok(`${id} the setup doctor`, false, error.message)
 }
 
+// guide.* — M644 (lane W). The guided first canvas: three moves, watched
+// rather than enforced, skippable from every step.
+try {
+  const G_OUT = join(ROOT, 'out/verify/first-canvas-guide.cjs')
+  buildSync({ entryPoints: [join(ROOT, 'src/shared/first-canvas-guide.ts')], outfile: G_OUT, bundle: true, platform: 'node', format: 'cjs' })
+  const G = require(G_OUT)
+  const none = { hasPanel: false, jumped: false, reviewed: false }
+  const views = [0, 1, 2].map((i) => G.guideView(i, none))
+  ok('guide.1 the tour is three steps in the order of the loop (start, answer, review); each waits on its own move alone; the last one says Done and a step past the end is no card',
+    G.GUIDE_STEPS.map((s) => s.id).join() === 'spawn,attention,review' && views.every((v, i) => v.at === i + 1 && v.of === 3 && v.done === false) &&
+      views.map((v) => v.advance).join() === 'Next,Next,Done' && G.guideView(3, none) === null && G.guideView(-1, none) === null &&
+      G.guideView(0, { ...none, hasPanel: true }).done === true && G.guideView(1, { ...none, hasPanel: true }).done === false &&
+      G.guideView(1, { ...none, jumped: true }).done === true && G.guideView(2, { ...none, reviewed: true }).done === true,
+    JSON.stringify(views.map((v) => [v.step.id, v.advance])))
+  const chord = (id) => ({ 'new-task': '⌘N', jump: '⌘J' })[id]
+  const bodies = G.GUIDE_STEPS.map((s) => G.guideBody(s, chord))
+  const bare = G.GUIDE_STEPS.map((s) => G.guideBody(s, () => undefined))
+  ok('guide.2 a step shows the registry\'s chord, never a literal one, and reads cleanly when a chord cannot be found',
+    /press ⌘N\./.test(bodies[0]) && /Press ⌘J to fly/.test(bodies[1]) && bodies.every((b) => !/\{chord\}/.test(b)) && bare.every((b) => !/\{chord\}|⌘/.test(b)) &&
+      G.GUIDE_STEPS.every((s) => !/⌘|Cmd/.test(s.body + s.title + s.done)),
+    JSON.stringify({ bodies, bare }))
+  const fs2 = require('node:fs')
+  const card = fs2.readFileSync(join(ROOT, 'src/renderer/onboarding/FirstCanvasGuide.tsx'), 'utf8')
+  const store = fs2.readFileSync(join(ROOT, 'src/renderer/onboarding/guide-store.ts'), 'utf8')
+  const tail = fs2.readFileSync(join(ROOT, 'src/renderer/canvas/useShellTail.ts'), 'utf8')
+  const overlays = fs2.readFileSync(join(ROOT, 'src/renderer/canvas/HostOverlays.tsx'), 'utf8')
+  const css = fs2.readFileSync(join(ROOT, 'src/renderer/styles.css'), 'utf8')
+  const guideCss = css.slice(css.indexOf('/* M644. THE GUIDED FIRST CANVAS'))
+  ok('guide.3 the card is never modal and never in the way: no dialog role, no focus trap, no scrim, a key it only NOTICES (never prevents), and Skip and Next on every step',
+    !/role="dialog"|aria-modal|useModalFocus|preventDefault/.test(card) && /data-guide-skip/.test(card) && /data-guide-next/.test(card) &&
+      /window\.addEventListener\('keydown', onKey, true\)/.test(card) && /data-screen-control/.test(card) &&
+      !/inset:\s*0|backdrop|scrim/.test(guideCss.slice(0, guideCss.indexOf('/* ── /st:W'))),
+    '')
+  ok('guide.4 it starts once, as the first-run card closes, stays ended, and never interrupts someone who set up before it existed; it steps aside for the card and the merged view',
+    /startGuide\(\)/.test(tail) && /getItem\(KEY\) !== null\) return/.test(store) && /ended \|\| next === null \? 'done'/.test(store) &&
+      /if \(step === null\) return\n  write\(null, true\)/.test(store) &&
+      /<FirstCanvasGuide panelCount=\{panels\.length\} reviewOpen=\{chrome\.centerView === 'review'\} hidden=\{showOnboarding \|\| merged\} \/>/.test(overlays),
+    '')
+} catch (error) {
+  for (const id of ['guide.1', 'guide.2', 'guide.3', 'guide.4']) ok(`${id} the guided first canvas`, false, error.message)
+}
+
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
 if (results.some((r) => !r.pass)) process.exitCode = 1
