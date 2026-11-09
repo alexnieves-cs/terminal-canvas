@@ -12,6 +12,9 @@ module.exports = [
       // The store reads its key once at load, so the key goes in before the reload.
       await k.js(`window.localStorage.setItem('tc.guide', 'on:0')`)
       await k.loadMain()
+      // The card sits at the foot of the canvas, and a reload drops the
+      // harness's pinned metrics: without this the capture stops short of it.
+      await k.resize(1440, 900)
       await k.theme('dark')
       await settle(k, 700)
       if (!(await k.js(`!!document.querySelector('[data-guide]')`))) throw new Error('the guide did not mount')
