@@ -31,16 +31,30 @@ const RULES: Array<{ pattern: RegExp; placeholder: string }> = [
   { pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b/g, placeholder: '[redacted github token]' },
   { pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, placeholder: '[redacted github token]' },
   { pattern: /\bsk-[A-Za-z0-9_-]{20,}\b/g, placeholder: '[redacted api key]' },
-  { pattern: /\bxox[abpors]-[A-Za-z0-9-]{10,}\b/g, placeholder: '[redacted slack token]' }
+  { pattern: /\bxox[abpors]-[A-Za-z0-9-]{10,}\b/g, placeholder: '[redacted slack token]' },
+  // The 2026-11-09 audit's additions: shapes an agent prints just as often as
+  // the ones above, none of which the `sk-` rule reaches (Stripe's separator is
+  // an underscore). Each has a distinctive prefix, so none can touch a sha.
+  { pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g, placeholder: '[redacted stripe key]' },
+  { pattern: /\bAIza[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])/g, placeholder: '[redacted google api key]' },
+  { pattern: /\bglpat-[A-Za-z0-9_-]{20,}/g, placeholder: '[redacted gitlab token]' },
+  { pattern: /\bnpm_[A-Za-z0-9]{36}\b/g, placeholder: '[redacted npm token]' },
+  { pattern: /\bhf_[A-Za-z0-9]{30,}\b/g, placeholder: '[redacted hugging face token]' },
+  // A password inside a URL (`https://user:pass@host`, a database DSN). The
+  // scheme, the user and the host stay so the line still says where it points;
+  // only the password goes. A URL with no userinfo is never touched (redact.3).
+  { pattern: /\b([a-z][a-z0-9+.-]*:\/\/[^\s:/@]+):[^\s/@]+@/gi, placeholder: '$1:[redacted password]@' }
 ]
 
 export function redactSecrets(text: string): Redaction {
   let count = 0
   let out = text
   for (const rule of RULES) {
-    out = out.replace(rule.pattern, () => {
+    out = out.replace(rule.pattern, (_match: string, group1: unknown) => {
       count += 1
-      return rule.placeholder
+      // `$1` is the one back-reference a placeholder may carry (the URL rule's
+      // scheme-and-user); a function replacer does not expand it on its own.
+      return typeof group1 === 'string' ? rule.placeholder.replace('$1', group1) : rule.placeholder
     })
   }
   return { text: out, count }
