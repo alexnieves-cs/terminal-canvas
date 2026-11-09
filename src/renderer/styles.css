@@ -13690,6 +13690,18 @@ tr[data-session-row]:focus-within .sessions-world,
 .pf--kind-terminal:has(.panel__slot):focus-within .pf__chrome .pf__path,
 .panel--selected.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__path { display: -webkit-box; flex: 0 100000 auto; min-width: 0; }
 .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { flex-shrink: 10; }
+/* M641. AND AT REST THE STRIP STOPS SHORT OF THE NORTH PORT. The path and
+   the branch were what pushed the state word past the port an edge ends on
+   (M397 A4, M609); with them off the strip at rest, the word sat right on
+   it and a fired edge's packet ran under the word's --well backing
+   (verify:panels:agents edge.paint.1, packet hit under `.pf__word`). So the
+   resting strip is the left half of the frame less a gap wider than the
+   port's 7px half: the name and the word can never reach the port. Width,
+   not `right`, and divided by --chrome-scale like the strip's own width, so
+   the gap holds in screen pixels at every zoom. Hover, focus and selection
+   give the strip its whole width back for the controls. Still absolute, so
+   nothing refits. */
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome { width: calc((50% - var(--sp-5)) / var(--chrome-scale, 1)); }
 /* M641. SETTINGS IN SECTIONS, WITH REAL CONTROLS. A heading per section, a
    switch that looks like one (the word On/Off stays as its label), a select
    for a choice among several, and a field for a number or a path. */
