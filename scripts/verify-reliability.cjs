@@ -44,17 +44,21 @@ const R = require('./lib/real-app.cjs')
 
 /* ---- the budgets -------------------------------------------------------
    `measured` is the hosted runner's own figure when the budget was pinned
-   (docs/reliability.md keeps the runs); `budget` is what fails the gate. */
+   (docs/reliability.md keeps the runs); `budget` is what fails the gate,
+   about 3x measured because a hosted runner's neighbours are loud. */
 const BUDGETS = {
   // Spawn to a mounted canvas. Best of the launches this suite makes: every
   // launch shares a regression, only some share a noisy neighbour.
-  coldStartMs: { measured: null, budget: 15000 },
+  coldStartMs: { measured: 2502, budget: 8000 },
   // p95 frame interval over 120 driven frames, fifty terminals on the canvas.
-  panP95Ms: { measured: null, budget: 250 },
-  zoomP95Ms: { measured: null, budget: 250 },
+  panP95Ms: { measured: 84.6, budget: 250 },
+  // Zoom is the dearer gesture: it rescales fifty panels every frame, so its
+  // p95 sat ~4x pan's in the same run. The budget is ~3x measured, as
+  // the others are; a real regression (a re-render per frame) lands far past it.
+  zoomP95Ms: { measured: 332.4, budget: 1000 },
   // Average load of the whole process tree over IDLE_WINDOW_S of nobody
   // touching it, fifty idle shells open, as a percentage of one core.
-  idleCpuPct: { measured: null, budget: 60 }
+  idleCpuPct: { measured: 9.2, budget: 30 }
 }
 const SCALE = (() => { const n = Number(process.env.TC_PERF_BUDGET_SCALE); return Number.isFinite(n) && n > 0 ? n : 1 })()
 const budget = (key) => BUDGETS[key].budget * SCALE

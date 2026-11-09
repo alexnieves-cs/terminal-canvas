@@ -176,8 +176,8 @@ Budgets, pinned from the hosted macOS runner (`MEASURE` lines of this PR's `veri
 
 | Budget | Measured | Limit |
 |---|---:|---:|
-| Cold start, best launch (ms) | PENDING | PENDING |
-| Pan p95, 50 terminals (ms) | PENDING | PENDING |
-| Pinch-zoom p95, 50 terminals (ms) | PENDING | PENDING |
-| Idle CPU, 50 terminals (% of one core) | PENDING | PENDING |
+| Cold start, best launch (ms) | 2502 | 8000 |
+| Pan p95, 50 terminals (ms) | 84.6 | 250 |
+| Pinch-zoom p95, 50 terminals (ms) | 332.4 | 1000 |
+| Idle CPU, 50 terminals (% of one core) | 9.2 | 30 |
 
