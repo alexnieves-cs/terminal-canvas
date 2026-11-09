@@ -385,7 +385,8 @@ export function doctorSummary(rows: readonly CanvasAgentRow[]): { tone: 'ready' 
   if (signedOut.length === found.length) return { tone: 'fix', sentence: signedOut.length === 1 ? `${signedOut[0].label} is installed but no sign-in was found. Its first message will ask you to sign in.` : 'These agents are installed but no sign-in was found. Each one\'s first message will ask you to sign in.' }
   const ready = found.filter((row) => row.signIn === 'found')
   if (ready.length > 0) return { tone: 'ready', sentence: ready.length === 1 ? `${ready[0].label} is installed and signed in. You are ready to start.` : `${ready.map((row) => row.label).join(' and ')} are installed and signed in. You are ready to start.` }
-  return { tone: 'ready', sentence: found.length === 1 ? `${found[0].label} is installed. Its first message checks sign-in.` : 'Your agents are installed. Each one\'s first message checks sign-in.' }
+  // Named, never "your agents": a row above may still say `not installed`.
+  return { tone: 'ready', sentence: found.length === 1 ? `${found[0].label} is installed. Its first message checks sign-in.` : `${found.map((row) => row.label).join(' and ')} are installed. Each one's first message checks sign-in.` }
 }
 
 export function installCommand(id: string): string | null {
