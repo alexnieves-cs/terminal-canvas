@@ -34,6 +34,7 @@
     "package": "npm run build && electron-builder --config electron-builder.config.cjs",
     "lb": "node scripts/lb.cjs",
     "ipc:list": "node scripts/ipc-list.cjs --write",
+    "guide:keys": "node scripts/guide-keys.cjs --write",
     "affected": "node scripts/affected.cjs",
     "collab": "node scripts/collab-server.cjs",
     "supabase:probe": "node scripts/supabase-probe.cjs",

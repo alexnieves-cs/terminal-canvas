@@ -334,6 +334,25 @@ check('demo.layout.2 the canvas layout.load answers keeps every cast panel and t
     ok('demo.site.3 the landing page has no script and a CSP without script-src', html !== '' && !/<script/i.test(html) && /default-src 'none'/.test(html) && !/script-src/.test(html))
   }
 
+  // M632 — demo.docs.1. The user guide is published. build-site.cjs renders
+  //        docs/guide/*.md into /docs/ and names every page it publishes; a
+  //        guide file it does not name fails the BUILD, but only on the Pages
+  //        job, so the same comparison is made here where every suite runs.
+  //        The landing page links the guide, and a guide page carries no
+  //        script, because the frame's CSP would refuse it without a word.
+  {
+    const { readdirSync } = require('node:fs')
+    const { PAGES } = require('./build-site.cjs')
+    const onDisk = readdirSync(join(ROOT, 'docs/guide')).filter((f) => f.endsWith('.md')).sort()
+    const named = PAGES.map((p) => p[0]).sort()
+    const scripted = onDisk.filter((f) => /<script/i.test(read(`docs/guide/${f}`)))
+    const required = ['install.md', 'first-task.md', 'keyboard.md', 'agents.md', 'overnight.md', 'review.md', 'faq.md', 'compare.md']
+    const absent = required.filter((f) => !onDisk.includes(f))
+    ok('demo.docs.1 every docs/guide page is published under /docs/, the landing page links it, and no guide page carries a script',
+      onDisk.join() === named.join() && absent.length === 0 && scripted.length === 0 && read('site/index.html').includes('href="./docs/"'),
+      JSON.stringify({ onDisk: onDisk.length, named: named.length, absent, scripted }))
+  }
+
   // demo.feedback.1. The demo's strip links the feedback form too.
   ok('demo.feedback.1 the demo strip links the feedback form', /FEEDBACK_URL\}/.test(read('src/web/demo-chrome.ts')) && read('src/web/demo-chrome.ts').includes('template=feedback.yml'))
 
