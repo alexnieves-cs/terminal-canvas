@@ -200,13 +200,19 @@ for (const [i, heading] of REQUIRED_HEADINGS.entries()) {
 // fall back to matching the whole README: a false FAILURE gets noticed and
 // fixed, a false PASS never does, and that asymmetry is why this stays scoped
 // tightly rather than generously.
+//
+// M632. The diagram moved with the rest of the README's architecture section
+// to docs/architecture.md when the README was cut to a front page, and this
+// check followed it. It is the same diagram and the same assertion; only the
+// file changed, and `ARCHITECTURE_DOC` is the one place that says which.
 const CONTRACT = read('src/shared/ipc-contract.ts') ?? ''
 const channels = [...CONTRACT.matchAll(/^\s+[A-Z_]+: '([a-z]+:[a-z-]+)'/gm)].map((m) => m[1])
-const fences = README.match(/^```[\s\S]*?^```/gm) ?? []
+const ARCHITECTURE_DOC = read('docs/architecture.md') ?? ''
+const fences = ARCHITECTURE_DOC.match(/^```[\s\S]*?^```/gm) ?? []
 const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 {
   const missing = channels.filter((c) => !DIAGRAM.includes(c))
-  ok('14 every IPC channel appears in the README',
+  ok('14 every IPC channel appears in the architecture diagram (docs/architecture.md)',
     channels.length > 20 && missing.length === 0,
     missing.length ? `missing: ${missing.join(', ')}` : `${channels.length} channels`)
 }
@@ -608,7 +614,7 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   // M48 — claude-md.1. CLAUDE.md is a COPY of the IPC diagram and of every
   //       load-bearing pointer, and it is edited by scripts. A script that
   //       opened it for writing before reading it emptied the whole file in
-  //       the M47 commit, and nothing here noticed: 19 pins README's diagram,
+  //       the M47 commit, and nothing here noticed: 14 pins the architecture diagram,
   //       not this one. So: every invoke channel in the contract appears in
   //       CLAUDE.md's diagram too, which is only true of a file that exists.
   {
@@ -755,14 +761,15 @@ console.log('\n' + '='.repeat(60))
 
 // version.1 (4.1.0 at M179; M60; 1.1.0 at M70; 2.0.0 at M95; 2.2.0 at M108; 2.3.0 at M111; 3.0.0 at M125; 3.1.0 at M134 — the M126–M133 act shipped its rows unversioned and the v7 run's Act 0 paid that debt). package.json says 4.1.0 and the README's status line v4.1.0 at M179
 // 4.0.0 at M160, the v7 run's reconcile; 5.0.0 at M192, the v9 run's;
-// 6.0.0 at M456, the redesign; 6.0.1 at M474, the streams run's first tagged release.
+// 6.0.0 at M456, the redesign; 6.0.1 at M474, the streams run's first tagged release;
+// 6.1.0 after lanes G–V, the bold directions and the two audits.
 // agrees — the one number that must not drift between the two files that
 // name it.
 {
   const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
   const statusLine = (readme.match(/^> \*\*Status:[^\n]*/m) || [''])[0]
-  ok('version.1 package.json is 6.0.1 and the README status line names the same version',
-    pkg.version === '6.0.1' && statusLine.includes('v6.0.1') && !/beta/i.test(statusLine),
+  ok('version.1 package.json is 6.1.0 and the README status line names the same version',
+    pkg.version === '6.1.0' && statusLine.includes('v6.1.0') && !/beta/i.test(statusLine),
     JSON.stringify({ version: pkg.version, statusLine }))
 }
 
@@ -788,15 +795,71 @@ console.log('\n' + '='.repeat(60))
     .filter((f) => !/-ledger\.md$/.test(f))
     .map((f) => /^m(\d+)(?:-m(\d+))?[a-z]?-.*\.md$/.exec(f)).filter(Boolean)
     .flatMap((m) => { const a = Number(m[1]); const b = m[2] === undefined ? a : Number(m[2]); const out = []; for (let n = a; n <= b; n += 1) out.push(n); return out })
-  const readme = read('README.md') ?? ''
+  // M632. The table lives in docs/milestones.md since the README became a
+  // front page. The README must not grow a second one: a row there would be a
+  // row this check no longer reads.
+  const readme = read('docs/milestones.md') ?? ''
+  const strayRows = [...(read('README.md') ?? '').matchAll(/^\| M(\d+)[a-z]? \|/gm)].length
   const rows = [...readme.matchAll(/^\| M(\d+)[a-z]? \|/gm)].map((m) => Number(m[1]))
   const rowSet = new Set(rows)
   const logSet = new Set(logs)
   const missingRows = [...logSet].filter((n) => !rowSet.has(n))
   const missingLogs = [...rowSet].filter((n) => n >= 36 && !logSet.has(n))
-  ok('milestones.1 every build log has a README milestone row, and every row from M36 on has a build log',
-    logs.length >= 25 && missingRows.length === 0 && missingLogs.length === 0,
-    JSON.stringify({ logs: logs.length, rows: rowSet.size, missingRows, missingLogs }))
+  ok('milestones.1 every build log has a milestone row in docs/milestones.md, and every row from M36 on has a build log',
+    logs.length >= 25 && missingRows.length === 0 && missingLogs.length === 0 && strayRows === 0,
+    JSON.stringify({ logs: logs.length, rows: rowSet.size, missingRows, missingLogs, strayRows }))
+}
+
+// M632 — readme.1. THE README IS A FRONT PAGE, AND IT STAYS ONE. It reached
+// 1,467 lines because every milestone appended to it and nothing pushed back:
+// checks 8–13 can only say a section is missing, never that the file has
+// become a reference manual a visitor will not read. The ceiling is the push
+// back. A change that needs more room belongs in docs/guide (for a user) or
+// docs/features.md, docs/architecture.md and docs/development.md (for the
+// rest); raise the number only on purpose.
+//
+// readme.2. Every picture and local link the README names exists. Its stills
+// are the visual check's own goldens, read straight from verify/visual/goldens
+// so the README can only show what the app really paints; the price is that
+// renaming or deleting a scene would leave a broken image on the repository's
+// front page, which GitHub renders as a small grey icon and no error.
+{
+  const README_MAX_LINES = 220
+  const lines = README.split('\n').length
+  ok('readme.1 the README is a front page: at most 220 lines', lines > 40 && lines <= README_MAX_LINES, `${lines} lines`)
+
+  const local = [
+    ...[...README.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]),
+    ...[...README.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1])
+  ].filter((ref) => !/^(https?:|mailto:|#)/.test(ref)).map((ref) => ref.split('#')[0])
+  const gone = [...new Set(local)].filter((ref) => !existsSync(join(ROOT, ref)))
+  const stills = local.filter((ref) => ref.startsWith('verify/visual/goldens/')).length
+  ok('readme.2 every picture and local link in the README exists, and its stills are visual goldens',
+    gone.length === 0 && stills >= 4 && !/mockup/i.test(README),
+    JSON.stringify({ links: local.length, stills, gone }))
+}
+
+// M632 — guide.keys.1. The user guide's shortcut tables are GENERATED from
+// src/shared/shortcuts.ts (scripts/guide-keys.cjs), between two markers. The
+// README's hand-written keyboard table said ⌘N was "New panel" long after the
+// registry made it New task; a generated block cannot fall behind, and this
+// is the check that says so, with the one command that fixes it. The count
+// clause is the non-vacuity guard: the generator reads the registry as text,
+// and a row its pattern could not read would otherwise vanish from the guide
+// while the two blocks still matched.
+{
+  let detail = ''
+  let pass = false
+  try {
+    const K = require('./guide-keys.cjs')
+    const have = K.currentBlock(read('docs/guide/keyboard.md') ?? '')
+    const want = K.block()
+    const read_ = K.rows().length
+    const declared = K.declared()
+    pass = have !== null && have === want && read_ === declared && read_ > 30
+    detail = have === null ? 'docs/guide/keyboard.md lost its guide:keys markers' : read_ !== declared ? `${read_} rows read, ${declared} declared` : pass ? `${read_} shortcuts, block matches` : 'the block and the registry disagree — run npm run guide:keys'
+  } catch (e) { detail = String(e) }
+  ok('guide.keys.1 docs/guide/keyboard.md\'s shortcut tables are exactly what npm run guide:keys generates from the registry', pass, detail)
 }
 
 // M103 — browser.1. THE GUEST'S FIVE PROPERTIES, AS TEXT. `webviewTag: true`

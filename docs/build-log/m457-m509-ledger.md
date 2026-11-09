@@ -171,3 +171,25 @@ From the UI and UX pass of 2026-11-09 (notes in the project library, `2026-11-09
 | this PR | M642 | Simple and Full. `labs.full` (off by default) is one switch in Settings, the View menu and the palette. Simple hides only the doors that START the 3D World, a tournament, a flowchart shape and the night film; everything already on a canvas keeps its verbs. Each keeps its own switch for someone in Full. The harnesses that run real main launch Full (`TC_FULL=1`), so their goldens show what they did | `verify:palette` full.1–full.4, labs.1, labs.4 |
 | this PR | M643 | The setup doctor. Main reports sign-in evidence per installed agent CLI: whether a credentials file, a keychain item or an API-key variable name EXISTS (nothing is opened or read; `none` is "no sign-in found", never "signed out"). The first-run card shows the install or sign-in line itself beside Copy, one summary sentence, and Check again | `verify:onboarding` doctor.1–doctor.5 |
 | this PR | M644 | The guided first canvas: three moves (start an agent, ⌘J to whoever needs you, Review) on one small card that watches for each move, always offers Next and Skip, is never modal, and starts once as the first-run card closes | `verify:onboarding` guide.1–guide.4 |
+
+## W — Reliability (M650–M654)
+
+Tier 3 of the plan of 2026-11-02 (project library, `2026-11-02-spectacular-plan/`), which Alex approved on 2026-11-09. The reasons, the budgets and the soak's rules are in [docs/reliability.md](../reliability.md).
+
+| PR | Milestone | What | Checks |
+|---|---|---|---|
+| this PR | M650 | Main's last listener (`main/crash-guard.ts`): an uncaught exception or unhandled rejection is recorded, scrubbed, in `crash-log.jsonl`; main keeps running once a window exists and exits with a dialog before one does; a failed boot no longer leaves an app with no window; a crashed renderer is loaded again, bounded | `verify:file` crash.1–crash.3; `verify:reliability` recover.5 |
+| this PR | M651 | The run marker (`running.json`): a launch after a kill, a force quit or a power cut knows it, and the reopen notice says in one sentence what came back. `ExitHow` gains `crash`, which no file can claim | `verify:layout` persist.6; `verify:reliability` recover.1–recover.6 |
+| this PR | M652 | `telemetry.crashReports`, the opt-in toggle for the maintainers' address, off by default. `PROJECT_DSN` is empty until Alex provides one, so it sends nothing and says so | `verify:file` telemetry.6 |
+| this PR | M653 | `verify:reliability`: the built app launched as a child and driven from outside (`scripts/lib/real-app.cjs`). Kill and reopen, a renderer crash, a clean quit; budgets for cold start, frame time at 50 terminals and idle CPU | `verify:reliability` |
+| this PR | M654 | The soak (`scripts/soak.cjs`, `.github/workflows/soak.yml`): weekly on the Mac runner, 20 terminals for 5 hours, red on growth in memory, handles, processes, heap or DOM nodes, or a dead session | the workflow's own run |
+
+Budgets, pinned from the hosted macOS runner (`MEASURE` lines of this PR's `verify` runs):
+
+| Budget | Measured | Limit |
+|---|---:|---:|
+| Cold start, best launch (ms) | 2502 | 8000 |
+| Pan p95, 50 terminals (ms) | 84.6 | 250 |
+| Pinch-zoom p95, 50 terminals (ms) | 332.4 | 1000 |
+| Idle CPU, 50 terminals (% of one core) | 9.2 | 30 |
+

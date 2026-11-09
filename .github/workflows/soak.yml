@@ -1,0 +1,112 @@
+# M654. The soak: the built app, many terminals printing, hours — and a red run
+# if memory, handles, processes, the renderer's heap or its DOM grew, or if a
+# terminal's process died along the way. scripts/soak.cjs holds the rules and
+# says why each one is shaped the way it is; docs/reliability.md says how to
+# read a run and how to tighten a limit.
+#
+# NOT part of `npm run verify`, and not a suite: it is hours long, and its
+# subject is time. Three ways in:
+#
+#   schedule           weekly, five hours, twenty panels. A leak that landed
+#                      during the week is a red run on Sunday rather than a
+#                      slow canvas at someone's hour five.
+#   workflow_dispatch  any length up to the hosted runner's six-hour job
+#                      ceiling (the plan's eight hours does not fit in one
+#                      hosted job; five and a half is what does).
+#   pull_request       ONLY when the soak's own files change, and only ten
+#                      minutes: it proves the harness still launches the app,
+#                      starts every terminal and holds its invariants. Ten
+#                      minutes cannot judge growth and the script does not
+#                      pretend to — it says "smoke" in its own summary.
+#
+# macOS for the same reasons verify.yml is: node-pty against Electron's ABI,
+# tmux, and a desktop app that needs a window server to paint.
+name: soak
+
+on:
+  schedule:
+    # Sundays 08:00 UTC — the runners' quiet end of the week.
+    - cron: '0 8 * * 0'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'How long to run, in minutes (330 is the most one hosted job allows)'
+        required: false
+        default: '300'
+      panels:
+        description: 'How many terminals to keep printing'
+        required: false
+        default: '20'
+  pull_request:
+    paths:
+      - 'scripts/soak.cjs'
+      - 'scripts/lib/real-app.cjs'
+      - '.github/workflows/soak.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# It reads the repository and uploads an artifact; nothing else.
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: soak
+    runs-on: macos-latest
+    # The job ceiling on a hosted runner is 360. Install and build take about
+    # ten; the script is capped at 330 below, which leaves the upload room.
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Without tmux the app falls back to the direct backend and the soak
+      # would be measuring a different product from the one people run.
+      - name: Install tmux
+        run: brew install tmux
+      - name: Install dependencies
+        run: npm ci
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
+      - name: Build
+        run: npm run build
+      - name: Soak
+        env:
+          # A pull request gets the ten-minute smoke; the schedule gets the
+          # default; a dispatch gets what it asked for, capped.
+          SOAK_EVENT: ${{ github.event_name }}
+          SOAK_MINUTES_INPUT: ${{ github.event.inputs.minutes }}
+          SOAK_PANELS_INPUT: ${{ github.event.inputs.panels }}
+          TC_SOAK_OUT: ${{ github.workspace }}/out/soak
+        run: |
+          if [ "$SOAK_EVENT" = "pull_request" ]; then
+            minutes=10
+          else
+            minutes="${SOAK_MINUTES_INPUT:-300}"
+          fi
+          # Digits only, then the cap: an input is text someone typed.
+          # Four digits at most before any arithmetic: a longer run of digits
+          # overflows the shell's test, which then reads as "not greater".
+          case "$minutes" in ''|*[!0-9]*|?????*) minutes=300 ;; esac
+          if [ "$minutes" -gt 330 ]; then minutes=330; fi
+          if [ "$minutes" -lt 1 ]; then minutes=1; fi
+          panels="${SOAK_PANELS_INPUT:-20}"
+          case "$panels" in ''|*[!0-9]*|????*) panels=20 ;; esac
+          if [ "$panels" -gt 60 ]; then panels=60; fi
+          if [ "$panels" -lt 1 ]; then panels=1; fi
+          export TC_SOAK_MINUTES="$minutes" TC_SOAK_PANELS="$panels"
+          # caffeinate: a display that sleeps stops painting the window, and a
+          # renderer that is not painting is not the renderer being soaked.
+          caffeinate -dims npm run soak
+      - name: Upload the samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-${{ github.run_id }}
+          path: out/soak/
+          if-no-files-found: warn
+          retention-days: 30
