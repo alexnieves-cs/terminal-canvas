@@ -429,7 +429,7 @@ const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + 
     out !== null && out.count === 6 && leaked.length === 0 &&
       /\[redacted stripe/.test(out.text) && /\[redacted google/.test(out.text) && /\[redacted gitlab/.test(out.text) &&
       /\[redacted npm/.test(out.text) && /\[redacted hugging face/.test(out.text) &&
-      out.text.endsWith('postgres://app:[redacted password]@db.example.com:5432/main') && !out.text.includes('s3cr3t'),
+      out.text.endsWith('postgres://app:[redacted]@db.example.com:5432/main') && !out.text.includes('s3cr3t'),
     JSON.stringify({ out, leaked }))
 }
 

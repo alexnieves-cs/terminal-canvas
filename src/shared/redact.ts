@@ -43,7 +43,10 @@ const RULES: Array<{ pattern: RegExp; placeholder: string }> = [
   // A password inside a URL (`https://user:pass@host`, a database DSN). The
   // scheme, the user and the host stay so the line still says where it points;
   // only the password goes. A URL with no userinfo is never touched (redact.3).
-  { pattern: /\b([a-z][a-z0-9+.-]*:\/\/[^\s:/@]+):[^\s/@]+@/gi, placeholder: '$1:[redacted password]@' }
+  // The placeholder holds NO SPACE, unlike the others: phoneText cuts a word at
+  // its last `@`, and a space inside the userinfo would split the word first and
+  // leave the user name on the phone (verify:mcp push.1).
+  { pattern: /\b([a-z][a-z0-9+.-]*:\/\/[^\s:/@]+):[^\s/@]+@/gi, placeholder: '$1:[redacted]@' }
 ]
 
 export function redactSecrets(text: string): Redaction {
