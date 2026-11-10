@@ -13678,30 +13678,28 @@ tr[data-session-row]:focus-within .sessions-world,
    mostly repeat the name's folder, kept their room. The rest layer is the
    name and one state (CLAUDE.md, the density layers); where the work lives
    is the contextual layer. So at rest the three are not laid out at all, and
-   the path arrives with the controls (hover, focus, selected) in whatever
-   room the name and the word leave it. The branch and the summary stay off
-   the strip: with the controls out there is no room for them that is not a
-   two-letter stub, and the inspector says both in full. The word does not
-   shrink at all; M410's 22ch cap still bounds a state that is a sentence. The strip is absolutely positioned over the
+   they arrive with the controls (hover, focus, selected). At rest the word
+   does not shrink at all; M410's 22ch cap still bounds a state that is a sentence. The strip is absolutely positioned over the
    frame (the frame rule), so none of this refits xterm. */
-.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__path, .pf__branch, .pf__summary) { display: none; }
-.pf--kind-terminal:has(.panel__slot):hover .pf__chrome .pf__path,
-.pf--kind-terminal:has(.panel__slot):focus-within .pf__chrome .pf__path,
-.panel--selected.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__path { display: -webkit-box; flex: 0 100000 auto; min-width: 0; }
-.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { flex-shrink: 0; }
-/* M641. AND THE WORD SITS AT THE STRIP'S FAR END, CLEAR OF THE NORTH PORT.
-   The path and the branch were what pushed the word past the port an edge
-   ends on (M397 A4, M609); with them off the strip at rest, the word sat
-   right on it and a fired edge's packet ran under the word's --well backing
-   (verify:panels:agents edge.paint.1). So the strip reads name at the left,
-   state at the right, the way a header usually does: a spacer that takes
-   the free room, then the controls (opacity 0 at rest), then the word and
-   its duration. The title keeps M402's cap short of the middle, and the word
-   only reaches the port on a frame narrower than twice its width. The strip
-   is still the whole-width handle (M408); the spacer is part of it. */
-.pf--kind-terminal:has(.panel__slot) .pf__chrome::before { content: ""; order: 1; flex: 1 1 0; min-width: 0; }
-.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__menu-host, .pf__mark, .pf__trail, [data-open-as-chat], .pf__maximise, .pf__close) { order: 2; }
-.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__word, .pf__duration) { order: 3; }
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome :is(.pf__path, .pf__branch, .pf__summary) { display: none; }
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome .pf__word { flex-shrink: 0; }
+/* M641. AND AT REST THE WORD SITS AT THE STRIP'S FAR END, CLEAR OF THE
+   NORTH PORT. The strip is laid out around the port an edge ends on (M397
+   A4, M609): its middle must paint nothing, or a fired edge's packet runs
+   under whatever does (verify:panels:agents edge.paint.1). With the path and
+   the branch off the strip at rest, the word sat right after the name, on
+   the port. So at rest the strip reads name at the left and state at the
+   right: a spacer takes the free room, then the controls (opacity 0 at
+   rest), then the word and its duration. Once the controls show (hover,
+   focus, selected) the strip is exactly the pre-M641 one: path, branch and
+   summary back between the name and the word, unpainted, and the controls
+   at the far end. That order is deliberate, not tidiness: putting the word
+   after the controls there was measured putting the maximise button on the
+   port of a 320px terminal. The strip is still the whole-width handle (M408);
+   the spacer is part of it. */
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome::before { content: ""; order: 1; flex: 1 1 0; min-width: 0; }
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome :is(.pf__menu-host, .pf__mark, .pf__trail, [data-open-as-chat], .pf__maximise, .pf__close) { order: 2; }
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome :is(.pf__word, .pf__duration) { order: 3; }
 /* M641. SETTINGS IN SECTIONS, WITH REAL CONTROLS. A heading per section, a
    switch that looks like one (the word On/Off stays as its label), a select
    for a choice among several, and a field for a number or a path. */
