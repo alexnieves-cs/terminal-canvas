@@ -23,8 +23,20 @@
  */
 'use strict'
 
+// M631. electron-builder's own directory name for a `dir` target, per arch:
+// x64 is the bare `mac`, every other arch is suffixed. Written down ONCE here
+// because verify:packaged launches the bundle from that directory and
+// release.yml reads the .app out of it; a second copy of this table is how an
+// Intel job would go looking in mac-arm64 and report a missing bundle.
+const MAC_DIR = { arm64: 'mac-arm64', x64: 'mac', universal: 'mac-universal' }
+
 function buildConfig(opts) {
   const arch = (opts && opts.arch) || 'arm64'
+  // M631. A typo in TC_MAC_ARCH must not become an arm64 build shipped under
+  // an Intel name (electron-builder ignores an arch it does not know).
+  if (!Object.prototype.hasOwnProperty.call(MAC_DIR, arch)) {
+    throw new Error(`builder-config: unknown arch "${arch}" (want ${Object.keys(MAC_DIR).join(', ')})`)
+  }
   // M630. Signing is a MODE the caller asks for, never something inferred from
   // the machine. electron-builder.config.cjs turns it on only for
   // TC_MAC_SIGN=1, which release.yml sets only when the Apple secrets exist;
@@ -150,4 +162,4 @@ function signedMac() {
   }
 }
 
-module.exports = { buildConfig }
+module.exports = { buildConfig, MAC_DIR }
