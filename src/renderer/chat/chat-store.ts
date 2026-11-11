@@ -1,3 +1,4 @@
+import { approvalRisk } from '@shared/approval-risk'
 import { useSyncExternalStore } from 'react'
 import { addTotals } from '@shared/cost'
 import type { AgentSessionEvent, AgentSessionSnapshot, CapHold } from '@shared/agent-session'
@@ -179,7 +180,7 @@ function syncApprovals(): void {
       const full = approvalAction(p.input)
       next.push({
         id, requestId: p.requestId, toolName: p.toolName, argument: toolArgument(p.input),
-        action: full.action, actionIsCode: full.code,
+        action: full.action, actionIsCode: full.code, risk: approvalRisk(p.toolName, p.input),
         ...(full.rest === undefined ? {} : { rest: full.rest }),
         ...(p.description === undefined || p.description === '' ? {} : { description: p.description }),
         ...(state.snapshot?.cwd === undefined || state.snapshot.cwd === '' ? {} : { cwd: state.snapshot.cwd })

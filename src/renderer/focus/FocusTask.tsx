@@ -16,6 +16,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import type { ResolvedDecision, TaskGroup } from '@renderer/shell/task-queue'
 import { waitedWords } from '@renderer/shell/decision-inbox'
 import { ChatConversation } from '@renderer/chat/ChatConversation'
+import { RunPane } from '@renderer/supervision/RunPane'
 import { claimConversation } from '@renderer/chat/conversation-host'
 import { deliverToComposer, insertIntoComposer, onChatTurnEnd, useChat } from '@renderer/chat/chat-store'
 import { useAgentState } from '@renderer/session/agent-state-store'
@@ -136,8 +137,8 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
   const previews = useMemo(() => panels.filter(isBrowserPanel).filter((p) => memberIds.includes(p.rect.id) && p.url !== ''), [panels, memberIds])
   // `page`, not a field named for the binding: the page is the pane's address,
   // and this view never reads the binding itself (`verify:meta preview-readers.1`).
-  const has = { page: previews.length > 0, review: props.taskContext !== undefined }
-  const sides = FOCUS_SIDES.filter((s) => (s === 'preview' ? has.page : s === 'review' ? has.review : true))
+  const has = { page: previews.length > 0, review: props.taskContext !== undefined, run: chats.length > 0 }
+  const sides = FOCUS_SIDES.filter((s) => (s === 'preview' ? has.page : s === 'review' ? has.review : s === 'run' ? has.run : true))
 
   const hasPlan = item.plan !== undefined
   const [prefs, setPrefs] = useState(() => readFocusPrefs(itemId))
@@ -478,6 +479,9 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
                 {...(ctx?.onRunChecks === undefined ? {} : { onRunCheck: (command: string) => ctx.onRunChecks!(itemId, command) })}
                 onReview={() => setSide(has.review ? 'review' : 'changes')}
               />
+            ) : side === 'run' && chatId !== undefined ? (
+              // M671. The shown agent's run: Creance's timeline and tool card over the same store as the conversation.
+              <RunPane key={chatId} panelId={chatId} />
             ) : benchTab !== null ? (
               <OrchWorkbench
                 subject={subject} current={subject} pinned={null} onPin={() => {}}

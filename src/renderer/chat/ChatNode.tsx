@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { approvalRisk, offersSessionGrant } from '@shared/approval-risk'
 import type { ChatPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
@@ -143,7 +144,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         <div className="chat__far-approval" data-chat-far-approval={p.requestId} onMouseDown={(e) => e.stopPropagation()}>
           <span className={`chat__far-question${toolArgumentIsCode(p.input) ? ' chat__far-question--code' : ''}`}><span className="chat__tool-name">{p.toolName}</span> {toolArgument(p.input)}</span>
           <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title={`Allow this one ${p.toolName} call`} {...shellControl(() => answer(p.requestId, true))}>Allow once</button>
-          <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
+          {/* M670. No session grant for a high-risk request, at this tier too. */}
+          {offersSessionGrant(approvalRisk(p.toolName, p.input)) && <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>}
           <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title={`Deny ${p.toolName}`} {...shellControl(() => answer(p.requestId, false))}>Deny</button>
         </div>) })() : undefined}
       onSelect={props.onSelect}

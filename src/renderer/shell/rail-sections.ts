@@ -1,3 +1,4 @@
+import type { ApprovalRisk } from '@shared/approval-risk'
 import type { WorkspaceRow } from '@shared/ipc-contract'
 import type { RailRow } from './rail-rows'
 import type { PersistedRun } from '@shared/runs'
@@ -165,6 +166,8 @@ export interface PendingApproval {
   description?: string
   /** The session's working directory — where the action would run. */
   cwd?: string
+  /** M670. `approvalRisk` of the request; absent on a fixture that predates it, which reads as medium. */
+  risk?: ApprovalRisk
 }
 
 /**

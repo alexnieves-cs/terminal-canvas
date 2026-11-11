@@ -196,7 +196,8 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
     // tool name main holds in its own pending record, never by a name the
     // renderer sent. A deny never grants, whatever the scope says.
     answer: ({ id, requestId, answer, scope }) => {
-      const toolName = scope === 'session' && answer.allow ? state.agents?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName : undefined
+      const asked = scope === 'session' && answer.allow ? state.agents?.get(id)?.pending.find((p) => p.requestId === requestId) : undefined
+      const toolName = asked?.toolName
       // M119. The grant goes FIRST so the answer itself can carry the vendor's
       // word for it (ACP's allow_always — the manager reads preAnswer when it
       // writes). `toolName` is defined only when the request is really PENDING
@@ -208,7 +209,8 @@ export function createAgentHandlers(state: MainState, stores: Stores, places: Pl
       // answered the process, and a session grant is kept for next time.
       const routed = state.teamAsks?.localAnswer(id, requestId, answer) ?? 'not-routed'
       if (routed === 'waiting') return true
-      if (toolName !== undefined) state.approvals?.grant(id, toolName)
+      // M670. The request's own input goes with it: a high-risk one is answered once and grants nothing.
+      if (toolName !== undefined) state.approvals?.grant(id, toolName, asked?.input)
       if (routed === 'decided') return true
       return state.agents?.answerPermission(id, requestId, answer) ?? false
     },

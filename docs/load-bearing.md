@@ -4184,6 +4184,16 @@ grant.2` reads `approvals.ts`, the layout schema, the layout store and the trans
 text and fails if any of them mentions a grant or `approvals.ts` imports a filesystem. A grant
 survives `exited` (the conversation resumes on the next send) and dies on `disposed`.
 
+**A high-risk request is never answered by a session grant, and the rule lives in main's
+grant tracker, not only on the card (`main/approvals.ts`, `shared/approval-risk.ts`, M670).**
+A grant is keyed by tool, so `Allow for session` on `Bash ls` would pre-answer a later
+`Bash rm -rf ~` before it was ever pending: no card, no bell, nothing in the queue. Hiding the
+verb on the chat card is not enough, because four other doors send `scope: 'session'` (the
+far tier, the queue's detail, the palette, the phone). So `grant` mints nothing from a
+high-risk request and `granted` answers false for one, and the manager's three `preAnswer`
+call sites pass the request's own `input` — drop it at one site and the tracker judges the
+name alone, which reads `Bash` as medium. `verify:agent-run risk.grant.1–.3`.
+
 **A backend is a ROW in `BACKENDS`, and no consumer may switch on its name
 (`shared/agent-backends.ts`, `verify:agent-session registry.1`, M99).** M90's build log
 records `backend` dropped silently by two field-by-field copy sites before anyone noticed, and
