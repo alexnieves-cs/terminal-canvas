@@ -32,6 +32,14 @@ The long list. The [README](../README.md) is the short version and the [user gui
   broadcast (`Cmd+Shift+I`, or the palette): every keystroke into the focused
   one reaches all of them, so the same instruction goes to four agents in one
   go. A banner says how many are listening and carries the Stop.
+- **Approvals that know what is risky.** A request to run a command that deletes,
+  force-pushes, publishes or pipes a download into a shell is labelled high risk
+  and asks every time: there is no "Allow for session" for it, and the app will not
+  let an earlier session grant answer it. `A`, `Shift+A` and `D` answer a focused
+  request.
+- **A Run tab on every task.** The task view shows what the agent did, step by step:
+  each message you sent, the tool calls under it with their state and how long
+  they took, and the picked call's input and result in full.
 - **A command palette.** `Cmd+K` for panels, presets, saved prompts, settings
   and workspaces, with drill-in scopes and fuzzy matching.
 - **A review layer.** Each panel is diffed against the snapshot taken when its

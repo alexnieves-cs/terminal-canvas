@@ -26,13 +26,17 @@ import { isRecord } from '../../shared/guards'
  * verdict, criteria, comments and the follow-up they compose — the review
  * node's own panel), and a preview when the task has one bound.
  */
-export type FocusSide = 'plan' | 'changes' | 'checks' | 'review' | 'output' | 'artifacts' | 'preview'
-/** M327. `plan` first: who is doing what, and what each step waits on, reads before the evidence. */
-export const FOCUS_SIDES: readonly FocusSide[] = ['plan', 'changes', 'checks', 'review', 'output', 'artifacts', 'preview']
+export type FocusSide = 'plan' | 'run' | 'changes' | 'checks' | 'review' | 'output' | 'artifacts' | 'preview'
+/**
+ * M327. `plan` first: who is doing what, and what each step waits on, reads before the evidence.
+ * M671. `run` second: what the shown agent actually did, step by step and call by call
+ * (the Run timeline). Shown only while the task has a conversation to read it from.
+ */
+export const FOCUS_SIDES: readonly FocusSide[] = ['plan', 'run', 'changes', 'checks', 'review', 'output', 'artifacts', 'preview']
 
 /** The workbench tab a side reads through; `preview` is the focus view's own. */
 export function benchTabOf(side: FocusSide): WorkbenchTab | null {
-  const tabs: Record<FocusSide, WorkbenchTab | null> = { plan: null, changes: 'changes', checks: 'checks', review: null, output: 'output', artifacts: 'artifacts', preview: null }
+  const tabs: Record<FocusSide, WorkbenchTab | null> = { plan: null, run: null, changes: 'changes', checks: 'checks', review: null, output: 'output', artifacts: 'artifacts', preview: null }
   return tabs[side]
 }
 
@@ -104,14 +108,16 @@ export function withFocusPrefs(prev: FocusPrefs, patch: Partial<Omit<FocusPrefs,
  * the task no longer has, which falls back to Changes rather than an empty
  * pane that promises a page.
  */
-export function openingSide(prefs: FocusPrefs, has: { page: boolean; review: boolean; plan?: boolean }, asked?: FocusSide): FocusSide {
+export function openingSide(prefs: FocusPrefs, has: { page: boolean; review: boolean; plan?: boolean; run?: boolean }, asked?: FocusSide): FocusSide {
   // M325. A side the opener asked for (a failing check, the changes to review)
   // wins — when this task can show it.
-  if (asked !== undefined && !(asked === 'preview' && !has.page) && !(asked === 'review' && !has.review)) return asked
+  if (asked !== undefined && !(asked === 'preview' && !has.page) && !(asked === 'review' && !has.review) && !(asked === 'run' && has.run === false)) return asked
   // M327. A task with a plan, opened for the first time, opens on the plan.
   if (prefs.at === 0 && has.plan === true) return 'plan'
   if (prefs.side === 'preview' && !has.page) return 'changes'
   if (prefs.side === 'review' && !has.review) return 'changes'
+  // M671. A remembered Run tab on a task with no conversation would be an empty promise.
+  if (prefs.side === 'run' && has.run === false) return 'changes'
   return prefs.side
 }
 
@@ -127,7 +133,7 @@ export function shownAgent(chats: readonly string[], own: string | undefined, re
 }
 
 export function sideLabel(side: FocusSide): string {
-  const words: Record<FocusSide, string> = { plan: 'Plan', changes: 'Changes', checks: 'Checks', review: 'Review', output: 'Output', artifacts: 'Artifacts', preview: 'Preview' }
+  const words: Record<FocusSide, string> = { plan: 'Plan', run: 'Run', changes: 'Changes', checks: 'Checks', review: 'Review', output: 'Output', artifacts: 'Artifacts', preview: 'Preview' }
   return words[side]
 }
 

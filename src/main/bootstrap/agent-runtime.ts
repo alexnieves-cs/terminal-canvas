@@ -134,7 +134,7 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     // M98. Resolved at CALL time through `state.approvals`: the tracker is
     // created after the manager (it subscribes to it), so a captured
     // reference here would be null for the life of the app.
-    preAnswer: (id, toolName) => state.approvals?.granted(id, toolName) ?? false
+    preAnswer: (id, toolName, input) => state.approvals?.granted(id, toolName, input) ?? false
     ,
     // M475. A gated auto run's check: the login shell, the session's folder.
     // M552. A sandboxed lane's check runs in its own fresh VM instead.

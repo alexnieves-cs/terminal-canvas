@@ -134,3 +134,16 @@ different places (an overlap that merges clean, the third's edit left uncommitte
 git 2.38 or later for `--write-tree`; an older git is an `error`, never read as clean.
 `tonight.batch.1` (M480) pins what the door hands main — which board tasks a Run tonight takes,
 which it names as left out, and that the batch it builds passes main's own parse.
+
+## Agent supervision (M670–M671)
+
+`verify:agent-run` is plain node. `risk.*` pins `shared/approval-risk.ts`: a destroying,
+publishing or pipe-to-shell command is high wherever it sits in the line, a read-only tool is
+low, and anything unknown is medium, never low. `risk.grant.*` drives main's real grant
+tracker (no grant minted from a high-risk request, none pre-answering one) and reads the
+manager's `preAnswer` call sites as text, because a call site that drops the input judges the
+name alone. `run.*` folds hand-built transcripts through `shared/agent-run.ts` (a step per
+delivered prompt, results by tool_use id, `no-result` for an unfinished call, an open request
+making its step wait, unknown events ignored). `adopt.*` reads the components for their
+Creance attribution and the MIT notice, the session verb behind `offersSessionGrant` in all
+three doors, and the task view's Run side.
