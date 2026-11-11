@@ -56,7 +56,7 @@ duplicated work that had already landed, so look first.
   with screenshots.
 - Read `docs/ideas-backlog.md` (open canvas items), `docs/product-rules.md`,
   `docs/architecture-map.md`, `src/renderer/canvas/CLAUDE.md`, `src/renderer/CLAUDE.md` (library
-  doors), and the latest build logs. `docs/development-waves-proposal-2026-09-28.md` is a proposal,
+  doors), and the latest build logs. `docs/archive/development-waves-proposal-2026-09-28.md` is a proposal,
   not an approved plan, but it names real gaps.
 - Existing infrastructure you must decide to reuse or deliberately not reuse: M187's note forms
   (sticky/text/frame), `LinkLayer` + `link-geometry.ts`, `AnnotationLayer` (M93/M155 strokes),

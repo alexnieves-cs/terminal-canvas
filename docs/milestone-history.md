@@ -56,7 +56,7 @@ walked the fourth dead-end audit (M134–M139); Act II shipped eight backlog ent
 toolbox's write half, prompt placeholders, cost history, the live tier's card pinned,
 zoom-independent chrome, the image handoff, zoom to fit, per-preset environment and template
 sets (M140–M147); Act III gave the shot harness teeth (`verify:visual`, goldens at half
-scale, two budgets) and walked every golden in `docs/ux-audit-4.0.md`, which found and fixed
+scale, two budgets) and walked every golden in `docs/archive/ux-audit-4.0.md`, which found and fixed
 defects as old as 2.3.0 (M148–M149); Act IV built tags on the vault (M150) and Act V ink on
 the annotation layer (M155), the rankings truncated below those by name; Act VI is this
 reconcile (M160). Before it, **3.1 (M134)**: the seventh run, M126 to M133, made the

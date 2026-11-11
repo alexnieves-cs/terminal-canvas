@@ -342,7 +342,7 @@ check does not, and should not, cover it.
   (`backendOptions`), disabled by name when a binary is absent. ACP is declined by name in the
   Act I spec — no ACP-speaking CLI on this machine to measure. M112 re-read that premise (an
   ACP agent is now one `npx` away) and diffed ACP's methods against the table in
-  `docs/acp-registry-diff.md`; no field added.
+  `docs/archive/acp-registry-diff.md`; no field added.
 - `src/shared/teammates.ts` / `src/shared/places.ts` / `src/main/places.ts` — M100. A teammate
   is a record saved top level with the record rules (`parseTeammates`; `carryTeammate` at every
   by-name copy); a chat carries `teammateId` and MAIN appends the brief from its own roster on
@@ -734,7 +734,7 @@ check does not, and should not, cover it.
 - Act III of the v7 run (M148–M149): `scripts/verify-visual.cjs` and `verify/visual/goldens/`
   — M148, the shot harness given teeth (goldens at half scale, a per-channel tolerance and a
   pixel budget with a sentence each, three outcomes per scene, `UPDATE_GOLDENS=1` only after
-  looking). `docs/ux-audit-4.0.md` — M149, every golden walked; what the walk found in the
+  looking). `docs/archive/ux-audit-4.0.md` — M149, every golden walked; what the walk found in the
   CODE: `useInspectorDetail.ts` now READS `ledger:usage` (M142 had shipped every other piece and
   never the call — `historyWord` has a fourth arm for a rejected read); `usePaletteActions`'
   `intoNewWorkspace` runs the three `New workspace from` doors on the sheet's Enter, never

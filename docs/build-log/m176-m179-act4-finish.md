@@ -25,7 +25,7 @@ verbatim. Four inline sentences kept as they were, by name.
 
 ## M178 — the second full audit
 
-`docs/ux-audit-4.1.md`: 26 findings from a fresh-context walk of every golden with the five
+`docs/archive/ux-audit-4.1.md`: 26 findings from a fresh-context walk of every golden with the five
 rules as the lens — 12 fixed (the audit's headline a latent 4.0 defect: the enabled Restart
 in the context pane painted white on white since M46; `restart.paint.1`), 3 declined with
 their rule, 11 owed to backlog #88 (and #86) by name, twelve stale scene intents rewritten.

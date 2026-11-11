@@ -51,7 +51,7 @@ constants are numbers with a comment each.
 
 ## M149 — the 4.0 UX audit
 
-`docs/ux-audit-4.0.md`, written from LOOKING at every scene `npm run shot` paints at the close
+`docs/archive/ux-audit-4.0.md`, written from LOOKING at every scene `npm run shot` paints at the close
 of Act II (53), plus the scenes this act adds. The method is M61–M70's: per scene, what the
 image shows against its intent, what is wrong, and what was done. Findings are fixed in this
 act with a check each where one is cheap, or declined by name. Six lenses, each a section:

@@ -4,7 +4,7 @@ An audit of the renderer as it stands at `1d925fbe`, and the ordered plan for ev
 toward the brief's direction: deep navy/charcoal surfaces, cyan and electric-blue
 illumination, restrained violet and green accents, layered depth, thin borders, controlled
 glow, high density without clutter. Updated as decisions change; the milestone's ledger is
-[build-log/m279-ui-evolution.md](build-log/m279-ui-evolution.md).
+[build-log/m279-ui-evolution.md](../build-log/m279-ui-evolution.md).
 
 **The reference image was not available.** `docs/design-reference.png` does not exist and
 the attachment arrived as a placeholder file icon, so the direction was taken from the
@@ -256,9 +256,9 @@ gate for all three:
 
 | | What it closed | Log |
 |---|---|---|
-| M280 | The diorama's bloom pass — real HDR post-processing behind a confined `postprocessing` door, additive ground pools, hub crystal, edge ribbons, atmosphere, and `orchestration-working`, the first scene in which any of it is visible | [m280](build-log/m280-orchestration-bloom.md) |
-| M281 + C1 | Dark HUD glass, the real task stage fill, and `orchPhase` as the one reader of a chat's phase | [m281](build-log/m281-orchestration-hud.md) |
-| M282 | The bottom strip as five cells — System / Current task / Terminal / Code / Files — the last three being jump cards onto canvas panels | [m282](build-log/m282-orchestration-jump-cards.md) |
+| M280 | The diorama's bloom pass — real HDR post-processing behind a confined `postprocessing` door, additive ground pools, hub crystal, edge ribbons, atmosphere, and `orchestration-working`, the first scene in which any of it is visible | [m280](../build-log/m280-orchestration-bloom.md) |
+| M281 + C1 | Dark HUD glass, the real task stage fill, and `orchPhase` as the one reader of a chat's phase | [m281](../build-log/m281-orchestration-hud.md) |
+| M282 | The bottom strip as five cells — System / Current task / Terminal / Code / Files — the last three being jump cards onto canvas panels | [m282](../build-log/m282-orchestration-jump-cards.md) |
 
 **Three decisions here are settled, and each was declined for a reason, not missed.** Re-reading
 the reference will suggest all three again:

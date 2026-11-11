@@ -5,16 +5,16 @@
 # Terminal Canvas
 
 <p align="center">
-  <strong>An infinite canvas for coding agents.</strong><br>
-  Run Claude Code, Codex and plain shells side by side, see which one needs you,
-  review what each one changed, and wake up to finished work.
+  <strong>Run coding agents side by side. Review every change.</strong><br>
+  Claude Code, Codex and plain shells each get a real terminal on one canvas.
+  See which one needs you, review what each one changed, and wake up to finished work.
 </p>
 
 <p align="center">
   <a href="https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml"><img alt="verify" src="https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <a href="docs/guide/install.md"><img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS-lightgrey.svg"></a>
-  <img alt="Version 6.1.0" src="https://img.shields.io/badge/version-6.1.0-5edce6.svg">
+  <img alt="Version 6.1.1" src="https://img.shields.io/badge/version-6.1.1-5edce6.svg">
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
   compares against, painted on a Mac from sample data.
 </sub></p>
 
-> **Status: `v6.1.0`.** macOS, Apple Silicon. Free and open source. The release is not signed
+> **Status: `v6.1.1`.** macOS, Apple silicon and Intel. Free and open source. The release is not signed
 > yet, so macOS objects on first launch; [Install](#install) has the fix.
 
 ## Why

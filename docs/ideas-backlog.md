@@ -1820,12 +1820,12 @@ and be blank the first time the app is relaunched.
 
 `assignTiers` reads the live scale; during a pinch a panel can cross a tier boundary several
 times in one gesture. tldraw's `getDebouncedZoomLevel` is the shape: feed the tier pass the
-scale from when the gesture started until it ends. See `docs/canvas-camera-comparison.md`.
+scale from when the gesture started until it ends. See `docs/archive/canvas-camera-comparison.md`.
 
 ## 79. A camera `idle | moving` state
 
 One signal to gate `machine:sample` polling and the rail's rebuilds while the user is
-mid-gesture. See `docs/canvas-camera-comparison.md`.
+mid-gesture. See `docs/archive/canvas-camera-comparison.md`.
 
 ## 80. `cursor-agent` as a fifth row — declined in the v6 run (M117), unmeasured
 
@@ -1955,7 +1955,7 @@ component re-rendering at pointer speed), its own milestone.
 
 ## 88. What the 4.1 audit owed — the small words the second walk found
 
-`docs/ux-audit-4.1.md` (M178) fixed the defects it found and OWES these here, each a sentence
+`docs/archive/ux-audit-4.1.md` (M178) fixed the defects it found and OWES these here, each a sentence
 or a slot rather than a design: the run row's facts as data with no `—` segment and the
 lineup preview's sentence (F.7); header and row meta that drops whole rather than clipping
 mid-word, and `svc` as a word (F.9); the workflow diagram's block meta in sentence case with

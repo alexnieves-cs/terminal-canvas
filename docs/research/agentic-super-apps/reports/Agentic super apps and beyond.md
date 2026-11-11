@@ -243,7 +243,7 @@ Sizes are rough: S is under one milestone, M is 1–3 milestones, L is 4–8, XL
 
 *Rules.* The hard problem is that **main enforces caps and main is on the laptop**. An off-device lane needs a server-side enforcer that holds only a lease issued by main, which can only shrink. Credentials must still never enter the VM's environment; broker calls go back through main or stay refused.
 
-*Codebase tension.* The 2026-09-14 review lists "cloud workers" as a separate investment, and the 2026-09-20 audit makes signing and notarisation P0 ahead of anything remote (`docs/canvas-opportunity-audit-2026-09-20.md`).
+*Codebase tension.* The 2026-09-14 review lists "cloud workers" as a separate investment, and the 2026-09-20 audit makes signing and notarisation P0 ahead of anything remote (`docs/archive/canvas-opportunity-audit-2026-09-20.md`).
 
 *Size.* XL.
 
@@ -269,7 +269,7 @@ Sizes are rough: S is under one milestone, M is 1–3 milestones, L is 4–8, XL
 
 ### What not to build
 
-**More artifact kinds or an office suite.** Claude Docs/Slides and ChatGPT Work already own deliverables. The internal review said explicitly: "Do not spend the next cycle expanding artifact types or building a general-purpose office suite" (`docs/product-review-and-roadmap-2026-09-14.md`).
+**More artifact kinds or an office suite.** Claude Docs/Slides and ChatGPT Work already own deliverables. The internal review said explicitly: "Do not spend the next cycle expanding artifact types or building a general-purpose office suite" (`docs/archive/product-review-and-roadmap-2026-09-14.md`).
 
 **A general plugin API or extension registry before a concrete consumer.** Backlog #9 and D19 forbid it.
 
