@@ -160,6 +160,18 @@ From the feature-by-feature audit of 2026-10-30 (report in the project library, 
 | this PR | M620 | `palette/commands.ts` (2.7k lines) builds its four biggest sections through `commands/panel-rows.ts`, `new-panel-rows.ts`, `canvas-rows.ts` and `manage-rows.ts`, in the same order; no row changes. Row pins read the family through `scripts/lib/palette-src.cjs` | `verify:palette`, `verify:verbs` closure.v9.1, `verify:swarm`, `verify:tournament`, `verify:cloud`, `verify:borrow`, `verify:learn`, `verify:multiplayer`, `verify:rd-f3`, `verify:rd-l-b`, `verify:rd-l-c` |
 | this PR | M621 | One "how long ago" formatter: `shared/time-ago.ts` `agoShort` (12s/4m/2h/3d, floored) and `agoWords` (just now/12s ago/4 min ago/2 h ago/3 d ago). Nine surfaces that wrote their own now read it. Copy changes on purpose: the board's freshness and the orchestration machine age say `4 min ago` instead of `4m ago`; Learn says `3 d ago` instead of `3 days ago`; the team view says `just now` up to 10s instead of 5s. Any scene that shows those ages changes, so goldens follow only after a person looks | `verify:rail` ago.1–3, boardx.fresh.1 |
 
+## W — First ten minutes (M640–M649)
+
+From the UI and UX pass of 2026-11-09 (notes in the project library, `2026-11-09-ui-ux-overhaul/`) and tier 2 of the 2026-11-02 plan, which Alex approved. Found by running the renderer in a browser (the web demo build) beside the Mac shots gallery. Goldens wait for Alex to look at the gallery.
+
+| PR | Milestone | What | Checks |
+|---|---|---|---|
+| this PR | M640 | Lane W joins the run: its files, its `st:W` CSS fence, this section | `verify:meta` streams.own.1 |
+| this PR | M641 | Defects on every page. The page switch's sliding thumb drew a 51px disc behind the active tab (M601 made the switch `static` and took away the thumb's containing block). A terminal's rim strip wrapped its path and branch onto a second line and squeezed the state word to one letter: at rest it is now the name and one state, and the path arrives with the controls. Settings left out window memory (`unset`, `detail`), gained sections, real switches, a select for a choice, and a field for a number or a path (they could not be edited there at all). The pill no longer says "3 agents need you · needs you" | `verify:styles`, `verify:rd-f3`; scenes move, see goldens |
+| this PR | M642 | Simple and Full. `labs.full` (off by default) is one switch in Settings, the View menu and the palette. Simple hides only the doors that START the 3D World, a tournament, a flowchart shape and the night film; everything already on a canvas keeps its verbs. Each keeps its own switch for someone in Full. The harnesses that run real main launch Full (`TC_FULL=1`), so their goldens show what they did | `verify:palette` full.1–full.4, labs.1, labs.4 |
+| this PR | M643 | The setup doctor. Main reports sign-in evidence per installed agent CLI: whether a credentials file, a keychain item or an API-key variable name EXISTS (nothing is opened or read; `none` is "no sign-in found", never "signed out"). The first-run card shows the install or sign-in line itself beside Copy, one summary sentence, and Check again | `verify:onboarding` doctor.1–doctor.5 |
+| this PR | M644 | The guided first canvas: three moves (start an agent, ⌘J to whoever needs you, Review) on one small card that watches for each move, always offers Next and Skip, is never modal, and starts once as the first-run card closes | `verify:onboarding` guide.1–guide.4 |
+
 ## W — Reliability (M650–M654)
 
 Tier 3 of the plan of 2026-11-02 (project library, `2026-11-02-spectacular-plan/`), which Alex approved on 2026-11-09. The reasons, the budgets and the soak's rules are in [docs/reliability.md](../reliability.md).

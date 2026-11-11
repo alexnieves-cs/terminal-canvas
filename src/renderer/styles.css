@@ -13648,6 +13648,197 @@ tr[data-session-row]:focus-within .sessions-world,
 .palette__band { padding: var(--sp-4) var(--sp-6) var(--sp-1); font-weight: 600; border-top: 1px solid var(--line); }
 .palette__list > .palette__band:first-child { border-top: 0; }
 /* ── /st:U ── */
+/* ── st:W ── */
+/* M641 (lane W). THE PAGE SWITCH'S THUMB DREW A DISC. M601 made the switch
+   `position: static` so it could sit in the bar's flow, which took away the
+   containing block the sliding thumb (M512) is drawn against: the thumb then
+   measured itself against the whole top bar and came out 51px tall behind a
+   24px tab, a round halo on every page of the app. The switch is the thumb's
+   box again; `relative` keeps it in the flow exactly where `static` had it. */
+.shell__top .shell__center-toggle { position: relative; left: auto; top: auto; }
+/* M641. A terminal's rim strip is ONE line. The path and the branch wrapped
+   onto a second line above the frame (a hyphen is a break opportunity) and
+   ran into the group label and each other. Clamped to their first line with
+   an ellipsis; a clamp keeps the box's width exactly what wrapping gave it,
+   so nothing on the strip moves (the strip is laid out around the north
+   port, M397 A4 and M609). */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__path, .pf__branch) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  max-height: var(--sp-6);
+  line-height: var(--sp-6);
+}
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__duration { white-space: nowrap; line-height: var(--sp-6); }
+/* M641. AND THE STATE WORD IS READABLE. On a default-size terminal the strip
+   squeezed `working` down to its four-character floor (it read "w") and the
+   name to "Claude — l…", while the path, the branch and the summary, which
+   mostly repeat the name's folder, kept their room. The rest layer is the
+   name and one state (CLAUDE.md, the density layers); where the work lives
+   is the contextual layer. So at rest the three are not laid out at all, and
+   they arrive with the controls (hover, focus, selected). At rest the word
+   does not shrink at all; M410's 22ch cap still bounds a state that is a sentence. The strip is absolutely positioned over the
+   frame (the frame rule), so none of this refits xterm. */
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome :is(.pf__path, .pf__branch, .pf__summary) { display: none; }
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome .pf__word { flex-shrink: 0; }
+/* M641. AND AT REST THE WORD SITS AT THE STRIP'S FAR END, CLEAR OF THE
+   NORTH PORT. The strip is laid out around the port an edge ends on (M397
+   A4, M609): its middle must paint nothing, or a fired edge's packet runs
+   under whatever does (verify:panels:agents edge.paint.1). With the path and
+   the branch off the strip at rest, the word sat right after the name, on
+   the port. So at rest the strip reads name at the left and state at the
+   right: a spacer takes the free room, then the controls (opacity 0 at
+   rest), then the word and its duration. Once the controls show (hover,
+   focus, selected) the strip is exactly the pre-M641 one: path, branch and
+   summary back between the name and the word, unpainted, and the controls
+   at the far end. That order is deliberate, not tidiness: putting the word
+   after the controls there was measured putting the maximise button on the
+   port of a 320px terminal. The strip is still the whole-width handle (M408);
+   the spacer is part of it. */
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome::before { content: ""; order: 1; flex: 1 1 0; min-width: 0; }
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome :is(.pf__menu-host, .pf__mark, .pf__trail, [data-open-as-chat], .pf__maximise, .pf__close) { order: 2; }
+.pf--kind-terminal:has(.panel__slot):not(:hover):not(:focus-within):not(.panel--selected) .pf__chrome :is(.pf__word, .pf__duration) { order: 3; }
+/* M641. SETTINGS IN SECTIONS, WITH REAL CONTROLS. A heading per section, a
+   switch that looks like one (the word On/Off stays as its label), a select
+   for a choice among several, and a field for a number or a path. */
+.rd-settings__section + .rd-settings__section { margin-top: var(--sp-6); }
+.rd-settings__section-title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.rd-settings__hint { max-width: 60ch; }
+.rd-settings__main .rd-settings__switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border-radius: var(--r-full);
+  background: var(--s-4);
+  color: transparent;
+  font-size: 0;
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.rd-settings__main .rd-settings__switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-full);
+  background: var(--fg-3);
+  transition: transform var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.rd-settings__main .rd-settings__switch[aria-checked="true"] { background: var(--iris-dim); border-color: var(--iris); }
+.rd-settings__main .rd-settings__switch[aria-checked="true"]::before { transform: translateX(16px); background: var(--iris); }
+.rd-settings__choice { display: inline-flex; flex: none; padding: var(--sp-1); gap: var(--sp-1); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-2); }
+.rd-settings__main .rd-settings__choice button { border: 0; background: transparent; border-radius: var(--r-full); color: var(--fg-2); padding: var(--sp-1) var(--sp-5); }
+.rd-settings__main .rd-settings__choice button[aria-pressed="true"] { background: var(--iris-dim); color: var(--fg); box-shadow: inset 0 0 0 1px var(--iris); }
+.rd-settings__row[data-setting-mode] { padding-block: var(--sp-5); }
+.rd-settings__row[data-setting-mode] .rd-settings__name { font-weight: 600; }
+.rd-settings__row[data-setting-mode] .rd-settings__hint { font-weight: 400; }
+.rd-settings__select,
+.rd-settings__input {
+  flex: none;
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--fg);
+  background: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+.rd-settings__field { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); flex: none; }
+.rd-settings__input { width: 22ch; }
+.rd-settings__input--number { width: 9ch; text-align: right; font-variant-numeric: tabular-nums; }
+.rd-settings__input[aria-invalid="true"] { border-color: var(--state-needs); }
+.rd-settings__field .rd-settings__refusal { margin: 0; color: var(--state-needs); font-size: var(--t-xs); }
+.rd-settings__select:focus-visible,
+.rd-settings__input:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .rd-settings__main .rd-settings__switch, .rd-settings__main .rd-settings__switch::before { transition: none; }
+}
+/* M643. THE SETUP DOCTOR. A row is the agent and its switch; under it, when
+   there is something to do, the sentence and the exact line to paste. */
+.rd-onboard__rows li { flex-direction: column; align-items: stretch; gap: var(--sp-2); }
+.rd-onboard__row-main { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4); }
+.rd-onboard__fix {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md);
+  font-size: var(--t-sm); color: var(--fg-2);
+}
+.rd-onboard__fix-line { display: flex; align-items: center; gap: var(--sp-3); }
+.rd-onboard__fix-line code {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); user-select: all;
+}
+.rd-onboard__fix-line code::before { content: "$ "; color: var(--fg-4); user-select: none; }
+.rd-onboard__rows .rd-onboard__fix-line button { flex: none; padding: var(--sp-1) var(--sp-4); min-width: 9ch; }
+.rd-onboard__doctor { margin: var(--sp-5) 0 0; font-size: var(--t-sm); color: var(--fg); }
+.rd-onboard__doctor[data-doctor="unknown"] { color: var(--fg-2); }
+.rd-onboard__tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.rd-onboard__tools button:disabled { color: var(--fg-4); cursor: default; }
+/* M644. THE GUIDED FIRST CANVAS. One small card at the canvas's lower left,
+   over the ground and never over the HUD or the pill. Not modal: nothing is dimmed,
+   and everything around it stays live. The tick wears the done tone through
+   the palette's own variable; no state colour is written here. */
+.guide {
+  position: absolute;
+  left: var(--sp-6);
+  bottom: var(--sp-6);
+  z-index: 5;
+  width: min(320px, calc(100% - 2 * var(--sp-6)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  background: var(--s-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--e-3);
+  color: var(--fg);
+  animation: tier-in var(--dur-2) var(--ease) both;
+}
+.guide__head { display: flex; align-items: center; gap: var(--sp-3); }
+.guide__dots { display: flex; gap: var(--sp-2); list-style: none; margin: 0; padding: 0; }
+.guide__dots li { width: var(--sp-5); height: var(--sp-1); border-radius: var(--r-full); background: var(--s-4); transition: background-color var(--dur-2) var(--ease); }
+.guide__dots li[data-past="true"] { background: var(--fg-3); }
+.guide__dots li[data-on="true"] { background: var(--iris); }
+.guide__count { color: var(--fg-3); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.guide__skip {
+  margin-left: auto; background: transparent; border: 0; padding: var(--sp-1) var(--sp-2);
+  color: var(--fg-3); font: inherit; font-size: var(--t-xs); cursor: pointer; border-radius: var(--r-sm);
+}
+.guide__skip:hover { color: var(--fg); background: var(--s-3); }
+.guide__title { margin: 0; font-size: var(--t-md); font-weight: 600; letter-spacing: -.01em; }
+.guide__body { margin: 0; color: var(--fg-2); font-size: var(--t-sm); line-height: 1.45; min-height: calc(3 * 1.45em); }
+.guide__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.guide__tick { color: var(--fg-3); font-size: var(--t-xs); }
+.guide__tick[data-done="true"] { color: var(--fg); }
+.guide__tick[data-done="true"]::before { content: "✓ "; color: var(--iris); }
+.guide__next {
+  font: inherit; font-size: var(--t-sm); cursor: pointer;
+  padding: var(--sp-2) var(--sp-5); border-radius: var(--r-md);
+  background: transparent; color: var(--fg); border: 1px solid var(--line);
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.guide__next:hover { background: var(--s-3); border-color: var(--line-strong); }
+.guide__next[data-primary="true"] { background: var(--iris); border-color: var(--iris); color: var(--on-iris); }
+.guide__skip:focus-visible, .guide__next:focus-visible { outline: 2px solid var(--state-select); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .guide { animation: none; }
+  .guide__dots li, .guide__next { transition: none; }
+}
+/* ── /st:W ── */
+
 
 /* ── st:M670 ── */
 /* M670–M671. Creance's supervision organisms (src/renderer/supervision/,

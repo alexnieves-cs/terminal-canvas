@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { labsOff, type LabId } from '@shared/labs'
+import { FULL_SETTING, isFullMode, labsOff, type LabId } from '@shared/labs'
 
 /**
  * M496. Which hidden surfaces are switched back on, for the renderer.
@@ -12,14 +12,19 @@ import { labsOff, type LabId } from '@shared/labs'
  */
 
 let off: ReadonlySet<LabId> = labsOff(() => undefined)
+// M642. Simple until the first read says otherwise, for the same no-flash reason.
+let full = false
 const listeners = new Set<() => void>()
 let started = false
 
 function read(): void {
   void window.canvas.settings.list().then((rows) => {
-    const next = labsOff((id) => rows.find((row) => row.id === id)?.value)
-    if (next.size === off.size && [...next].every((id) => off.has(id))) return
-    off = next
+    const valueOf = (id: string): unknown => rows.find((row) => row.id === id)?.value
+    const next = labsOff(valueOf)
+    const nextFull = isFullMode(valueOf)
+    if (nextFull === full && next.size === off.size && [...next].every((id) => off.has(id))) return
+    full = nextFull
+    if (!(next.size === off.size && [...next].every((id) => off.has(id)))) off = next
     for (const listener of listeners) listener()
   })
 }
@@ -41,7 +46,7 @@ const snapshot = (): ReadonlySet<LabId> => off
 
 /** The labs that are off right now. A new Set only when the answer changes, so it is a stable memo key. */
 export function useLabsOff(): ReadonlySet<LabId> {
-  return useSyncExternalStore(subscribe, snapshot)
+  return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
 /** Whether one lab's doors are shown. */
@@ -53,4 +58,16 @@ export function useLab(id: LabId): boolean {
 export function labOn(id: LabId): boolean {
   start()
   return !off.has(id)
+}
+
+const fullSnapshot = (): boolean => full
+
+/** M642. Whether the product is in Full mode (Simple is the default). */
+export function useFullMode(): boolean {
+  return useSyncExternalStore(subscribe, fullSnapshot, fullSnapshot)
+}
+
+/** M642. The one write: the View menu's item and nothing else calls it. Settings and the palette write the row themselves. */
+export function setFullMode(next: boolean): void {
+  void window.canvas.settings.set(FULL_SETTING, next)
 }

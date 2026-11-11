@@ -1,4 +1,5 @@
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react'
+import { startGuide } from '../onboarding/guide-store'
 import type { EnvReport } from '@shared/env-report'
 import type { PaletteActions, PresetRow } from '@renderer/palette/commands'
 import { type Panel, isTerminalPanel, isChatPanel, addLink, workCardItemId } from '@renderer/panels/panels'
@@ -224,6 +225,9 @@ export function useShellTail(deps: UseShellTailDeps) {
   const finishOnboarding = (): void => {
     try { window.localStorage.setItem('tc.onboarding.done', '1') } catch { /* the card may return next launch */ }
     setOnboardingDone(true)
+    // M644. The card closing, finished or skipped, is where the three-move
+    // tour begins. Once per install: startGuide does nothing a second time.
+    startGuide()
   }
   // The card's answers are SAVED, not just read: a renamed workspace keeps the
   // name, and the first agent turned on becomes ⌘N. Claude and Codex are

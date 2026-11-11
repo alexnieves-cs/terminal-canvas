@@ -27,6 +27,7 @@ import {
   UPDATES_CATEGORY,
   type SettingDef
 } from '@shared/settings-schema'
+import { FULL_SETTING, LABS } from '@shared/labs'
 
 export type SettingsPaneId = 'general' | 'appearance' | 'terminal' | 'agents' | 'sessions' | 'keyboard' | 'integrations' | 'privacy'
 
@@ -43,7 +44,7 @@ export const SETTINGS_PANES: readonly SettingsPane[] = [
     label: 'General',
     // M496. Labs share General rather than a ninth page: seven switches for
     // surfaces the cut list hid are an arrangement of the window, not a subject.
-    purpose: 'How the window is arranged, which hidden surfaces are switched back on, and whether a launch looks for a newer release.',
+    purpose: 'Simple or Full, how the window is arranged, which extra surfaces are switched on, and whether a launch looks for a newer release.',
     categories: [SHELL_CATEGORY, LABS_CATEGORY, UPDATES_CATEGORY]
   },
   {
@@ -99,7 +100,64 @@ export function settingsPane(id: SettingsPaneId): SettingsPane {
   return found
 }
 
+/**
+ * M641 (lane W). WINDOW MEMORY IS NOT A CHOICE. These rows record where the
+ * person last left the window (which pane, which tab, how wide), and the page
+ * showed them as settings with values like `unset` and `detail` that nobody
+ * can meaningfully pick from a list. They stay settings (the palette still
+ * finds them, a plan may still read them); the page leaves them out.
+ */
+export const PAGE_HIDDEN: ReadonlySet<string> = new Set([
+  'shell.layout.wide', 'shell.layout.narrow', 'shell.inspectorWidth', 'shell.navWidth',
+  'shell.centerView', 'shell.contextTab', 'shell.navigator'
+])
+
 export function rowsForPane(id: SettingsPaneId): SettingDef[] {
   const cats = new Set<string>(settingsPane(id).categories)
-  return SETTINGS.filter((def) => cats.has(def.category) && def.type !== 'list' && def.id !== 'keyboard.overrides')
+  return SETTINGS.filter((def) => cats.has(def.category) && def.type !== 'list' && def.id !== 'keyboard.overrides' && !PAGE_HIDDEN.has(def.id))
+}
+
+/**
+ * M641. A page is short sections under plain headings, not one list: Agents
+ * was twenty-two rows in schema order, a budget beside a bell. The heading is
+ * derived from the row (its category, or its id's prefix inside the two big
+ * categories), so a new setting lands in a section without this file changing.
+ */
+export function sectionOf(def: Pick<SettingDef, 'id' | 'category'>): string {
+  if (def.id === FULL_SETTING) return 'Mode'
+  if (def.category === SHELL_CATEGORY) return 'Window'
+  if (def.category === LABS_CATEGORY) return 'More surfaces'
+  if (def.category === UPDATES_CATEGORY) return 'Updates'
+  if (def.category === RESTORE_CATEGORY) return 'When the app opens'
+  if (def.category === SESSION_CATEGORY) return 'When the app quits'
+  if (def.category === AGENT_CATEGORY) {
+    if (def.id.startsWith('vm.')) return 'Sandboxed lanes'
+    if (/^agents\.(maxConcurrent|budget|nodeCap)/.test(def.id)) return 'Limits and budgets'
+    if (/^(learn\.|agents\.team|agents\.turnSnapshots)/.test(def.id)) return 'Teams and lessons'
+    return 'Attention'
+  }
+  if (def.category === TELEMETRY_CATEGORY) return def.id.startsWith('remote.') ? 'Phone alerts and remote clients' : 'Crash reports'
+  return def.category
+}
+
+export interface PaneSection<T> { title: string; rows: T[] }
+
+/**
+ * The page's rows in sections, in order of first appearance with Mode first.
+ * In Simple the `full` labs' own switches are left out: each only has an
+ * effect in Full, and a row that reads On while its surface is hidden is a lie.
+ */
+export function sectionsFor<T extends Pick<SettingDef, 'id' | 'category'>>(rows: readonly T[], full: boolean): PaneSection<T>[] {
+  const fullOnly = new Set<string>(LABS.filter((lab) => lab.full === true).map((lab) => lab.setting))
+  const out: PaneSection<T>[] = []
+  for (const row of rows) {
+    if (!full && fullOnly.has(row.id)) continue
+    const title = sectionOf(row)
+    const section = out.find((s) => s.title === title)
+    if (section === undefined) out.push({ title, rows: [row] })
+    else section.rows.push(row)
+  }
+  const mode = out.findIndex((s) => s.title === 'Mode')
+  if (mode > 0) out.unshift(...out.splice(mode, 1))
+  return out
 }

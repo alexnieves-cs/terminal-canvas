@@ -11,6 +11,7 @@ import type { PersistedTeammate } from '@shared/teammates'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { ResumeSummary } from '@shared/resume-summary'
 import { BlankCanvas } from '@renderer/shell/EmptyState'
+import { FirstCanvasGuide } from '@renderer/onboarding/FirstCanvasGuide'
 import { ConnectedSpawnMenu } from '@renderer/palette/SpawnSheet'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { Onboarding } from '@renderer/onboarding/Onboarding'
@@ -385,6 +386,9 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
         onDone={() => setRestoreLeft(true)}
       />
     )}
+    {/* M644. The guided first canvas. Out of the way while the first-run card
+        or the merged view owns the screen; it keeps its step and returns. */}
+    <FirstCanvasGuide panelCount={panels.length} reviewOpen={chrome.centerView === 'review'} hidden={showOnboarding || merged} />
     {showOnboarding && !merged && (
       <Onboarding
         workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''}
@@ -393,6 +397,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
         {...(envReport === null ? {} : { tmux: { path: envReport.tmux.path } })}
         onHandoff={(_handoff, answers) => completeOnboarding(answers)}
         onSkip={finishOnboarding}
+        onCheckAgain={() => paletteActions.checkReadiness()}
         onCustom={() => { finishOnboarding(); paletteActionsRef.current?.beginSpawnSheet() }}
       />
     )}

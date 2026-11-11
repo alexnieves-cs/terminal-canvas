@@ -24,6 +24,7 @@ Five streams run at once on separate branches, each opened as its own PR against
 | P | Multiplayer canvas | M580–M589 | Handoffs and a shared review queue on the shared canvas, judged by the collab server; plan in [bold.md](bold.md) |
 | U | UI and UX gaps | M600–M614 | The 24 items an app-wide audit found (2026-10-26): contrast, modal focus, the top bar, one empty-canvas card, a real Review page, hidden doors, plain words, the hosted tab's keys |
 | V | Scale audit | M615–M629 | The 2026-10-30 audit of every shipped feature: copies of one rule that drifted apart become one shared module (broker refusals, type guards, atomic writes), each batch its own PR |
+| W | First ten minutes | M640–M649 | The 2026-11-09 UI and UX pass: defects found by running the app (the tab halo, the terminal strip, Settings), Simple as the default with one Full switch, the setup doctor in the first-run card, and the guided first canvas |
 
 ## Setting your lane
 

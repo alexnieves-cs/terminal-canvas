@@ -537,7 +537,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M383. `.replay` is the Replay sheet's card: modal, over a scrim, the share dialog's shape.
   // M408. `.canvas-context__menu` is the right-click menu: transient, over the
   // canvas in screen space, the View menu's surface — an overlay by every test.
-  const OVERLAY = /\.canvas-context__menu$|\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.shell--inspector-float|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$|\.briefing$|\.canvas-toast$|\.share-dialog__card$|\.replay$/
+  // M644. `.guide` is the first-canvas tour's card: screen space, over the
+  // canvas, separate from whatever is under it — an overlay by the same test.
+  const OVERLAY = /\.guide$|\.canvas-context__menu$|\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.shell--inspector-float|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$|\.briefing$|\.canvas-toast$|\.share-dialog__card$|\.replay$/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere

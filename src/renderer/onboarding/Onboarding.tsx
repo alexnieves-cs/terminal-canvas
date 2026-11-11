@@ -5,7 +5,7 @@ import { panelState } from '../panels/panel-state'
 import type { AgentState } from '@shared/types'
 import {
   AGENTS_STEP_LEAD, AGENTS_STEP_TITLE, CUSTOM_COMMAND, FIRST_TASK_HANDOFF, ONBOARDING_FOOTER, ONBOARDING_RAIL,
-  STATE_PREVIEW_CAPTION, agentRows, installCommand, sessionsPersistence, stepWords,
+  STATE_PREVIEW_CAPTION, agentRows, doctorSummary, sessionsPersistence, stepWords,
   type AgentProbe, type OnboardingAnswers, type OnboardingStepId
 } from '@shared/onboarding'
 
@@ -23,6 +23,12 @@ export interface OnboardingProps {
   tmux?: { path: string | null; timedOut?: boolean }
   onCopy?: (command: string) => void
   onCustom?: () => void
+  /**
+   * M643. Ask the login shell again (the launcher's own Check again). The
+   * card waits for the promise so the button can say it is looking; the new
+   * report arrives through `probes`.
+   */
+  onCheckAgain?: () => Promise<unknown> | void
   /** The last Continue. `answers` is what the person typed and toggled; the caller saves it. */
   onHandoff?: (handoff: typeof FIRST_TASK_HANDOFF, answers: OnboardingAnswers) => void
   /**
@@ -43,7 +49,7 @@ const PREVIEW: ReadonlyArray<{ agent: AgentState; title: string }> = [
 const RUNNING = { kind: 'running' as const, pid: 1, command: 'preview', cwd: '', reattached: false }
 
 export function Onboarding({
-  initialStep = 'workspace', workspaceName = '', probes = [], enabled = [], tmux, onCopy, onCustom, onHandoff, onSkip
+  initialStep = 'workspace', workspaceName = '', probes = [], enabled = [], tmux, onCopy, onCustom, onCheckAgain, onHandoff, onSkip
 }: OnboardingProps): JSX.Element {
   const [step, setStep] = useState<OnboardingStepId>(initialStep)
   // M600. The card owns the window on first run: Tab stays inside it.
@@ -59,13 +65,22 @@ export function Onboarding({
   const sessions = sessionsPersistence(tmux)
   const index = ONBOARDING_RAIL.findIndex((row) => row.id === step)
 
-  const copy = (id: string): void => {
-    const command = installCommand(id)
-    if (command === null) return
+  // M643. Which line was just copied, so its button can say so for a moment.
+  const [copied, setCopied] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
+  const copy = (id: string, command: string): void => {
     onCopy?.(command)
     const clipboard = navigator.clipboard
     if (clipboard !== undefined) void clipboard.writeText(command)
+    setCopied(id)
+    window.setTimeout(() => setCopied((cur) => cur === id ? null : cur), 1600)
   }
+  const checkAgain = (): void => {
+    if (checking || onCheckAgain === undefined) return
+    setChecking(true)
+    void Promise.resolve(onCheckAgain()).catch(() => {}).finally(() => setChecking(false))
+  }
+  const doctor = doctorSummary(view.rows)
 
   const advance = (): void => {
     if (step === 'task') {
@@ -112,19 +127,30 @@ export function Onboarding({
                   <p className="rd-onboard__lead">{AGENTS_STEP_LEAD}</p>
                   <ul className="rd-onboard__rows">
                     {view.rows.map((row) => (
-                      <li key={row.id} data-agent={row.id} data-phase={row.phase}>
-                        <div>
-                          <span className="rd-onboard__agent">{row.label}</span>
-                          <span className="rd-onboard__status">{row.status}</span>
-                          {row.path !== undefined && <span className="rd-onboard__where"><span className="rd-onboard__mono">{row.path}{row.version !== undefined ? ` · ${row.version}` : ''}</span>{row.version === undefined && <span className="rd-onboard__unknown"> · version unknown</span>}</span>}
+                      <li key={row.id} data-agent={row.id} data-phase={row.phase} data-sign-in={row.signIn}>
+                        <div className="rd-onboard__row-main">
+                          <div>
+                            <span className="rd-onboard__agent">{row.label}</span>
+                            <span className="rd-onboard__status" data-doctor-status={row.fix === undefined ? 'ok' : row.fix.kind}>{row.status}</span>
+                            {row.path !== undefined && <span className="rd-onboard__where"><span className="rd-onboard__mono">{row.path}{row.version !== undefined ? ` · ${row.version}` : ''}</span>{row.version === undefined && <span className="rd-onboard__unknown"> · version unknown</span>}</span>}
+                          </div>
+                          {row.phase === 'found' && (
+                            <button type="button" aria-pressed={row.enabled} aria-label={`${row.label}, ${row.enabled ? 'on' : 'off'}`} onClick={() => setChosen((cur) => cur.includes(row.id) ? cur.filter((id) => id !== row.id) : [...cur, row.id])}>
+                              {row.enabled ? 'On' : 'Off'}
+                            </button>
+                          )}
                         </div>
-                        {row.phase === 'found' && (
-                          <button type="button" aria-pressed={row.enabled} onClick={() => setChosen((cur) => cur.includes(row.id) ? cur.filter((id) => id !== row.id) : [...cur, row.id])}>
-                            {row.enabled ? 'On' : 'Off'}
-                          </button>
-                        )}
-                        {row.phase === 'missing' && row.install !== undefined && (
-                          <button type="button" data-copy-install={row.id} onClick={() => copy(row.id)}>Copy install command</button>
+                        {/* M643. The doctor's line: what to do and the exact text to
+                            paste, in view rather than behind a button. Copy puts
+                            it on the clipboard; nothing here runs it. */}
+                        {row.fix !== undefined && (
+                          <div className="rd-onboard__fix" data-doctor-fix={row.fix.kind}>
+                            <span className="rd-onboard__fix-words">{row.fix.sentence}</span>
+                            <span className="rd-onboard__fix-line">
+                              <code>{row.fix.command}</code>
+                              <button type="button" {...(row.fix.kind === 'install' ? { 'data-copy-install': row.id } : { 'data-copy-sign-in': row.id })} onClick={() => copy(row.id, row.fix?.command ?? '')}>{copied === row.id ? 'Copied' : 'Copy'}</button>
+                            </span>
+                          </div>
                         )}
                       </li>
                     ))}
@@ -135,7 +161,11 @@ export function Onboarding({
                       </div>
                     </li>
                   </ul>
-                  <button type="button" className="rd-onboard__custom" onClick={() => onCustom?.()}>{CUSTOM_COMMAND.label}</button>
+                  <p className="rd-onboard__doctor" data-doctor={doctor.tone} role="status">{doctor.sentence}</p>
+                  <div className="rd-onboard__tools">
+                    {onCheckAgain !== undefined && <button type="button" className="rd-onboard__custom" data-doctor-check-again disabled={checking} title="Ask your login shell again, after installing or signing in" onClick={checkAgain}>{checking ? 'Checking…' : 'Check again'}</button>}
+                    <button type="button" className="rd-onboard__custom" onClick={() => onCustom?.()}>{CUSTOM_COMMAND.label}</button>
+                  </div>
                   <p className="rd-onboard__ready" data-ready={view.ready}>{view.label}</p>
                 </>
               )}

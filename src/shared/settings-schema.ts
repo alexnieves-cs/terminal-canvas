@@ -832,10 +832,23 @@ export const SETTINGS: readonly SettingDef[] = [
   // plan should not grow or shrink the product a person chose.
   // Off hides the doors that MINT one; an object already on a canvas still
   // opens, edits and exports (shared/labs.ts says which rows each one hides).
+  // M642 (lane W). Simple and Full. Off (Simple) is the default a new person
+  // meets; shared/labs.ts says which surfaces also need it. First in the
+  // category so the Settings page leads with it. Never planWritable, for the
+  // same reason as the labs below.
+  {
+    id: 'labs.full',
+    label: 'Full mode',
+    description: 'show everything, adding the 3D World view, tournaments, flowchart shapes and the night film; Simple keeps to the canvas, agents, terminals, attention, review, tasks and overnight',
+    keywords: ['full', 'simple', 'mode', 'advanced', 'everything', 'beginner', 'world', 'tournament', 'flowchart', 'film', 'labs'],
+    type: 'boolean',
+    default: false,
+    category: LABS_CATEGORY
+  },
   {
     id: 'labs.world',
     label: 'Show the 3D World view',
-    description: 'put the 2D | World lens on the canvas, ⌘⇧W, and Show in World in Sessions',
+    description: 'in Full mode, put the 2D | World lens on the canvas, ⌘⇧W, and Show in World in Sessions',
     keywords: ['world', '3d', 'room', 'robots', 'lens', 'labs', 'three'],
     type: 'boolean',
     default: true,
@@ -893,6 +906,45 @@ export const SETTINGS: readonly SettingDef[] = [
     keywords: ['toolbox', 'tools', 'permissions', 'memory', 'decided', 'labs'],
     type: 'boolean',
     default: false,
+    category: LABS_CATEGORY
+  },
+  // M642. The three other surfaces Simple hides. On by default and only in
+  // force in Full mode, like World above: each is the switch that puts one away.
+  {
+    id: 'labs.tournament',
+    label: 'Show tournaments',
+    description: 'in Full mode, offer Run as a tournament on a task; one already running keeps its stop, pick and judge rows',
+    keywords: ['tournament', 'race', 'compete', 'agents', 'bracket', 'labs', 'full'],
+    type: 'boolean',
+    default: true,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.flowcharts',
+    label: 'Show flowchart shapes',
+    description: 'in Full mode, offer the Add a step, decision and other shape rows and Import a Mermaid flowchart; shapes already on a canvas still edit and export',
+    keywords: ['flowchart', 'shape', 'diagram', 'mermaid', 'process', 'decision', 'labs', 'full'],
+    type: 'boolean',
+    default: true,
+    category: LABS_CATEGORY
+  },
+  {
+    id: 'labs.film',
+    label: 'Show the night film',
+    description: 'in Full mode, offer Render last night as a film in the palette; the morning card keeps its own button',
+    keywords: ['film', 'video', 'night', 'time-lapse', 'timelapse', 'mp4', 'labs', 'full'],
+    type: 'boolean',
+    default: true,
+    category: LABS_CATEGORY
+  },
+  {
+    // M682. Like the three above: in force only in Full, on by its own default.
+    id: 'labs.fork',
+    label: 'Show fork from a turn',
+    description: 'in Full mode, offer fork from here on an agent\'s answer, which branches a new worktree and chat from that point',
+    keywords: ['fork', 'branch', 'turn', 'worktree', 'resume', 'labs', 'full'],
+    type: 'boolean',
+    default: true,
     category: LABS_CATEGORY
   },
   {

@@ -33,6 +33,10 @@ const { tmpdir } = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { buildSync } = require('esbuild')
 const { app, BrowserWindow, webContents } = require('electron')
+// M642. The suites exercise the Full product (the World scenes, the
+// tournament and shape rows); Simple is pinned by verify:palette full.*.
+// Read by main's settings:list, so it must be set before any handler runs.
+process.env.TC_FULL ??= '1'
 
 // On CI, as panels-harness.cjs decides it; TC_SHOT_OFFSCREEN=1 tries it locally.
 const SHOT_OFFSCREEN = !!process.env.CI || process.env.TC_SHOT_OFFSCREEN === '1'

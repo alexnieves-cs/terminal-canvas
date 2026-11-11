@@ -11,6 +11,10 @@ const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readF
 const { execFileSync, spawn: spawnChild } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow, ipcMain, webContents, clipboard } = require('electron')
+// M642. The suites exercise the Full product (the World scenes, the
+// tournament and shape rows); Simple is pinned by verify:palette full.*.
+// Read by main's settings:list, so it must be set before any handler runs.
+process.env.TC_FULL ??= '1'
 // Per-job userData, for the reason ENTRY_OUT is suffixed: captures and assets
 // land under app.getPath('userData'), and product's image-add check clears and
 // COUNTS that directory, so two parts sharing it read each other's files. Only

@@ -3355,7 +3355,9 @@ const FRESH = () => ctx({
   const fs = require('node:fs')
   const src = (rel) => fs.readFileSync(join(__dirname, '..', rel), 'utf8')
   const defs = P.LABS.map((lab) => P.SETTINGS.find((d) => d.id === lab.setting))
-  const strays = P.SETTINGS.filter((d) => d.id.startsWith('labs.') && !P.LABS.some((lab) => lab.setting === d.id)).map((d) => d.id)
+  // M642. `labs.full` is the mode, not a lab: it has no rows of its own, so it
+  // is the one labs.* setting without a LabDef (full.1 below pins it).
+  const strays = P.SETTINGS.filter((d) => d.id.startsWith('labs.') && d.id !== P.FULL_SETTING && !P.LABS.some((lab) => lab.setting === d.id)).map((d) => d.id)
   ok('labs.1 every lab is a declared boolean setting whose default is the lab\'s own, in the Labs category, not planWritable — and no labs.* setting is without a lab',
     P.LABS.length > 0 && defs.every((d, i) => d !== undefined && d.type === 'boolean' && d.default === P.LABS[i].shown && d.category === P.LABS_CATEGORY && d.planWritable === undefined) &&
       strays.length === 0 && P.LABS.every((lab) => lab.setting === `labs.${lab.id}`),
@@ -3380,7 +3382,9 @@ const FRESH = () => ctx({
   const rows = [...built].map((id) => ({ id }))
   const allOff = P.labsOff(() => false)
   const allOn = P.labsOff(() => true)
-  const atDefaults = P.labsOff(() => undefined)
+  // M642. "At the defaults" for the LABS is with Full on: Simple hides the
+  // `full` labs as well, and full.2 below is where that is pinned.
+  const atDefaults = P.labsOff((id) => id === P.FULL_SETTING ? true : undefined)
   const off = P.withoutHiddenLabs(rows, allOff).map((r) => r.id)
   ok('labs.4 at the defaults only the hidden labs are off (World stays); switched off, a lab\'s rows leave; switched on, nothing leaves; a malformed value is off',
     allOff.size === P.LABS.length && allOn.size === 0 && P.labsOff(() => 'true').size === P.LABS.length &&
@@ -3388,6 +3392,41 @@ const FRESH = () => ctx({
       !off.includes('object.create.deck') && !off.includes('jira.open') && off.includes('object.create.note') && off.includes('spawn.sheet') &&
       P.withoutHiddenLabs(rows, allOn).length === rows.length && off.length === rows.length - rows.filter((r) => P.labOfRow(r.id) !== undefined).length,
     JSON.stringify({ off: allOff.size, kept: off.length, rows: rows.length }))
+
+  // full.* — M642 (lane W). Simple and Full: one switch, off by default,
+  // that the `full` labs also need.
+  {
+    const fullDef = P.SETTINGS.find((d) => d.id === P.FULL_SETTING)
+    ok('full.1 the mode is one declared boolean, off by default (Simple), in the Labs category, not planWritable, and no lab claims it',
+      fullDef !== undefined && fullDef.type === 'boolean' && fullDef.default === false && fullDef.category === P.LABS_CATEGORY && fullDef.planWritable === undefined &&
+        !P.LABS.some((lab) => lab.setting === P.FULL_SETTING),
+      JSON.stringify(fullDef))
+    const fullLabs = P.LABS.filter((lab) => lab.full === true).map((lab) => lab.id).sort()
+    const simple = P.labsOff(() => undefined)
+    const fullOn = P.labsOff((id) => id === P.FULL_SETTING ? true : undefined)
+    const worldOffInFull = P.labsOff((id) => id === P.FULL_SETTING ? true : id === 'labs.world' ? false : undefined)
+    ok('full.2 Simple (the default, and any malformed value) hides every full lab; Full shows them; a full lab\'s own switch still puts it away in Full; a full lab is on by its own default',
+      fullLabs.join() === 'film,flowcharts,fork,tournament,world' && fullLabs.every((id) => simple.has(id)) && fullLabs.every((id) => !fullOn.has(id)) &&
+        fullLabs.every((id) => P.labsOff((s) => s === P.FULL_SETTING ? 'true' : undefined).has(id)) &&
+        worldOffInFull.has('world') && !worldOffInFull.has('film') && P.LABS.filter((lab) => lab.full === true).every((lab) => lab.shown === true) &&
+        P.isFullMode(() => undefined) === false && P.isFullMode(() => true) === true,
+      JSON.stringify({ fullLabs, simple: [...simple] }))
+    const simpleRows = P.withoutHiddenLabs(rows, simple).map((r) => r.id)
+    const core = ['spawn.sheet', 'start.work', 'panel.review', 'task.tonight', 'canvas.fit', 'object.create.note', 'flowchart.connect', 'task.tournament-stop', 'task.tournament-pick', 'shape.style', 'flowchart.export.svg']
+    const gone = ['world.view', 'task.tournament', 'task.tournament-field', 'shape.add.process', 'shape.add.decision', 'flowchart.import', 'film.last-night']
+    ok('full.3 Simple keeps the core rows and every verb on what already exists (stop a tournament, restyle a shape, export a chart), and hides only the rows that START a full surface',
+      core.every((id) => !built.has(id) && !palSrc.includes(`id: '${id}'`) ? true : P.labOfRow(id) === undefined) &&
+        gone.every((id) => P.labOfRow(id) !== undefined) && gone.filter((id) => built.has(id)).every((id) => !simpleRows.includes(id)),
+      JSON.stringify({ core: core.map((id) => [id, P.labOfRow(id)]), gone: gone.map((id) => [id, P.labOfRow(id)]) }))
+    const bar = src('src/renderer/shell/TopBar.tsx')
+    const ipc = src('src/main/ipc.ts')
+    const harness = ['scripts/panels-harness.cjs', 'scripts/shot.cjs', 'scripts/verify-canvas.cjs'].map(src)
+    ok('full.4 the View menu carries the switch, and the harnesses that run real main launch Full (TC_FULL) through a default that never overrides a stored choice',
+      /data-view-full/.test(bar) && /setFullMode\(!fullMode\)/.test(bar) &&
+        /def\.id === FULL_SETTING && !\(def\.id in layoutStore\.preferences\(\)\) && process\.env\.TC_FULL === '1'/.test(ipc) &&
+        harness.every((text) => /process\.env\.TC_FULL \?\?= '1'/.test(text)),
+      '')
+  }
 
   // The doors outside the palette, read as text: each reads its lab, and the
   // way OUT of a room opened anyway is never what is hidden.

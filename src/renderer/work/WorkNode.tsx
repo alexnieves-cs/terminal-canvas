@@ -15,6 +15,7 @@ import { retainedNextAction, retainedRefsWord, type RetainedOutcome } from '@sha
 import type { ReviewHandoff } from '@shared/review-readiness'
 import type { RadarFlag } from '@shared/collision-radar'
 import { SWARM_LIST, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
+import { useLab } from '@renderer/labs/useLabs'
 
 /**
  * M116. THE WORK CARD — the board's row in the world, the twelfth kind,
@@ -138,6 +139,8 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
   const [assignOpen, setAssignOpen] = useState(false)
   const [swarmOpen, setSwarmOpen] = useState(false)
   const [cloudOpen, setCloudOpen] = useState(false)
+  // M642. A tournament is one of the surfaces Simple hides (shared/labs.ts).
+  const tournamentShown = useLab('tournament')
   const cloud = useCloudLane(item?.id)
   const cloudWord = cloud === undefined ? undefined : cloudLaneWord(cloud.state)
   const readOnly = props.readOnly === true
@@ -410,7 +413,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                         and the card's resting face stays as it was. Refused by
                         the two facts the card holds — a lane to fork from and a
                         check to decide — in the verb's own words. */}
-                    {props.onTournament !== undefined && (() => {
+                    {tournamentShown && props.onTournament !== undefined && (() => {
                       const why = item.panelId === undefined ? 'no lane yet — start work on this item first'
                         : (item.checks ?? []).length === 0 && (item.recipeUsed?.definition.checks ?? []).length === 0 ? 'this task has no check — add one; the check is what picks the winner' : null
                       return (<>
