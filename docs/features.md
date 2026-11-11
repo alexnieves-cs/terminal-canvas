@@ -164,7 +164,7 @@ build; nothing is asserted — the images are for eyes). Six of them, described:
   recorded tail and a dashed grey edge, `click to start`; a review node listing two changed
   files with `discard` beside each and `commit` in the chrome; a file panel and a note with
   `editing` and `Save` in the chrome row; `toolbox · repo` with its slash commands and
-  permissions; the Jira panel with `Connect Jira…`. Since 2.3.0 the ground is lit by an aura, the frames are glass with one low lift, and the state edge glows.
+  permissions. Since 2.3.0 the ground is lit by an aura, the frames are glass with one low lift, and the state edge glows.
 - **`overview.png`** — the same canvas at 100% with the minimap in the top-right corner: one
   block per panel in its state colour, the waiting panel amber, asleep panels dashed, the
   camera an iris rectangle. The dock badge says `1`; the rail says `needs you` on the same
