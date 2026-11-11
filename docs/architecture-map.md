@@ -289,8 +289,8 @@ check does not, and should not, cover it.
   when its trigger says so, with NO pty anywhere in it. The process seam is injected
   (`agent-runner.ts`'s shape), so the coalesce, the exit arms, the capped tail and the ledger
   row all run under plain node in `verify:file watch.1`. ARMING is `main/index.ts`'s — a
-  recursive `fs.watch` for a directory, `FileWatchers` for a file (including a git trigger's
-  `.git/HEAD`), an interval for a timer — and the `panel` trigger is the RENDERER's, fired
+  recursive `fs.watch` for a directory, `FileWatchers` for a file, `git-head-watch.ts` for
+  a git trigger (the commit HEAD names, M660), an interval for a timer — and the `panel` trigger is the RENDERER's, fired
   from the same events and the same `handoffFires` table the graph's edges ask.
   `shared/watch-trigger.ts` is the union and the one phrase every surface says it with;
   `renderer/watcher/` holds the node, the per-panel store mirror and the palette's parse.

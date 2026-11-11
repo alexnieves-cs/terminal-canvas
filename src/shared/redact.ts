@@ -57,7 +57,9 @@ export function redactSecrets(text: string): Redaction {
       count += 1
       // `$1` is the one back-reference a placeholder may carry (the URL rule's
       // scheme-and-user); a function replacer does not expand it on its own.
-      return typeof group1 === 'string' ? rule.placeholder.replace('$1', group1) : rule.placeholder
+      // M660. Inserted by a function too: a string replacement would read a
+      // `$&` or `$'` inside the user name as a pattern and mangle the line.
+      return typeof group1 === 'string' ? rule.placeholder.replace('$1', () => group1) : rule.placeholder
     })
   }
   return { text: out, count }

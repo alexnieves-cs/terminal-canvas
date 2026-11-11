@@ -468,11 +468,11 @@ export function compareRecipeRuns(now: { item: PersistedWorkItem; outcome: Recip
   const o = now.outcome, p = before.outcome
   out.push(`${o.merged ? 'merged' : o.finished ? 'done' : 'not finished'} (last success: ${p.merged ? 'merged' : 'done'})`)
   if (o.durationMs !== undefined && p.durationMs !== undefined) out.push(`${minutes(o.durationMs)} to ${o.merged ? 'merge' : 'review'} (last success: ${minutes(p.durationMs)})`)
-  if (o.reviewedFiles !== undefined && p.reviewedFiles !== undefined) out.push(`${o.reviewedFiles} files reviewed (last success: ${p.reviewedFiles})`)
+  if (o.reviewedFiles !== undefined && p.reviewedFiles !== undefined) out.push(`${o.reviewedFiles} file${o.reviewedFiles === 1 ? '' : 's'} reviewed (last success: ${p.reviewedFiles})`)
   if (o.criteria.total > 0 || p.criteria.total > 0) out.push(`${o.criteria.met} of ${o.criteria.total} criteria confirmed (last success: ${p.criteria.met} of ${p.criteria.total})`)
   if (o.passed !== undefined && p.passed !== undefined) {
     const lost = p.passed.filter((c) => !(o.passed ?? []).includes(c))
-    out.push(lost.length === 0 ? `${o.passed.length} checks passing (last success: ${p.passed.length})` : `${o.passed.length} checks passing — not passing now: ${lost.map((c) => `\`${c}\``).join(', ')}`)
+    out.push(lost.length === 0 ? `${o.passed.length} check${o.passed.length === 1 ? '' : 's'} passing (last success: ${p.passed.length})` : `${o.passed.length} check${o.passed.length === 1 ? '' : 's'} passing — not passing now: ${lost.map((c) => `\`${c}\``).join(', ')}`)
   } else {
     out.push('checks: not compared — the evidence for one of the runs was not read')
   }

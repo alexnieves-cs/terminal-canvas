@@ -95,6 +95,20 @@ function absolute(path: string, base: string): string {
  * agent's `tc view` is refused exactly where its `tc plan` would be. A page
  * becomes a browser panel, a picture an image, anything else a file panel.
  */
+/**
+ * M660. A relative directory, made absolute against the caller's shell.
+ * The socket's other end is the APP, whose working directory is `/` when it
+ * is launched from the Dock — so `tc open --cwd .` used to open a panel at
+ * `/`, and `--cwd src` was refused as missing. `~` is left for main to
+ * expand (a quoted `~/x` reaches here unexpanded); with no absolute PWD the
+ * path goes as written, as before.
+ */
+export function callerPath(path: string, env: Record<string, string | undefined>): string {
+  if (path.startsWith('/') || path === '~' || path.startsWith('~/')) return path
+  const base = env['PWD'] ?? env['TC_PANEL_CWD']
+  return base !== undefined && base.startsWith('/') ? absolute(path, base) : path
+}
+
 export function viewPlan(target: string, env: Record<string, string | undefined>): { kind: 'ok'; line: string } | { kind: 'usage'; error: string } {
   // `;` would start a second plan step, and the plan splits words on runs of
   // whitespace, so neither can ride inside one argument.
@@ -131,7 +145,7 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
         const flag = rest[i]!
         const value = rest[i + 1]
         if ((flag === '--preset' || flag === '--cwd') && value !== undefined) {
-          fields[flag.slice(2)] = value
+          fields[flag.slice(2)] = flag === '--cwd' ? callerPath(value, env) : value
           i += 1
         } else {
           return { kind: 'usage', error: `unexpected argument ${flag}` }
@@ -156,7 +170,8 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
         if ((flag === '--brief' || flag === '--recipe' || flag === '--cwd' || flag === '--criterion' || flag === '--swarm') && value === undefined) return { kind: 'usage', error: `${flag} needs a value` }
         // M370. `--swarm review` proposes the task WITH an arrangement: Start
         // work opens with it chosen, and a person still presses Start.
-        if (flag === '--brief' || flag === '--recipe' || flag === '--cwd' || flag === '--swarm') { fields[flag.slice(2)] = value; i += 1 }
+        if (flag === '--brief' || flag === '--recipe' || flag === '--swarm') { fields[flag.slice(2)] = value; i += 1 }
+        else if (flag === '--cwd') { fields.cwd = callerPath(value as string, env); i += 1 }
         else if (flag === '--criterion') { criteria.push(value as string); i += 1 }
         else if (flag.startsWith('--')) return { kind: 'usage', error: `unexpected argument ${flag}` }
         else words.push(flag)
@@ -193,7 +208,8 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
         const flag = flags[i]!
         const value = flags[i + 1]
         if (value === undefined) return { kind: 'usage', error: `${flag} needs a value` }
-        if (flag === '--root' || flag === '--kind' || flag === '--text') { fields[flag.slice(2)] = value; i += 1; continue }
+        if (flag === '--root') { fields.root = callerPath(value, env); i += 1; continue }
+        if (flag === '--kind' || flag === '--text') { fields[flag.slice(2)] = value; i += 1; continue }
         // M121. A teammate's OWN memory: the `teammate:<id>` root main already
         // sorts by (the pane reads the same list), so the flag is a root, not a
         // second field the handler would have to learn.

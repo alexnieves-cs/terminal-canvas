@@ -23,6 +23,7 @@ import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type Template
 import { parseWorkflowNode } from '../workflow-nodes'
 import { TEAMMATES_MAX, type PersistedTeammate } from '../teammates'
 import { ROUTINES_MAX, ROUTINE_MIN_MS, type PersistedRoutine } from '../routines'
+import { TIMER_MAX_MS } from '../watch-trigger'
 import { AGENT_KINDS, type AgentKind } from '../cost'
 import { isNum, isRecord, isStr, parseAgentOptions, parseEnvMap, parseWorktreeFlag } from './fields'
 import type { Preset, Prompt, WorktreeRecord } from './types'
@@ -523,7 +524,10 @@ export function parseRoutines(raw: unknown, warnings: string[]): PersistedRoutin
     if (!isStr(entry.teammateId) || entry.teammateId.trim() === '') { warnings.push(`dropped routine ${entry.id}: it names no teammate`); return }
     if (!isNum(entry.everyMs) || entry.everyMs < ROUTINE_MIN_MS) { warnings.push(`dropped routine ${entry.id}: the interval was under ${ROUTINE_MIN_MS / 1000}s or not a number`); return }
     if (!isStr(entry.prompt)) { warnings.push(`dropped routine ${entry.id}: prompt was unusable`); return }
-    const r: PersistedRoutine = { id: entry.id, name: entry.name, teammateId: entry.teammateId, everyMs: entry.everyMs, prompt: entry.prompt, paused: entry.paused === true }
+    // M660. Clamped, not dropped: a longer interval cannot reach setInterval
+    // (it would fire every millisecond), and the routine is still the person's.
+    if (entry.everyMs > TIMER_MAX_MS) warnings.push(`routine ${entry.id}: its interval was longer than a timer can hold — kept at 24 days`)
+    const r: PersistedRoutine = { id: entry.id, name: entry.name, teammateId: entry.teammateId, everyMs: Math.min(entry.everyMs, TIMER_MAX_MS), prompt: entry.prompt, paused: entry.paused === true }
     if (isStr(entry.plan) && entry.plan.trim() !== '') r.plan = entry.plan
     if (isRecord(entry.lastRun) && isNum(entry.lastRun.at) && (entry.lastRun.outcome === 'started' || entry.lastRun.outcome === 'refused')) {
       r.lastRun = { at: entry.lastRun.at, outcome: entry.lastRun.outcome, ...(isStr(entry.lastRun.panelId) ? { panelId: entry.lastRun.panelId } : {}), ...(isStr(entry.lastRun.error) ? { error: entry.lastRun.error } : {}) }

@@ -12,6 +12,14 @@ export interface UsageEntry {
   totals: TokenTotals
   /** An isSidechain record: a subagent's turn, in the same session file. */
   subagent: boolean
+  /**
+   * M660. `message.id`, when the line carries one. Claude Code writes ONE
+   * line per content block (thinking, text, each tool_use), and every line of
+   * a message repeats that message's usage — measured on a real transcript:
+   * 140 assistant lines for 76 API calls. The accumulator counts a message
+   * once by this id; summing lines overstated tokens, cost and turns ~1.8x.
+   */
+  messageId?: string
 }
 
 export interface ParsedChunk {
@@ -69,6 +77,7 @@ export function parseUsageChunk(text: string, carry: string): ParsedChunk {
     entries.push({
       model: typeof message.model === 'string' ? message.model : 'unknown',
       subagent: parsed.isSidechain === true,
+      ...(typeof message.id === 'string' && message.id !== '' ? { messageId: message.id } : {}),
       totals: {
         input: num(usage.input_tokens),
         output: num(usage.output_tokens),
