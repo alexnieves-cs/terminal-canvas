@@ -1,4 +1,4 @@
-import { addTotals, emptyTotals, type PanelUsage } from '../shared/cost'
+import { addTotals, emptyTotals, type PanelUsage, type TokenTotals } from '../shared/cost'
 import { parseUsageChunk } from './usage-parse'
 
 /**
@@ -14,7 +14,16 @@ interface PanelState {
   offset: number
   carry: string
   usage: PanelUsage
+  /**
+   * M660. What each recent message id has already contributed, so the
+   * per-block lines that repeat one message's usage count once. Bounded:
+   * a message's lines are adjacent in the file, so the newest few ids are
+   * all a later line can still belong to.
+   */
+  seen: Map<string, TokenTotals>
 }
+
+const SEEN_MAX = 64
 
 export interface UsageState {
   panels: Map<string, PanelState>
@@ -30,7 +39,8 @@ function stateFor(state: UsageState, panelId: string): PanelState {
     s = {
       offset: 0,
       carry: '',
-      usage: { totals: emptyTotals(), byModel: {}, turns: 0, subagentTurns: 0 }
+      usage: { totals: emptyTotals(), byModel: {}, turns: 0, subagentTurns: 0 },
+      seen: new Map()
     }
     state.panels.set(panelId, s)
   }
@@ -92,17 +102,41 @@ export function applyChunk(
   const { entries, carry } = parseUsageChunk(text, s.carry)
   s.carry = carry
   if (entries.length === 0) return undefined
+  let changed = false
   for (const entry of entries) {
-    s.usage.totals = addTotals(s.usage.totals, entry.totals)
+    // M660. A later line of a message already counted adds only what grew
+    // (nothing, when the usage is repeated verbatim), and is not a new turn.
+    const before = entry.messageId === undefined ? undefined : s.seen.get(entry.messageId)
+    const add = before === undefined ? entry.totals : {
+      input: Math.max(0, entry.totals.input - before.input),
+      output: Math.max(0, entry.totals.output - before.output),
+      cacheWrite: Math.max(0, entry.totals.cacheWrite - before.cacheWrite),
+      cacheRead: Math.max(0, entry.totals.cacheRead - before.cacheRead)
+    }
+    if (entry.messageId !== undefined) {
+      s.seen.delete(entry.messageId)
+      s.seen.set(entry.messageId, before === undefined ? { ...entry.totals } : {
+        input: Math.max(before.input, entry.totals.input),
+        output: Math.max(before.output, entry.totals.output),
+        cacheWrite: Math.max(before.cacheWrite, entry.totals.cacheWrite),
+        cacheRead: Math.max(before.cacheRead, entry.totals.cacheRead)
+      })
+      if (s.seen.size > SEEN_MAX) s.seen.delete(s.seen.keys().next().value as string)
+    }
+    if (before !== undefined && add.input === 0 && add.output === 0 && add.cacheWrite === 0 && add.cacheRead === 0) continue
+    changed = true
+    s.usage.totals = addTotals(s.usage.totals, add)
     s.usage.byModel[entry.model] = addTotals(
       s.usage.byModel[entry.model] ?? emptyTotals(),
-      entry.totals
+      add
     )
+    if (before !== undefined) continue
     s.usage.turns += 1
     // Included in `turns`, not counted beside it: the pane renders "N turns,
     // M of them subagent", and two figures that do not reconcile read as a bug.
     if (entry.subagent) s.usage.subagentTurns += 1
   }
+  if (!changed) return undefined
   // A fresh object, so the renderer store's identity check and React's
   // useSyncExternalStore both see a real change. Mutating in place would make
   // the snapshot identical by reference and the pane would never repaint.

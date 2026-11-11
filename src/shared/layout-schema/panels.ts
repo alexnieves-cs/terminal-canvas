@@ -36,7 +36,7 @@ import type { ToolboxSource } from '../toolbox'
 import type { ChatSource } from '../chat-panel'
 import { parseSwarmMark } from '../swarm'
 import { HANDOFF_TRIGGERS, type HandoffTrigger, type LinkAutomation } from '../handoff'
-import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../watch-trigger'
+import { TIMER_MAX_MS, WATCH_TIMER_MIN_MS, type WatchTrigger } from '../watch-trigger'
 import { AGENT_KINDS, type AgentKind } from '../cost'
 import {
   isNum,
@@ -117,7 +117,9 @@ export function parseWatch(raw: unknown, id: string, warnings: string[]): { cwd:
       warnings.push(`dropped watcher panel ${id}: its timer asked for every ${t.everyMs}ms, below the ${WATCH_TIMER_MIN_MS}ms floor`)
       return null
     }
-    return { cwd: raw.cwd, command: raw.command, args, ...armed, ...templateMark, trigger: { kind: 'timer', everyMs: t.everyMs } }
+    // M660. Clamped, not dropped — see TIMER_MAX_MS.
+    if (t.everyMs > TIMER_MAX_MS) warnings.push(`watcher panel ${id}: its timer was longer than a timer can hold — kept at 24 days`)
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, ...templateMark, trigger: { kind: 'timer', everyMs: Math.min(t.everyMs, TIMER_MAX_MS) } }
   }
   if (t.kind === 'panel' && isStr(t.sourceId) && t.sourceId.trim() !== '' && HANDOFF_TRIGGERS.includes(t.on as HandoffTrigger)) {
     return { cwd: raw.cwd, command: raw.command, args, ...armed, ...templateMark, trigger: { kind: 'panel', sourceId: t.sourceId, on: t.on as HandoffTrigger } }

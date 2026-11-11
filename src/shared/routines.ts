@@ -1,4 +1,5 @@
 import { buildPlan, parsePlanLine, planIsDestructive, type PlanFacts } from './plan'
+import { TIMER_MAX_MS, TIMER_MAX_WORD } from './watch-trigger'
 
 /**
  * M101. A ROUTINE is a scheduled run that starts a FRESH chat as a teammate:
@@ -64,6 +65,7 @@ export function routineRefusal(r: PersistedRoutine, teammate: { name: string; sc
   if (!teammate.scheduling) return `${teammate.name} may not be scheduled — allow scheduling on the teammate first`
   if (teammate.places !== undefined && teammate.places.length === 0) return `${teammate.name} has no places — a routine's chat needs a folder to work in; add one first`
   if (!Number.isFinite(r.everyMs) || r.everyMs < ROUTINE_MIN_MS) return `the shortest interval is ${ROUTINE_MIN_MS / 60_000} minute${ROUTINE_MIN_MS === 60_000 ? '' : 's'}`
+  if (r.everyMs > TIMER_MAX_MS) return TIMER_MAX_WORD
   if (r.prompt.trim() === '') return 'a routine needs a prompt — what the chat is asked each time'
   if (r.plan !== undefined && r.plan.trim() !== '') {
     const inputs = parsePlanLine(r.plan)

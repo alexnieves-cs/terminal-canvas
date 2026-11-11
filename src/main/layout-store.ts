@@ -468,8 +468,14 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     w.runs = (incoming.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) }))
     // M93. Absent stays absent ON DISK: an empty list is no key, so a pre-M93
     // reader (and the layout check that counts keys) sees the file it knew.
-    if (incoming.annotations !== undefined && incoming.annotations.length > 0) w.annotations = incoming.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } }))
-    else delete w.annotations
+    // M660. Gated on `layout`, like the panels the notes are pinned to:
+    // initial() hands the renderer no annotations when `restore.layout` is
+    // off, so an ungated write here deleted the stored notes on the first
+    // camera pan — the "discard on launch" the comment above refuses.
+    if (layout) {
+      if (incoming.annotations !== undefined && incoming.annotations.length > 0) w.annotations = incoming.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } }))
+      else delete w.annotations
+    }
     // M113. The same absent-when-empty rule, for the same reader.
     if (incoming.workItems !== undefined && incoming.workItems.length > 0) w.workItems = incoming.workItems.map(carryWorkItem)
     else delete w.workItems
@@ -963,6 +969,10 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       const w = activeWorkspace()
       const fresh = defaultWorkspace()
       w.panels = []
+      // M660. The groups go with the panels they name, as the renderer's own
+      // reset does; without this the file kept groups of panels that no
+      // longer exist until the renderer's next save happened to land.
+      w.groups = []
       w.camera = { ...fresh.camera }
       w.selectedId = null
       w.focusedId = null
