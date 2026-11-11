@@ -5,9 +5,9 @@
 # Terminal Canvas
 
 <p align="center">
-  <strong>An infinite canvas for coding agents.</strong><br>
-  Run Claude Code, Codex and plain shells side by side, see which one needs you,
-  review what each one changed, and wake up to finished work.
+  <strong>Run coding agents side by side. Review every change.</strong><br>
+  Claude Code, Codex and plain shells each get a real terminal on one canvas.
+  See which one needs you, review what each one changed, and wake up to finished work.
 </p>
 
 <p align="center">
