@@ -938,6 +938,16 @@ export const SETTINGS: readonly SettingDef[] = [
     category: LABS_CATEGORY
   },
   {
+    // M682. Like the three above: in force only in Full, on by its own default.
+    id: 'labs.fork',
+    label: 'Show fork from a turn',
+    description: 'in Full mode, offer fork from here on an agent\'s answer, which branches a new worktree and chat from that point',
+    keywords: ['fork', 'branch', 'turn', 'worktree', 'resume', 'labs', 'full'],
+    type: 'boolean',
+    default: true,
+    category: LABS_CATEGORY
+  },
+  {
     // M446. A list of `id<TAB>chord`, not a record: SettingValue has no object,
     // and parsePreferences already checks a list of strings. The Keyboard page
     // is the editor. A plan must not rebind the canvas out from under a person.

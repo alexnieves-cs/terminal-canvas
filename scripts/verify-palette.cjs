@@ -3406,7 +3406,7 @@ const FRESH = () => ctx({
     const fullOn = P.labsOff((id) => id === P.FULL_SETTING ? true : undefined)
     const worldOffInFull = P.labsOff((id) => id === P.FULL_SETTING ? true : id === 'labs.world' ? false : undefined)
     ok('full.2 Simple (the default, and any malformed value) hides every full lab; Full shows them; a full lab\'s own switch still puts it away in Full; a full lab is on by its own default',
-      fullLabs.join() === 'film,flowcharts,tournament,world' && fullLabs.every((id) => simple.has(id)) && fullLabs.every((id) => !fullOn.has(id)) &&
+      fullLabs.join() === 'film,flowcharts,fork,tournament,world' && fullLabs.every((id) => simple.has(id)) && fullLabs.every((id) => !fullOn.has(id)) &&
         fullLabs.every((id) => P.labsOff((s) => s === P.FULL_SETTING ? 'true' : undefined).has(id)) &&
         worldOffInFull.has('world') && !worldOffInFull.has('film') && P.LABS.filter((lab) => lab.full === true).every((lab) => lab.shown === true) &&
         P.isFullMode(() => undefined) === false && P.isFullMode(() => true) === true,

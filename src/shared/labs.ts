@@ -23,7 +23,7 @@
  * and the plain-node suites all read the same list.
  */
 
-export type LabId = 'world' | 'accounts' | 'relay' | 'decks' | 'sheets' | 'jira' | 'toolbox' | 'tournament' | 'flowcharts' | 'film'
+export type LabId = 'world' | 'accounts' | 'relay' | 'decks' | 'sheets' | 'jira' | 'toolbox' | 'tournament' | 'flowcharts' | 'film' | 'fork'
 
 /**
  * M642 (lane W). SIMPLE AND FULL. One boolean, off by default, that the
@@ -82,7 +82,13 @@ export const LABS: readonly LabDef[] = [
   // the morning card keeps its own film button on the night it has one.
   { id: 'tournament', setting: 'labs.tournament', shown: true, full: true, rows: ['task.tournament', 'task.tournament-field'] },
   { id: 'flowcharts', setting: 'labs.flowcharts', shown: true, full: true, rows: ['flowchart.import'], prefixes: ['shape.add.'] },
-  { id: 'film', setting: 'labs.film', shown: true, full: true, rows: ['film.last-night'] }
+  { id: 'film', setting: 'labs.film', shown: true, full: true, rows: ['film.last-night'] },
+  // M682. Fork from a turn resumes the agent in a new worktree, and that resume
+  // still owes its hand check on a real Mac (lane K). Until it has one, a new
+  // person does not meet it: the chat's "fork from here" is its only door
+  // outside Replay, and Replay's Branch already needs per-turn snapshots on.
+  // No palette row mints a fork, so the lab hides no rows, only that button.
+  { id: 'fork', setting: 'labs.fork', shown: true, full: true, rows: [] }
 ]
 
 /** The lab whose doors include this palette row, or undefined for a row no lab hides. */
