@@ -55,7 +55,7 @@ export interface CreationHost {
   terminal(): Promise<CreationResult>
   agent(): Promise<CreationResult>
   /** M245: a discriminator rather than M244's boolean, now that a document can be a note, a checklist or a sheet; M248's deck joins by adding a word. */
-  document(view: 'note' | 'checklist' | 'sheet' | 'deck', name?: string): Promise<CreationResult>
+  document(view: 'note' | 'checklist' | 'deck', name?: string): Promise<CreationResult>
   image(path?: string): Promise<CreationResult>
   workflow(): Promise<CreationResult>
   browser(url?: string): Promise<CreationResult>
@@ -85,7 +85,6 @@ export const CREATABLE_OBJECTS = [
   creation('workflow', 'Workflow', 'workflow', (h) => h.workflow()),
   creation('browser', 'Browser/Preview', 'browser', (h, value) => h.browser(value)),
   creation('checklist', 'Checklist', 'checklist', (h, value) => h.document('checklist', value), 'folder'),
-  creation('sheet', 'Sheet', 'sheet', (h, value) => h.document('sheet', value), 'folder'),
   creation('deck', 'Deck', 'deck', (h, value) => h.document('deck', value), 'folder'),
   // M252. 'folder' because a tool is MADE somewhere: a mini app's files go
   // under <folder>/tools/, and a workflow's blocks work in that folder.
@@ -117,12 +116,8 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'deck-export-pdf', label: 'Deck: export to PDF', args: [panel()], destructive: false, actions: ['exportDeckPdf'], target: 'panel', hint: 'one 16:9 page per slide, through a save dialog; notes are left out' },
   { id: 'checklist-edit', label: 'Checklist: edit item', args: [panel(), { name: 'operation', kind: 'value' }, { name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['editChecklist'], target: 'panel', hint: 'add text, toggle/delete a zero-based line, move line to-line, undo or redo' },
   { id: 'checklist-hand', label: 'Checklist: hand to agent', args: [panel(), { name: 'line', kind: 'value' }, panel('agent')], destructive: false, actions: ['handChecklist'], target: 'panel', hint: 'send a task line to an idle conversation, through the ordinary send gate' },
-  // M245. "Edit sheet X": one cell, through the sheet's own guarded write. An empty value clears the cell.
-  { id: 'sheet-edit', label: 'Sheet: set a cell', args: [panel(), { name: 'cell', kind: 'value' }, { name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['editSheet'], target: 'panel', hint: 'set a cell like B2 to a value or =formula; empty clears it — from an agent it proposes a draft' },
-  // M246. Resolve draft cells. Keeping is a person's: the agent door is refused by name.
   // M247. The agent → object links, shown or hidden. A canvas-wide view fact, stored as a setting.
   { id: 'agent-links', label: 'Agent links: show or hide', args: [{ name: 'state', kind: 'value' }], destructive: false, actions: ['setAgentLinks'], target: 'canvas', hint: 'on, off or toggle the lines from each agent to what it read, wrote or drafted' },
-  { id: 'sheet-review', label: 'Sheet: keep or discard draft cells', args: [panel(), { name: 'operation', kind: 'value' }, { name: 'target', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['reviewSheet'], target: 'panel', hint: 'keep or discard a cell, a range like B2:C4, or all of a pending draft' },
   ...CREATABLE_OBJECTS.map((entry): VerbDef => ({ id: entry.verb, label: `New ${entry.label}`, args: [{ name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['createObject'], target: 'canvas', hint: `create ${entry.label.toLowerCase()} at the viewport centre` })),
   // M337. Sharing. Each OPENS the share dialog, prefilled — the person's click
   // there shares, opens or changes a role, whichever door ran the verb.
@@ -513,9 +508,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'deck-export-pdf': { canvas: 'deck PDF', palette: 'deck.export-pdf', agent: 'tc plan deck-export-pdf f1', workflow: 'an action node whose line is: deck-export-pdf f1' },
   'checklist-edit': { canvas: 'checklist Add, check, drag/Up/Down, Delete and Undo controls', palette: 'checklist.edit', agent: 'tc plan checklist-edit f1 add hello', workflow: 'an action node whose line is: checklist-edit f1 add hello' },
   'checklist-hand': { canvas: 'Hand to agent on a checklist item', palette: 'checklist.hand', agent: 'tc plan checklist-hand f1 2 ch1', workflow: 'an action node whose line is: checklist-hand f1 2 ch1' },
-  'sheet-edit': { canvas: 'type into a sheet cell (double-click, Enter or start typing)', palette: 'sheet.edit', agent: 'tc plan sheet-edit f1 B2 =SUM(B1:B1)', workflow: 'an action node whose line is: sheet-edit f1 B2 =SUM(B1:B1)' },
   'agent-links': { canvas: 'the links button in the canvas HUD\'s zoom cluster', palette: 'canvas.agent-links', agent: 'tc plan agent-links off', workflow: 'an action node whose line is: agent-links off' },
-  'sheet-review': { canvas: 'Keep / Discard selected, Keep all / Discard all on a sheet\'s draft strip', palette: 'sheet.review', agent: 'tc plan sheet-review f1 discard all', workflow: 'an action node whose line is: sheet-review f1 keep B2' },
   ...Object.fromEntries(CREATABLE_OBJECTS.map((entry) => [entry.verb, entry.doors])),
   'share-workspace': { canvas: 'the account menu\'s Share this workspace…', palette: 'share.workspace', agent: 'tc plan share-workspace', workflow: 'an action node whose line is: share-workspace' },
   'open-share': { canvas: 'the account menu\'s Open a shared workspace…', palette: 'share.open', agent: 'tc plan open-share', workflow: 'an action node whose line is: open-share' },

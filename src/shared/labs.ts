@@ -22,7 +22,7 @@
  * and the plain-node suites all read the same list.
  */
 
-export type LabId = 'world' | 'accounts' | 'relay' | 'decks' | 'sheets' | 'toolbox'
+export type LabId = 'world' | 'accounts' | 'relay' | 'decks' | 'toolbox'
 
 export interface LabDef {
   id: LabId
@@ -52,7 +52,6 @@ export const LABS: readonly LabDef[] = [
   { id: 'accounts', setting: 'labs.accounts', shown: false, rows: ['account.sign-in', 'canvas.people', 'share.workspace', 'share.open', 'share.role'] },
   { id: 'relay', setting: 'labs.relay', shown: false, rows: ['object.create.relay'] },
   { id: 'decks', setting: 'labs.decks', shown: false, rows: ['object.create.deck'] },
-  { id: 'sheets', setting: 'labs.sheets', shown: false, rows: ['object.create.sheet'] },
   { id: 'toolbox', setting: 'labs.toolbox', shown: false, rows: ['panel.toolbox', 'panel.memory'] }
 ]
 

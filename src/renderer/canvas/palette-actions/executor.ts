@@ -81,8 +81,6 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'deck-review': return self.reviewDeck(a.panel!, a.action ?? '', a.slides ?? '', origin)
       case 'deck-present': return self.presentDeck(a.panel!, origin)
       case 'deck-export-pdf': return self.exportDeckPdf(a.panel!)
-      case 'sheet-edit': return self.editSheet(a.panel!, a.cell!, a.value ?? '', caller)
-      case 'sheet-review': return self.reviewSheet(a.panel!, a.operation!, a.target, caller)
       case 'agent-links': return self.setAgentLinks(a.state!)
       case 'starter': return applyStarter()
       case 'workflow-save': return self.saveWorkflow(a.template!)

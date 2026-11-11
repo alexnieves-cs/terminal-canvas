@@ -161,7 +161,7 @@ export const SETTINGS: readonly SettingDef[] = [
     id: 'canvas.agentLinks',
     planWritable: true,
     label: 'Show agent links',
-    description: 'draw a line from each agent to the files, notes, checklists and sheets it read, wrote or drafted',
+    description: 'draw a line from each agent to the files, notes, checklists and decks it read, wrote or drafted',
     keywords: ['links', 'edges', 'agent', 'files', 'touched', 'read', 'wrote', 'draft', 'lines'],
     type: 'boolean',
     default: true,
@@ -864,15 +864,6 @@ export const SETTINGS: readonly SettingDef[] = [
     label: 'Show decks',
     description: 'offer New Deck; a deck already on a canvas still opens and exports',
     keywords: ['deck', 'slides', 'presentation', 'pptx', 'powerpoint', 'labs'],
-    type: 'boolean',
-    default: false,
-    category: LABS_CATEGORY
-  },
-  {
-    id: 'labs.sheets',
-    label: 'Show sheets',
-    description: 'offer New Sheet; a sheet already on a canvas still opens and exports',
-    keywords: ['sheet', 'spreadsheet', 'xlsx', 'csv', 'cells', 'labs'],
     type: 'boolean',
     default: false,
     category: LABS_CATEGORY

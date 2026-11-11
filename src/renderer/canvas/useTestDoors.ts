@@ -15,7 +15,6 @@ import { viewCentre } from './safe-area'
 import type { ChecklistView } from '@shared/checklist'
 import type { DeckView } from '@shared/deck'
 import type { ImportedNote } from '@shared/imported-note'
-import type { SheetView } from '@shared/sheet'
 import type { History } from '@renderer/panels/history'
 /**
  * M507 (E4, the Canvas.tsx split). The window doors the Electron suites drive
@@ -34,7 +33,7 @@ export interface UseTestDoorsDeps {
   nextIdRef: RefObject<number>
   onClosePanel: (id: string) => void
   openAsChatRef: RefObject<(id: string) => Promise<{ kind: string; reason?: string | undefined; }>>
-  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true; }) => void
+  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true; }) => void
   openInTerminalRef: RefObject<(id: string) => { kind: string; reason?: string | undefined; }>
   openToolboxPanel: (cwd: string, label: string, centre: Point) => void
   paletteActionsRef: RefObject<PaletteActions | null>

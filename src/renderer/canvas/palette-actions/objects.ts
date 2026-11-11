@@ -15,7 +15,6 @@
 
 import { checklistController } from '@renderer/file/checklist-controllers'
 import { deckController } from '@renderer/file/deck-controllers'
-import { sheetController } from '@renderer/file/sheet-controllers'
 import { notify, notifyDone, notifyFailed } from '../../shell/toast'
 import { deckExportSentence } from '@shared/deck-pptx'
 import type { GithubPublishRequest } from '@shared/ipc-contract'
@@ -33,8 +32,6 @@ export type ObjectsActions = Pick<PaletteActions,
   | 'reviewDeck'
   | 'presentDeck'
   | 'exportDeckPdf'
-  | 'editSheet'
-  | 'reviewSheet'
   | 'exportPanelText'
   | 'exportCanvasPng'
   | 'exportCanvas'
@@ -109,8 +106,6 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     },
     presentDeck: async (panel, origin = 'person') => deckController(panel)?.present(origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
     exportDeckPdf: async (panel) => deckController(panel)?.exportPdf() ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
-    editSheet: async (panel, cell, value, caller) => sheetController(panel)?.edit(cell, value, caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
-    reviewSheet: async (panel, operation, target, caller) => sheetController(panel)?.review(operation, target ?? 'all', caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
     // M58. Fire-and-forget into main, which owns the dialog, the write and
     // the reveal; a refusal is logged, since the palette has no toast.
     exportPanelText: (panelId) => {

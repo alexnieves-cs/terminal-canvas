@@ -3167,16 +3167,16 @@ const FRESH = () => ctx({
   const c = ctx({ ...FRESH(), panels, selectedIds: panels.map((p) => p.id), capturedId: 'chat', noteRoot: '/w', workflowTemplateOf: () => 't1' })
   const all = P.buildCommands(c)
   const grammar = all.filter((r) => /<[a-z]/i.test(r.subtitle || '')).map((r) => r.id)
-  const GRAMMAR_ROWS = ['checklist.edit', 'deck.edit', 'deck.write', 'deck.review', 'deck.present', 'deck.export-pdf', 'checklist.hand', 'sheet.review', 'sheet.edit']
+  const GRAMMAR_ROWS = ['checklist.edit', 'deck.edit', 'deck.write', 'deck.review', 'deck.present', 'deck.export-pdf', 'checklist.hand']
   const rest = new Set(P.filterCommands(all, '').map((r) => r.id))
   const atRest = GRAMMAR_ROWS.filter((id) => rest.has(id))
   const deck = P.filterCommands(all, 'deck').map((r) => r.id)
   c.actions.calls.length = 0
   byId(all, 'deck.edit').run()
   const call = c.actions.calls[0]
-  ok('palette.verbs.2 no row subtitle carries <arg> grammar; the nine grammar rows are hidden at rest, found by "deck"/"sheet", and open the verb line prefilled with their verb',
+  ok('palette.verbs.2 no row subtitle carries <arg> grammar; the seven grammar rows are hidden at rest, found by "deck", and open the verb line prefilled with their verb',
     grammar.length === 0 && atRest.length === 0 && ['deck.edit', 'deck.write', 'deck.review', 'deck.present', 'deck.export-pdf'].every((id) => deck.includes(id)) &&
-      P.filterCommands(all, 'sheet').some((r) => r.id === 'sheet.edit') && call !== undefined && call[0] === 'beginRunVerb' && call[1] === 'deck-edit' && rest.has('canvas.run-verb'),
+      call !== undefined && call[0] === 'beginRunVerb' && call[1] === 'deck-edit' && rest.has('canvas.run-verb'),
     JSON.stringify({ grammar, atRest, call }))
 }
 
@@ -3370,10 +3370,10 @@ const FRESH = () => ctx({
   ok('labs.2 every row a lab hides is a row the palette builds', stale.length === 0, JSON.stringify(stale))
 
   // The no-dead-end rule: what acts on an object already on a canvas stays.
-  const kept = ['deck.edit', 'deck.export-pptx', 'sheet.edit', 'sheet.review', 'credential.set.github', 'credential.verify.github', 'team.allow.w1.a1', 'spawn.sheet', 'object.create.note', 'capability.open']
+  const kept = ['deck.edit', 'deck.export-pptx', 'credential.set.github', 'credential.verify.github', 'team.allow.w1.a1', 'spawn.sheet', 'object.create.note', 'capability.open']
   ok('labs.3 no lab hides a verb on an existing object, a credential row, a team ask or a near-namesake',
     kept.every((id) => P.labOfRow(id) === undefined) &&
-      P.labOfRow('object.create.deck') === 'decks' && P.labOfRow('object.create.sheet') === 'sheets' &&
+      P.labOfRow('object.create.deck') === 'decks' &&
       P.labOfRow('world.view') === 'world' && P.labOfRow('share.open') === 'accounts' && P.labOfRow('object.create.relay') === 'relay' && P.labOfRow('panel.memory') === 'toolbox',
     JSON.stringify(kept.map((id) => [id, P.labOfRow(id)])))
 

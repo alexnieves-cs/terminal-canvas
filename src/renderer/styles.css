@@ -7654,52 +7654,10 @@ body {
 .deck-presenter__notes { width: 28vw; overflow: auto; padding: var(--sp-6); border-left: 1px solid var(--line); white-space: pre-wrap; font-size: var(--t-lg); color: var(--fg-2); }
 .deck-presenter__bar { grid-column: 1 / -1; display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--line); }
 
-/* M245. The sheet. Keeps its header (the frame rule): rows × cols and the
-   directory are facts the grid does not repeat. The grid is a positioned plane
-   inside one scroller; only the visible window is rendered, and the headers
-   are placed at the scroll offset rather than made sticky, because sticky
-   inside an absolutely-positioned plane does not stick. */
-.sheet-node__body { display: flex; flex-direction: column; height: 100%; min-height: 0; font-family: var(--font-ui); color: var(--fg-2); outline: none; }
-.sheet-node__body:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.sheet-node__bar { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); min-width: 0; }
-.sheet-node__ref { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-3); min-width: 3.5em; }
-.sheet-node__formula { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sheet-node__tools { display: flex; gap: var(--sp-2); opacity: 0; transition: opacity var(--dur-1); }
-.sheet-node__body:hover .sheet-node__tools, .sheet-node__body:focus-within .sheet-node__tools { opacity: 1; }
-.sheet-node__tools button { font: inherit; font-size: var(--t-sm); color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); }
-.sheet-node__tools button:disabled { color: var(--fg-4); }
-.sheet-node__tools button.is-urgent { color: var(--fg); border-color: var(--amber, var(--iris)); }
-.sheet-node__status { margin: 0; padding: var(--sp-3) var(--sp-4); font-size: var(--t-sm); color: var(--fg-2); background: var(--iris-dim); }
-.sheet-node__scroller { position: relative; flex: 1; min-height: 0; overflow: auto; }
-.sheet-node__plane { position: relative; }
-.sheet-node__cell, .sheet-node__colhead, .sheet-node__rowhead, .sheet-node__corner { position: absolute; box-sizing: border-box; }
-.sheet-node__cell { padding: 0 var(--sp-3); line-height: 23px; font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); cursor: cell; user-select: none; }
-.sheet-node__cell.is-number { text-align: right; font-variant-numeric: tabular-nums; }
-.sheet-node__cell.is-error { color: var(--amber, var(--fg-3)); }
-.sheet-node__cell.is-in-range { background: var(--iris-dim); }
-.sheet-node__colhead, .sheet-node__rowhead, .sheet-node__corner { z-index: 2; background: var(--s-1); color: var(--fg-3); font-size: var(--t-xs);
   line-height: 23px; text-align: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); user-select: none; }
-.sheet-node__corner { z-index: 3; }
-.sheet-node__colhead.is-active, .sheet-node__rowhead.is-active { color: var(--fg); }
-.sheet-node__resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 1; }
-.sheet-node__cursor { position: absolute; pointer-events: none; box-shadow: inset 0 0 0 2px var(--iris); z-index: 1; }
-.sheet-node__editor { position: absolute; z-index: 4; box-sizing: border-box; font: inherit; font-size: var(--t-sm); padding: 0 var(--sp-2);
   color: var(--fg); background: var(--s-0, var(--s-1)); border: 2px solid var(--iris); outline: none; }
-.sheet-node__dir { color: var(--fg-3); font-size: var(--t-sm); margin-left: var(--sp-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.sheet-node__loss { margin-left: var(--sp-4); font: inherit; font-size: var(--t-xs); color: var(--fg-3); background: none; border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); }
-.sheet-node__loss.is-pending { color: var(--fg); border-color: var(--amber, var(--iris)); cursor: pointer; }
 
-/* M246. The draft layer: proposed cells carry the accent edge and show the NEW value
-   (old → new in the title and the formula bar); the strip is contextual. */
-.sheet-node__cell.is-draft { box-shadow: inset 0 0 0 1px var(--iris); color: var(--fg); background: var(--iris-dim); }
-.sheet-node__draft { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font-size: var(--t-sm); border-bottom: 1px solid var(--line); }
-.sheet-node__draft > span { flex: 1; min-width: 0; color: var(--fg-2); }
-.sheet-node__draft button { font: inherit; font-size: var(--t-sm); color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); }
-.sheet-node__draft button:disabled { color: var(--fg-4); }
-.sheet-node__draft.is-conflict > span { color: var(--fg); }
-.sheet-node__draft.is-done > span { color: var(--fg-3); }
-.sheet-node__changes { margin-left: var(--sp-4); font-size: var(--t-xs); color: var(--fg); border: 1px solid var(--iris); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); white-space: nowrap; }
 
 /* ── M256. Documents: focus, reading measure, edit state, save word ──────────
    Every rule below reads a data attribute or class the kind renders, so the
@@ -7799,13 +7757,6 @@ body {
 .checklist-node__items input[type=checkbox] { flex: none; width: 20px; height: 20px; margin: 0; cursor: pointer; }
 .checklist-node__items li[data-checked] label > span { color: var(--fg-3); text-decoration: line-through; text-decoration-color: var(--fg-4); }
 
-/* ── M256. Sheets: a frozen header that looks frozen, a clear active cell ── */
-.sheet-node__colhead { box-shadow: 0 1px 0 var(--line-strong), 0 var(--sp-1) var(--sp-2) color-mix(in srgb, var(--s-0) 60%, transparent); background: var(--s-2); font-weight: 600; }
-.sheet-node__rowhead { box-shadow: 1px 0 0 var(--line-strong), var(--sp-1) 0 var(--sp-2) color-mix(in srgb, var(--s-0) 60%, transparent); background: var(--s-2); }
-.sheet-node__corner { background: var(--s-3); box-shadow: 1px 1px 0 var(--line-strong); }
-.sheet-node__colhead.is-active { color: var(--iris); background: var(--iris-dim); box-shadow: inset 0 -2px 0 var(--iris), 0 1px 0 var(--line-strong); }
-.sheet-node__rowhead.is-active { color: var(--iris); background: var(--iris-dim); box-shadow: inset -2px 0 0 var(--iris), 1px 0 0 var(--line-strong); }
-.sheet-node__cursor { box-shadow: inset 0 0 0 2px var(--iris), 0 0 0 1px var(--iris-dim); background: color-mix(in srgb, var(--iris-dim) 40%, transparent); border-radius: var(--r-sm); }
 
 /* ── M256. Decks: slides as media ─────────────────────────────────────────
    A darker stage so a slide reads as a lit object, larger thumbnails, and a

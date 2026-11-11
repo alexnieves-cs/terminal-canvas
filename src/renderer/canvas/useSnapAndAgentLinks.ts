@@ -3,7 +3,6 @@ import { type Panel, isFilePanel, isChatPanel, occupiedRect, terminalRimAt } fro
 import { agentLinks } from '@shared/agent-links'
 import { indexToolFiles } from '@shared/tool-index'
 import { getChat as getChatState, useChatsVersion } from '@renderer/chat/chat-store'
-import { sheetController } from '@renderer/file/sheet-controllers'
 import type { Viewport, WorldRect } from './viewport'
 import { publishAgentLinks } from './agent-links-store'
 import { smartSnap, type SpacingGuide } from './arrange'
@@ -90,8 +89,7 @@ export function useSnapAndAgentLinks(deps: UseSnapAndAgentLinksDeps) {
   useEffect(() => {
     const objects = panels.filter(isFilePanel).map((p) => ({
       id: p.rect.id,
-      path: p.source.path,
-      ...(p.source.sheet?.draft?.by === undefined ? {} : { draftBy: p.source.sheet.draft.by })
+      path: p.source.path
     }))
     const objectsKey = JSON.stringify(objects)
     for (const agent of panels.filter(isChatPanel)) {
@@ -105,10 +103,9 @@ export function useSnapAndAgentLinks(deps: UseSnapAndAgentLinksDeps) {
     const live = new Set(panels.map((p) => p.rect.id))
     for (const id of [...agentLinkCache.current.keys()]) if (!live.has(id)) agentLinkCache.current.delete(id)
   }, [panels, linksChatsVersion])
-  // A draft badge opens that draft's review: the sheet, brought into view and focused.
+  // A draft badge opens that draft's review: the object, brought into view.
   const openDraftReview = useCallback((objectId: string) => {
     paletteActionsRef.current?.goToPanel(objectId)
-    sheetController(objectId)?.focusDraft()
   }, [])
   const toggleAgentLinks = useCallback(() => {
     paletteActionsRef.current?.toggleSetting('canvas.agentLinks', !agentLinksOn)

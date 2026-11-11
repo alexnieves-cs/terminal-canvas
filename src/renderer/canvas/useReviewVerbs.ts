@@ -2,7 +2,6 @@ import { type Dispatch, type RefObject, type SetStateAction, useCallback, type D
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { ChecklistView } from '@shared/checklist'
 import type { DeckView } from '@shared/deck'
-import { isSheetPath, type SheetView } from '@shared/sheet'
 import type { ImportedNote } from '@shared/imported-note'
 import { isWorkPanel, isReviewPanel, isTerminalPanel, makeFilePanel, makeToolboxPanel, isChatPanel, makeReviewPanel, nextZ, reviewCentre, REVIEW_H, REVIEW_MIN, REVIEW_W, TASK_REVIEW_SIZE, type Panel } from '@renderer/panels/panels'
 import { WORK_ITEM_GONE } from '@renderer/work/WorkNode'
@@ -229,10 +228,7 @@ export function useReviewVerbs(deps: UseReviewVerbsDeps) {
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true }) => {
-    // M245. A newly opened .csv/.tsv/.xlsx opens as a sheet. Only NEW opens:
-    // a persisted file panel without the key stays the text view it was.
-    const sheet = opts?.sheet ?? (opts?.prose !== true && opts?.checklist === undefined && opts?.deck === undefined && isSheetPath(path) ? {} : undefined)
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true }) => {
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -257,7 +253,6 @@ export function useReviewVerbs(deps: UseReviewVerbsDeps) {
           // apart in id minting, cascading, z-order or selection.
           ...(opts?.prose === true ? { prose: true as const } : {}),
           ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist }),
-          ...(sheet === undefined ? {} : { sheet }),
           ...(opts?.imported === undefined ? {} : { imported: opts.imported }),
           ...(opts?.deck === undefined ? {} : { deck: opts.deck })
         })

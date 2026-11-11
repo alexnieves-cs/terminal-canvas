@@ -5,7 +5,6 @@ import type { DeckView } from '@shared/deck'
 import type { ImportedNote } from '@shared/imported-note'
 import type { InputMode } from '@renderer/palette/Palette'
 import { type Panel, makeWatcherPanel, isWatcherPanel, isTerminalPanel, makeChatPanel, isChatPanel, makePanel, nextZ, removePanel } from '@renderer/panels/panels'
-import type { SheetView } from '@shared/sheet'
 import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY } from '@renderer/palette/commands'
 import { getChat } from '@renderer/chat/chat-store'
 import { disposeChat } from '@renderer/chat/useChatSessions'
@@ -35,7 +34,7 @@ export interface UseChatSwapVerbsDeps {
   noteRootRef: RefObject<string | null>
   onClosePanel: (id: string) => void
   openAsChatRef: RefObject<(id: string) => Promise<{ kind: string; reason?: string | undefined; }>>
-  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true; }) => void
+  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true; }) => void
   openInTerminalRef: RefObject<(id: string) => { kind: string; reason?: string | undefined; }>
   palette: PaletteController
   panelsRef: RefObject<Panel[]>
