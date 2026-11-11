@@ -93,7 +93,7 @@ export async function initTelemetry(state: MainState, stores: Stores): Promise<v
       // envelope kind before it reaches the transport) in the same change.
     })
     state.telemetryOn = true
-    console.log(`[startup] telemetry=on nativeCrashes=${plan.nativeCrashes}`)
+    console.log(`[startup] telemetry=on to=${plan.to} nativeCrashes=${plan.nativeCrashes}`)
   } catch (error: unknown) {
     console.error('[startup] telemetry failed to initialise; continuing without it', error)
   }

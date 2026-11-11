@@ -3204,6 +3204,40 @@ been a third door). Recovery goes through `commitHistory` like a spawn, so `Cmd+
 which disposes the sessions, and that is right: the user was asked and said yes, then said no.
 The dialog itself is manual-only; no suite drives `showMessageBox`.
 
+**A killed app is known by the run marker it left, and the marker is READ behind the single-instance gate, never at construction (`main/last-exit.ts`, `main/index.ts`, `shared/persistence.ts`).**
+M651. A SIGKILL, a force quit and a power cut record nothing, so the launch after one said nothing.
+`alive()` keeps `running.json` on disk while the app runs (which panels have a session, and whether a
+death keeps them) and a clean quit deletes it; a marker still there is the crash. Four orderings fail
+silently: **(1)** `createStores` runs in a second launch that is about to LOSE the lock, and the
+winner's marker is on disk the whole time, so a read at construction would have the loser report a
+crash and delete the evidence; **(2)** the first `alive()` must precede `createWindow`, or the
+renderer's one `session:last-exit` ask is answered before the crash is known; **(3)** the quit writes
+its record and THEN unlinks the marker, and a record outranks a marker, so a death between the two
+lines is still a quit; **(4)** the marker is refreshed from `PtyManager.onSessionsChanged`, never a
+timer: `list()` on tmux is a subprocess, and an idle canvas must cost nothing. The crash words are
+their own arm of `reopenLines`: nobody "quit" and nothing ran "while the app was closed".
+`verify:layout persist.6`; `verify:reliability recover.1`–`recover.6` against the real app.
+
+**Main keeps running after an exception once a window exists, and exits with a dialog before one does (`main/crash-guard.ts`, `main/index.ts`).**
+M650. Nothing in main listened for `uncaughtException` or `unhandledRejection`: an exception raised
+Electron's modal at 3am, a rejection in the boot left an app with no window, a crashed renderer left
+a blank one, and none of it was written down. The guard is installed FIRST in `index.ts`, before the
+object graph can throw. Exiting after boot would end every agent on the direct backend, so it does
+not; a stray rejection during boot is not fatal either (a probe that timed out is not the boot
+failing), and the boot's own rejection arrives by name through the `.catch` on `whenReady`. Records
+are scrubbed by `telemetry.ts`'s `scrubText`, exported from there so `redactSecrets` keeps its named
+caller list (`verify:verbs gate.2`). A storm past 20 records a minute is counted, not written; a
+renderer is reloaded at most three times a minute, and only the app's own window, never a `webview`.
+`verify:file crash.1`–`crash.3`; `verify:reliability recover.5`.
+
+**The maintainers' crash-report toggle sends nothing while `PROJECT_DSN` is empty, and a person's own DSN is final (`main/telemetry.ts`, `shared/settings-schema.ts`).**
+M652. `telemetry.crashReports` is off by default and never `planWritable`. The arms are ordered: a
+person's own DSN is asked about first and a MALFORMED one answers `malformed-dsn` rather than falling
+through, because a typo in a field must never change where bytes go; a native dump never rides the
+toggle. With no project address the plan is off BY NAME (`no-project-dsn`) and the setting's
+description says nothing is sent. `verify:file telemetry.6` fails when the constant and that
+sentence disagree.
+
 **What was running when the window went away is RECORDED before the teardown, sealed by the quit, and read-and-deleted at the next boot (`main/last-exit.ts`, `shared/persistence.ts`, `shell/ReopenNotice.tsx`, `session:last-exit`).**
 Brief #20. On reopening, a reattached session, a kept session that died, and a process the quit
 stopped by design wear the same dormant card, and only the second is a problem — but the renderer

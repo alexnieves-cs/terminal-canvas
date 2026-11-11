@@ -1,6 +1,6 @@
 {
   "name": "terminal-canvas",
-  "version": "6.0.1",
+  "version": "6.1.0",
   "description": "An infinite-canvas workspace where every node is a live terminal running a coding agent CLI.",
   "main": "./out/main/index.js",
   "author": "Alex Nieves",
@@ -34,6 +34,7 @@
     "package": "npm run build && electron-builder --config electron-builder.config.cjs",
     "lb": "node scripts/lb.cjs",
     "ipc:list": "node scripts/ipc-list.cjs --write",
+    "guide:keys": "node scripts/guide-keys.cjs --write",
     "affected": "node scripts/affected.cjs",
     "collab": "node scripts/collab-server.cjs",
     "supabase:probe": "node scripts/supabase-probe.cjs",
@@ -140,7 +141,9 @@
     "verify:film": "node scripts/verify-film.cjs",
     "verify:vm": "node scripts/verify-vm.cjs",
     "verify:learn": "node scripts/verify-learn.cjs",
-    "verify:host": "node scripts/verify-host.cjs"
+    "verify:host": "node scripts/verify-host.cjs",
+    "verify:reliability": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-reliability.cjs",
+    "soak": "node scripts/soak.cjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.7.0",

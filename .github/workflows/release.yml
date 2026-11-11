@@ -22,9 +22,12 @@
 # release that was meant to be signed must not ship without it. The secrets
 # and how to make them: docs/release-signing.md.
 #
+# M631: two DMGs, Apple silicon and Intel, one `build` leg each; `publish`
+# runs once after both and is the only job that creates the release.
+#
 # Run by hand (workflow_dispatch), or on a PR that touches the packaging, it
 # does everything except publish, so the pipeline is proved without minting a
-# tag. The DMG is still uploaded as an artifact.
+# tag. The DMGs are still uploaded as artifacts.
 name: release
 
 on:
@@ -42,6 +45,7 @@ on:
       - build/**
       - electron-builder.config.cjs
       - scripts/verify-packaged.cjs
+      - Casks/**
 
 permissions:
   contents: write
@@ -51,11 +55,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    # arm64. macos-latest is Apple silicon; an Intel build is a second job
-    # when someone asks for one.
-    runs-on: macos-latest
-    timeout-minutes: 60
+  # M631. One leg per architecture, each on a runner OF that architecture:
+  # node-pty is compiled natively (no cross-build to get wrong) and
+  # verify:packaged launches the very binary an Intel or Apple silicon Mac will
+  # run. TC_MAC_ARCH is the only switch (electron-builder.config.cjs reads it,
+  # verify:package arch.1-4 pin it). Both legs gate the release: `publish`
+  # needs the whole matrix, so a version never ships for one chip only.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+          # The last hosted Intel image. When GitHub retires it, this leg
+          # becomes a cross-build on Apple silicon and loses its launch check.
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      TC_MAC_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -150,7 +170,8 @@ jobs:
       # Builds, packages a --dir bundle and launches it. The gate.
       - name: verify:packaged
         env:
-          TC_WATCHDOG_SCALE: '2'
+          # The hosted Intel image is the slower machine by a wide margin.
+          TC_WATCHDOG_SCALE: ${{ matrix.arch == 'x64' && '4' || '2' }}
         run: npm run verify:packaged
 
       # The DMG itself. `--publish never`: the release step below is the only
@@ -196,17 +217,31 @@ jobs:
           npx electron-builder --config electron-builder.config.cjs --mac --publish never
           rm -f "$RUNNER_TEMP"/AuthKey_*.p8
 
-      - name: Checksums and a codesign note
-        id: files
+      # The DMG leaves under a name that says its chip, twice: once with the
+      # version (what a person keeps) and once without (what
+      # releases/latest/download/... and the Homebrew cask point at, so neither
+      # needs editing per release). electron-builder's own x64 name carries no
+      # arch at all, which is why the names are made here.
+      - name: Name the DMG and a codesign note
         env:
           SIGNED: ${{ steps.sign.outputs.signed }}
+          ARCH: ${{ matrix.arch }}
         run: |
           cd release
           ls -la
+          version=$(node -p 'require("../package.json").version')
           dmg=$(ls *.dmg | head -1)
-          shasum -a 256 "$dmg" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          mkdir -p ../dist
+          cp "$dmg" "../dist/Terminal-Canvas-$version-$ARCH.dmg"
           app=$(ls -d mac*/*.app | head -1)
+          # The binary is the chip the name says. An arm64 app in an Intel DMG
+          # would pass every other step on a runner that can run both.
+          want=$([ "$ARCH" = x64 ] && echo x86_64 || echo "$ARCH")
+          lipo -archs "$app/Contents/MacOS/Terminal Canvas" | tee arch.txt
+          if [ "$(tr -d ' \n' < arch.txt)" != "$want" ]; then
+            echo "::error::the $ARCH leg built $(cat arch.txt)"
+            exit 1
+          fi
           if [ "$SIGNED" = true ]; then
             # M630. A GATE when signed: the seal holds, Gatekeeper accepts the
             # app as a notarized Developer ID app, and the ticket is stapled
@@ -216,46 +251,73 @@ jobs:
             { codesign --verify --deep --strict --verbose=2 "$app" 2>&1
               codesign -dv --verbose=2 "$app" 2>&1 | grep -E '^(Authority|TeamIdentifier|Runtime)'
               spctl --assess --type execute --verbose=2 "$app" 2>&1
-              xcrun stapler validate "$app" 2>&1; } | tee codesign.txt
+              xcrun stapler validate "$app" 2>&1; } | tee "../dist/codesign-$ARCH.txt"
           else
             # Not a gate: the build is unsigned by decision. What macOS will
             # make of it is written down so nobody has to guess.
-            { codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true; } | tee codesign.txt
+            { codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true; } | tee "../dist/codesign-$ARCH.txt"
           fi
-          echo "dmg=release/$dmg" >> "$GITHUB_OUTPUT"
+          echo "$SIGNED" > "../dist/signed-$ARCH.txt"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dmg
-          path: |
-            release/*.dmg
-            release/SHA256SUMS.txt
-            release/codesign.txt
+          name: dmg-${{ matrix.arch }}
+          path: dist/
           retention-days: 30
+
+  # M631. The only job that talks to GitHub's releases, and it runs once, after
+  # BOTH legs: two legs each creating the release would race, and the loser
+  # would leave a version with one chip's DMG.
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dmg-*
+          path: dist
+          merge-multiple: true
 
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
         env:
           GH_TOKEN: ${{ github.token }}
-          DMG: ${{ steps.files.outputs.dmg }}
-          SIGNED: ${{ steps.sign.outputs.signed }}
         run: |
+          # The legs already checked the tag against package.json (a tag push)
+          # or that it is new and on main (a dispatch); this is the same name.
+          TAG="v$(node -p 'require("./package.json").version')"
+          cd dist
+          # The versionless copies: stable URLs under releases/latest/download/.
+          for arch in arm64 x64; do cp "Terminal-Canvas-${TAG#v}-$arch.dmg" "Terminal-Canvas-$arch.dmg"; done
+          shasum -a 256 *.dmg > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cd ..
+          # Signed only if BOTH legs were: the notes must not promise one chip
+          # an app that opens without a warning when it will not.
+          SIGNED=true; for f in dist/signed-*.txt; do [ "$(cat "$f")" = true ] || SIGNED=false; done
+          DMGS="Terminal-Canvas-${TAG#v}-arm64.dmg (Apple silicon) or Terminal-Canvas-${TAG#v}-x64.dmg (Intel)"
           if [ "$SIGNED" = true ]; then
           cat > notes.md <<EOF
           ## Install
 
-          1. Download \`$(basename "$DMG")\` below (Apple silicon) and open it.
+          1. Download $DMGS below and open it. Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple" is Apple silicon, "Processor: Intel" is Intel.
           2. Drag **Terminal Canvas** into Applications and open it. The app is signed with an Apple Developer ID and notarized by Apple, so it opens without a warning.
 
           Check the download against \`SHA256SUMS.txt\`: \`shasum -a 256 -c SHA256SUMS.txt\`.
 
-          The packaged app passed \`verify:packaged\` on the build runner, and its signature, Gatekeeper assessment and stapled notarization ticket were checked, before this release was created.
+          Or with Homebrew: \`brew tap alexnieves-cs/terminal-canvas https://github.com/alexnieves-cs/terminal-canvas && brew install --cask terminal-canvas\`.
+
+          Each DMG's app passed \`verify:packaged\` on a runner of its own chip, and its signature, Gatekeeper assessment and stapled notarization ticket were checked, before this release was created.
           EOF
           else
           cat > notes.md <<EOF
           ## Install
 
-          1. Download \`$(basename "$DMG")\` below (Apple silicon) and open it.
+          1. Download $DMGS below and open it. Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple" is Apple silicon, "Processor: Intel" is Intel.
           2. Drag **Terminal Canvas** into Applications.
           3. This build is **not signed** with an Apple Developer ID, so macOS stops the first launch.
              Open it once from **System Settings → Privacy & Security → Open Anyway**
@@ -265,7 +327,9 @@ jobs:
 
           Check the download against \`SHA256SUMS.txt\`: \`shasum -a 256 -c SHA256SUMS.txt\`.
 
-          The packaged app passed \`verify:packaged\` on the build runner before this release was created.
+          Or with Homebrew: \`brew tap alexnieves-cs/terminal-canvas https://github.com/alexnieves-cs/terminal-canvas && brew install --cask terminal-canvas\`.
+
+          Each DMG's app passed \`verify:packaged\` on a runner of its own chip before this release was created.
           EOF
           fi
           # The version's own notes, under the install steps, when the repo has them.
@@ -274,7 +338,7 @@ jobs:
           # A tag push already has its tag; a dispatch has it created here, on
           # the commit that was just packaged and gated.
           if [ "$GITHUB_REF_NAME" = "$TAG" ]; then verify=--verify-tag; else verify="--target $GITHUB_SHA"; fi
-          gh release create "$TAG" "$DMG" release/SHA256SUMS.txt \
+          gh release create "$TAG" dist/*.dmg dist/SHA256SUMS.txt \
             --title "Terminal Canvas ${TAG#v}" \
             --notes-file notes.md \
             $verify

@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { writeFileSync, chmodSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { app } from 'electron'
+import { app, dialog } from 'electron'
 import { registerIpcHandlers } from './ipc'
 import { createBrowserHandlers } from './browser-read'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
@@ -36,6 +36,7 @@ import { createTaskDoors } from './bootstrap/task-handlers'
 import { withDigests } from './task-evidence'
 import { recordDecision } from './decision-audit'
 import { initTelemetry } from './bootstrap/telemetry-init'
+import { createCrashLog, installCrashGuard } from './crash-guard'
 import { sweepOrphans } from './bootstrap/orphan-sweep'
 import { createWatchWiring } from './bootstrap/watch-handlers'
 import { createKitHandlers } from './bootstrap/kit-handlers'
@@ -71,6 +72,43 @@ import {
 
 const state = createMainState()
 const tokens = createPanelTokens()
+
+// M650. FIRST, before the object graph below can throw: every later line of
+// this file runs with a listener already installed. It reads `state.window`
+// at use (context.ts's rule) — "booted" is "a window has been made", and a
+// failure before that has nothing to carry on behind (crash-guard.ts).
+// `everHadWindow` rather than `state.window !== null`: macOS keeps the app up
+// with its window closed, and that is not boot.
+let everHadWindow = false
+const crashGuard = installCrashGuard({
+  proc: process,
+  log: createCrashLog({ file: () => join(app.getPath('userData'), 'crash-log.jsonl') }),
+  now: () => Date.now(),
+  version: app.getVersion(),
+  paths: () => ({ userData: app.getPath('userData'), home: app.getPath('home') }),
+  booted: () => everHadWindow,
+  fatal: (record) => {
+    // showErrorBox is the one dialog that is safe before `ready`. The words
+    // are the scrubbed record's: this box gets screenshotted into bug reports.
+    dialog.showErrorBox('Terminal Canvas could not start', `${record.name}: ${record.message}\n\nThe details are in crash-log.jsonl in the app's data folder.`)
+    app.exit(1)
+  }
+})
+// A renderer that broke is loaded again (bounded — crash-guard.ts, rule 4).
+// Only the app's own window: a browser pane's guest is a `webview`, and its
+// node already says "crashed" and offers the reload itself.
+app.on('render-process-gone', (_event, contents, details) => {
+  // getType() throws on a destroyed webContents, so that is asked first.
+  const type = contents.isDestroyed() ? 'destroyed' : contents.getType()
+  crashGuard.report('renderer-gone', new Error(`${type} renderer gone: ${details.reason} (exit ${details.exitCode})`))
+  if (type !== 'window') return
+  if (crashGuard.shouldReload(details.reason)) contents.reload()
+})
+app.on('child-process-gone', (_event, details) => {
+  // A clean exit of a utility process is a process ending, not a crash.
+  if (details.reason === 'clean-exit') return
+  crashGuard.report('child-gone', new Error(`${details.type} process gone: ${details.reason} (exit ${details.exitCode})`))
+})
 
 /**
  * Whether this process owns the app. TWO COPIES OF ONE BUILD ARE DESTRUCTIVE
@@ -404,7 +442,28 @@ app.whenReady().then(async () => {
       retry: () => state.worldFeed?.retry() ?? { state: 'live' }
     }
   )
+  // M651. The run marker, behind the gate and BEFORE the window: its first
+  // call reads what the previous run left, and the renderer's `lastExit` ask
+  // must find that answer already there. Kept current from the manager's own
+  // spawn and exit events, coalesced — never a poll: `list()` on tmux is a
+  // subprocess, and an idle canvas must cost nothing. A death on tmux keeps
+  // the sessions whatever `keepOnQuit` says: nothing ran the quit that would
+  // have ended them.
+  const markAlive = (): void => {
+    try {
+      stores.lastExit.alive(state.backend.kind === 'tmux', stores.ptyManager.list().map((s) => s.panelId))
+    } catch (error) {
+      console.warn('[last-exit] could not refresh the run marker', error)
+    }
+  }
+  markAlive()
+  let markTimer: ReturnType<typeof setTimeout> | null = null
+  stores.ptyManager.onSessionsChanged = () => {
+    if (markTimer !== null) return
+    markTimer = setTimeout(() => { markTimer = null; markAlive() }, 250)
+  }
   createWindow(state, stores)
+  everHadWindow = true
   // R-019. Measured after the probe, the layout load and the window. Sends
   // go to the window that already exists — not sendToRenderer, which would
   // show a window that was not up. Preload keeps an event that arrives
@@ -515,6 +574,10 @@ app.whenReady().then(async () => {
     state.window.show()
     state.window.focus()
   })
+}).catch((error: unknown) => {
+  // M650. The boot itself rejected. Without this the app ran on with no
+  // window and no word (crash-guard.ts, rule 3).
+  crashGuard.bootFailed(error)
 })
 
 app.on('before-quit', () => {

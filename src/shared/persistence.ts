@@ -29,8 +29,14 @@
 
 import { mergedLine } from './review-readiness'
 
-/** How the window last went away. A quit and a closed window stop different things. */
-export type ExitHow = 'quit' | 'window'
+/**
+ * How the window last went away. A quit and a closed window stop different
+ * things. `crash` (M651) is never recorded at the moment — a killed process
+ * records nothing — it is what the NEXT launch concludes from a run marker
+ * nobody cleared (`main/last-exit.ts`), so `parseLastExit` refuses it: a file
+ * cannot claim it.
+ */
+export type ExitHow = 'quit' | 'window' | 'crash'
 
 /** Main's record of the moment the window last went away. */
 export interface LastExit {
@@ -100,7 +106,7 @@ export function reopenSummary(input: ReopenInput): ReopenSummary {
   return out
 }
 
-export type ReopenGroup = 'reconnected' | 'ended' | 'stopped' | 'issue' | 'task'
+export type ReopenGroup = 'crash' | 'reconnected' | 'ended' | 'stopped' | 'issue' | 'task'
 
 export interface ReopenLine {
   group: ReopenGroup
@@ -127,17 +133,37 @@ function names(list: readonly ReopenPanel[]): string {
 export function reopenLines(s: Pick<ReopenSummary, 'reconnected' | 'ended' | 'stopped' | 'issues' | 'lastExit'>): ReopenLine[] {
   const lines: ReopenLine[] = []
   const window = s.lastExit?.how === 'window'
+  // M651. The app did not close; it was killed, crashed, or the Mac lost
+  // power. Nobody "quit" and nothing ran "while the app was closed", so every
+  // sentence below has its own wording for this arm.
+  const crash = s.lastExit?.how === 'crash'
   if (s.ended.length > 0) {
     const verb = s.ended.length === 1 ? 'ended' : 'all ended'
     lines.push({
       group: 'ended',
       tone: 'problem',
-      text: `${names(s.ended)} ${verb} while the ${window ? 'window' : 'app'} was closed, though ${s.ended.length === 1 ? 'it was' : 'they were'} set to keep running — start again or leave stopped`,
+      text: crash
+        ? `${names(s.ended)} ${verb} when the app closed unexpectedly — start again or leave stopped`
+        : `${names(s.ended)} ${verb} while the ${window ? 'window' : 'app'} was closed, though ${s.ended.length === 1 ? 'it was' : 'they were'} set to keep running — start again or leave stopped`,
       panels: [...s.ended]
     })
   }
   for (const issue of s.issues) lines.push({ group: 'issue', tone: 'problem', text: issue, panels: [] })
-  if (s.reconnected.length > 0) {
+  if (crash) {
+    // ONE sentence for what came back: the canvas (always — it is the saved
+    // layout), and the sessions that are still running, when any are. What was
+    // LOST gets its own line, above (ended) or below (stopped); with nothing
+    // lost this is the whole notice.
+    const kept = s.reconnected.length === 0
+      ? ''
+      : `, and ${names(s.reconnected)} reconnected, still running`
+    lines.push({
+      group: 'crash',
+      tone: 'info',
+      text: `Terminal Canvas closed unexpectedly last time — your canvas is back as it was last saved${kept}`,
+      panels: [...s.reconnected]
+    })
+  } else if (s.reconnected.length > 0) {
     lines.push({
       group: 'reconnected',
       tone: 'info',
@@ -149,11 +175,27 @@ export function reopenLines(s: Pick<ReopenSummary, 'reconnected' | 'ended' | 'st
     lines.push({
       group: 'stopped',
       tone: 'info',
-      text: `${names(s.stopped)} stopped when ${window ? 'the window closed' : 'you quit'} — click ${s.stopped.length === 1 ? 'it' : 'one'} to start it again`,
+      text: `${names(s.stopped)} stopped when ${crash ? 'the app closed unexpectedly' : window ? 'the window closed' : 'you quit'} — click ${s.stopped.length === 1 ? 'it' : 'one'} to start it again`,
       panels: [...s.stopped]
     })
   }
   return lines
+}
+
+/**
+ * M651. THE RUN MARKER: what `main/last-exit.ts` keeps on disk WHILE the app
+ * runs, so a launch that finds one knows the run before it never reached its
+ * quit. The same three facts a `LastExit` carries, minus `how` — the reader
+ * supplies `crash`, the one thing a file left behind by a dead process means.
+ * Whole or not at all, like `parseLastExit`, and for the same reason.
+ */
+export function parseRunMarker(raw: unknown): Omit<LastExit, 'how'> | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const r = raw as Record<string, unknown>
+  if (typeof r.at !== 'number' || !Number.isFinite(r.at)) return null
+  if (typeof r.kept !== 'boolean') return null
+  if (!Array.isArray(r.running) || !r.running.every((id) => typeof id === 'string')) return null
+  return { at: r.at, kept: r.kept, running: [...r.running] as string[] }
 }
 
 /**

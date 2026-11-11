@@ -479,9 +479,10 @@ aborted the suite and skipped every check below it. `dispatch.2` gets this right
 body and asserting `threw === null`; copy that shape.
 
 **`verify:meta milestones.1` is the documentation gate and it fires late.** The build log, the
-ledger row and the guide checkbox were all written and the suite still failed — `README.md`'s
-milestone table had no M196 row, and that table is the roadmap contract. It is the FIRST check in
-the chain, so a missing row costs a full re-run of everything after it. Write the README row when
+ledger row and the guide checkbox were all written and the suite still failed — the milestone
+table (in `README.md` then, in `docs/milestones.md` since M632) had no M196 row, and that table
+is the roadmap contract. It is the FIRST check in
+the chain, so a missing row costs a full re-run of everything after it. Write the milestone row when
 the build log is written, not at the end.
 
 ## The v10 run, D03 (M195)
