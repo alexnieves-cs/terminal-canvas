@@ -5,6 +5,7 @@ import { approvalHeadline } from '@renderer/chat/chat-model'
 import { Markdown } from '@renderer/chat/Markdown'
 import { PLAN_TOOL } from '@shared/transcript'
 import { approvalOutcomeWords, noteApprovalOutcome, useApprovalOutcomes, type ApprovalOutcome } from './approval-outcome'
+import { HIGH_RISK_NOTE, offersSessionGrant, riskWords } from '@shared/approval-risk'
 
 export interface ApprovalDetailProps {
   approval: PendingApproval
@@ -50,6 +51,9 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
   // M358. Approving a plan is allowing ExitPlanMode ONCE: there is no session
   // grant for it (main refuses one too), or every later plan would run unread.
   const isPlan = approval.toolName === PLAN_TOOL
+  // M670. A high-risk request is confirmed every time: no session grant is offered (and main mints none).
+  const risk = approval.risk ?? 'medium'
+  const session = offersSessionGrant(risk)
   return (
     <div className="approval" data-approval={approval.requestId}>
       {/* #14. ONE sentence first — who, what will happen, where — so the facts
@@ -62,6 +66,7 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
         {task !== undefined && task !== '' && <div className="approval__fact"><dt>Task</dt><dd data-approval-task>{task}</dd></div>}
         {approval.cwd !== undefined && <div className="approval__fact"><dt>In</dt><dd className="approval__mono" data-approval-cwd title={approval.cwd}>{approval.cwd}</dd></div>}
         <div className="approval__fact"><dt>Wants</dt><dd data-approval-tool>{approval.toolName}</dd></div>
+        {!isPlan && <div className="approval__fact"><dt>Risk</dt><dd><span className="sv-risk" data-sv-risk={risk}>{riskWords(risk)}</span></dd></div>}
       </dl>
       {approval.description !== undefined && <p className="approval__why" data-approval-why>{approval.description}</p>}
       {/* M358. A plan is read as the agent wrote it: Markdown, whole, in a scroll. */}
@@ -96,9 +101,9 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
               <button type="button" className="approval__verb approval__verb--primary" data-approval-verb="once"
                 title={`Allow this one ${approval.toolName} call — the next one asks again`}
                 {...shellControl(() => decide(true))}>Allow once</button>
-              <button type="button" className="approval__verb" data-approval-verb="session"
+              {session && <button type="button" className="approval__verb" data-approval-verb="session"
                 title={`Allow every ${approval.toolName} call in this conversation until it closes — held in memory, so a relaunch asks again; revoke it in the inspector's Detail`}
-                {...shellControl(() => decide(true, 'session'))}>Allow {approval.toolName} for this session</button>
+                {...shellControl(() => decide(true, 'session'))}>Allow {approval.toolName} for this session</button>}
               <button type="button" className="approval__verb approval__verb--deny" data-approval-verb="deny"
                 title={`Deny this ${approval.toolName} call — the agent is told it was denied`}
                 {...shellControl(() => decide(false))}>Deny</button>
@@ -113,11 +118,12 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
           Approve and the agent leaves plan mode and starts on this plan. Keep planning and it revises the plan and asks again; nothing runs until a plan is approved.
         </p>
       )}
-      {!sent && !isPlan && (
+      {!sent && !isPlan && session && (
         <p className="approval__scope" data-approval-scope>
           Once answers only this call. For this session allows every {approval.toolName} call in this conversation until it closes — a relaunch asks again.
         </p>
       )}
+      {!sent && !isPlan && !session && <p className="approval__scope" data-approval-scope data-sv-risk-note>{HIGH_RISK_NOTE}</p>}
     </div>
   )
 }

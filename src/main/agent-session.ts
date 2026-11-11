@@ -127,9 +127,10 @@ export interface AgentSessionDeps {
   /**
    * M98. Main's session grants: a `permission-request` this answers true for
    * is answered `allow` here, before it is ever pending, and emitted as
-   * `permission-auto-allowed`. Absent means every request asks.
+   * `permission-auto-allowed`. Absent means every request asks. M670:
+   * `input` is the request's own, so a high-risk call is never pre-answered.
    */
-  preAnswer?: (id: string, toolName: string) => boolean
+  preAnswer?: (id: string, toolName: string, input?: Record<string, unknown>) => boolean
   /**
    * M90. Whether this panel's transcript log already holds turns — the codex
    * analogue of `transcriptExists`: a restored codex chat with turns resumes
@@ -688,7 +689,7 @@ export class AgentSessionManager {
   askExternal(id: string, toolName: string, input: Record<string, unknown>, description: string): Promise<boolean> {
     const session = this.sessions.get(id)
     if (!session) return Promise.resolve(false)
-    if (this.deps.preAnswer?.(id, toolName) === true) {
+    if (this.deps.preAnswer?.(id, toolName, input) === true) {
       this.emit({ id, type: 'permission-auto-allowed', requestId: `tc-ext-${++this.requestSeq}`, toolName })
       return Promise.resolve(true)
     }
@@ -715,7 +716,7 @@ export class AgentSessionManager {
       // M119. The grant is read at ANSWER time: main grants first and then
       // answers through this door (index.ts's order), so a vendor with a
       // word for the grant (ACP's allow_always) hears it on this very answer.
-      const grant = answer.allow && this.deps.preAnswer?.(id, pending.toolName) === true
+      const grant = answer.allow && this.deps.preAnswer?.(id, pending.toolName, pending.input) === true
       session.proc.write(this.encodePermission(session, requestId, pending.input, answer, grant))
     }
     session.pending.delete(requestId)
@@ -1220,7 +1221,7 @@ export class AgentSessionManager {
         // no attention surface lights, and the transcript hears a quiet row
         // naming the tool. The answer is written to THIS process (the
         // identity gate above already held when the chunk arrived).
-        if (this.deps.preAnswer?.(id, event.toolName) === true && session.proc) {
+        if (this.deps.preAnswer?.(id, event.toolName, event.input) === true && session.proc) {
           session.proc.write(this.encodePermission(session, event.requestId, event.input, { allow: true }, true))
           this.emit({ id, type: 'permission-auto-allowed', requestId: event.requestId, toolName: event.toolName })
           return

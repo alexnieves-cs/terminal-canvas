@@ -26,6 +26,8 @@ import { useLab } from '@renderer/labs/useLabs'
 import { promptCount } from '@shared/turn-fork'
 import { TOOL_GLYPH, ToolOther, ChevronRight, ChevronDown, KIND_GLYPH, ArrowUp, Stop } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
+import { ApprovalPrompt } from '@renderer/supervision/ApprovalPrompt'
+import { approvalRisk } from '@shared/approval-risk'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
 
 /**
@@ -730,20 +732,14 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
               </div>
             </div>
           )
+          // M670. Creance's inline approval: the same sentence and verbs, a
+          // risk label, and no session grant for a high-risk request.
           return (
-          <div key={p.requestId} className="chat__permission" data-chat-permission={p.requestId} role="group" aria-label={`${p.toolName} asks for permission`}>
-            {/* M169. A SENTENCE and two buttons (the brief, Codex): the tool and
-                its argument are the sentence's object; the role stays as the
-                group's accessible name. */}
-            <span className="chat__role">asks</span>
-            <p className="chat__permission-sentence">{BACKENDS[backend].label} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span> — allow it?</p>
-            <div className="chat__permission-verbs">
-              <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this one tool call — the next one asks again" {...shellControl(() => answer(p.requestId, true))}>Allow once</button>
-              {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. */}
-              <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session — it will not ask again`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
-              <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title="Deny this tool call" {...shellControl(() => answer(p.requestId, false))}>Deny</button>
-            </div>
-          </div>
+            <ApprovalPrompt key={p.requestId} requestId={p.requestId} toolName={p.toolName} risk={approvalRisk(p.toolName, p.input)}
+              label={`${p.toolName} asks for permission`}
+              sentence={<>{BACKENDS[backend].label} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span> — allow it?</>}
+              onAllow={(scope) => answer(p.requestId, true, scope === 'session' ? 'session' : undefined)}
+              onDeny={() => answer(p.requestId, false)} />
           )
         })}
       </div>}

@@ -1,6 +1,7 @@
 import type { AttentionSink } from './pty-manager'
 import { holdWords, type AgentSessionEvent } from '@shared/agent-session'
 import { PLAN_TOOL } from '@shared/transcript'
+import { approvalRisk } from '@shared/approval-risk'
 
 /**
  * M76. MAIN OWNS PENDING, AND SAYS SO ONCE.
@@ -46,7 +47,14 @@ import { PLAN_TOOL } from '@shared/transcript'
  * dispose drops the hold from the union — a stopped agent is not waiting on
  * anyone — though main's hold itself stays until a cap is raised.
  *
- * Plain node; `verify:agent-session approve.1–.3`, `grant.1–.2`, `hold.attention.1`, `plan.grant.1`.
+ * M670. A HIGH-RISK REQUEST IS CONFIRMED EVERY TIME (Creance's rule for
+ * "Always allow"). A grant is keyed by tool, so `Bash` granted for an `ls`
+ * would pre-answer a later `rm -rf` unseen. `grant` mints nothing from a
+ * high-risk request and `granted` answers false for one, whatever is held —
+ * so the rule holds for every door that sends `scope: 'session'` (the card,
+ * the queue, the palette, the phone), not only the ones that hide the verb.
+ *
+ * Plain node; `verify:agent-session approve.1–.3`, `grant.1–.2`, `hold.attention.1`, `plan.grant.1`; `verify:agent-run risk.grant.*`.
  */
 
 export interface ApprovalTrackerDeps {
@@ -70,10 +78,10 @@ export interface ApprovalTracker {
   pendingIds(): string[]
   /** M355. Panel ids main holds at a cap, in entry order. */
   heldIds(): string[]
-  /** M98. Allow `toolName` for the rest of this session, without asking. */
-  grant(id: string, toolName: string): void
-  /** M98. Whether `toolName` is granted for `id` — what the manager's `preAnswer` asks. */
-  granted(id: string, toolName: string): boolean
+  /** M98. Allow `toolName` for the rest of this session, without asking. M670: `input` is the request's; a high-risk one grants nothing. */
+  grant(id: string, toolName: string, input?: Record<string, unknown>): void
+  /** M98. Whether `toolName` is granted for `id` — what the manager's `preAnswer` asks. M670: never for a high-risk `input`. */
+  granted(id: string, toolName: string, input?: Record<string, unknown>): boolean
   /** M98. The granted tools, in grant order. Empty for an unknown id. */
   grantsOf(id: string): string[]
   /** M98. Drop every grant for `id`. */
@@ -161,16 +169,17 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
     resync(id) { if (waiting(id)) deps.emitState(id, 'wants-you') },
     pendingIds: () => [...pending.keys()],
     heldIds: () => [...held],
-    grant(id, toolName) {
+    grant(id, toolName, input) {
       // M358. A plan is approved each time it is presented. A session grant
       // for ExitPlanMode would pre-answer every later plan unread, and the
       // manager's preAnswer would never even let it reach a person.
       if (toolName === PLAN_TOOL) return
+      if (approvalRisk(toolName, input) === 'high') return
       const set = grants.get(id)
       if (set) { set.add(toolName); return }
       grants.set(id, new Set([toolName]))
     },
-    granted: (id, toolName) => grants.get(id)?.has(toolName) ?? false,
+    granted: (id, toolName, input) => approvalRisk(toolName, input) !== 'high' && (grants.get(id)?.has(toolName) ?? false),
     grantsOf: (id) => [...(grants.get(id) ?? [])],
     revoke(id) { grants.delete(id) }
   }
