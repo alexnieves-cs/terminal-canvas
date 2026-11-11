@@ -1,6 +1,6 @@
 # Terminal Canvas — ordered product development guide
 
-This is the follow-along plan for implementing **every recommendation** in [the product audit](product-audit-2026-09-08.md), including the four 10X opportunities and the P2/P3 work. Follow the numbered steps in order. The complete original audit is preserved at the end as a reference, including its evidence, feature inventory, scoring, strengths, constraints, and product thesis. The coverage tables connect that material to the execution sequence; no recommendation is silently dropped.
+This is the follow-along plan for implementing **every recommendation** in [the product audit](archive/product-audit-2026-09-08.md), including the four 10X opportunities and the P2/P3 work. Follow the numbered steps in order. The complete original audit is preserved at the end as a reference, including its evidence, feature inventory, scoring, strengths, constraints, and product thesis. The coverage tables connect that material to the execution sequence; no recommendation is silently dropped.
 
 The implementation details below extend the original diagnosis into a plan. They are proposed designs, not claims that these features already exist or have been verified. Historical checkout observations in the audit remain historical. At document creation, HEAD had advanced to `3455c65`, an M188 spec commit, so re-read the ledger before assigning new milestones.
 
@@ -287,7 +287,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 **Do in order:**
 
-1. Reconcile `docs/ux-audit-4.1.md` and backlog #86/#88 against current code. Retain evidence for already-fixed findings.
+1. Reconcile `docs/archive/ux-audit-4.1.md` and backlog #86/#88 against current code. Retain evidence for already-fixed findings.
 2. Use the audit's four density layers: identity at rest; next action and blocker contextually; configuration/provenance in inspector; metrics/logs/history in deep detail.
 3. Reduce workflow control competition: keep primary Run clear, move secondary actions into contextual controls, retain disabled actions with named reasons, and keep explanation from unnecessarily displacing the graph.
 4. Make inspector actions appropriate to the selected kind and task. Preserve unavailable capabilities as discoverable named refusals; use progressive disclosure rather than a permanent grid of generic verbs.
@@ -773,7 +773,7 @@ Preserve the material system and aliases. Improve hierarchy by changing what is 
 | Inspector | Configuration, provenance, detailed outcomes |
 | Deep detail | Logs, diagnostics, metrics, historical execution records |
 
-Existing [4.1 audit findings](ux-audit-4.1.md) should remain traceable. Do not reopen already-fixed findings merely because their historical descriptions still exist.
+Existing [4.1 audit findings](archive/ux-audit-4.1.md) should remain traceable. Do not reopen already-fixed findings merely because their historical descriptions still exist.
 
 ## 7. CANVAS AUDIT
 

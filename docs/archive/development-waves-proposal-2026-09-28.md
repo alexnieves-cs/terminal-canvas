@@ -27,22 +27,22 @@ must be rechecked against the current tree before being turned into work.
 The foundation is substantial:
 
 - Tasks already have focus views, plans, checks, comments, acceptance and recovery
-  ([M306–M310](build-log/m306-m310-flagship-flow.md),
-  [M316](build-log/m316-job-recovery.md),
-  [M325–M328](build-log/m325-m328-tasks-workspace-plan.md)).
+  ([M306–M310](../build-log/m306-m310-flagship-flow.md),
+  [M316](../build-log/m316-job-recovery.md),
+  [M325–M328](../build-log/m325-m328-tasks-workspace-plan.md)).
 - Parallel changes already have scratch integration, freshness checks and receipts;
   deliverables and portable recipes also exist
-  ([M317–M318](build-log/m317-m318-integration-and-decisions.md),
-  [M319–M321](build-log/m319-m321-backends-deliverables-recipes.md)).
+  ([M317–M318](../build-log/m317-m318-integration-and-decisions.md),
+  [M319–M321](../build-log/m319-m321-backends-deliverables-recipes.md)).
 - Plan approval, review proposals, persistent spending caps, team asks and replay have
   landed. These should be extended rather than recreated.
 - The latest inspected full-run record reports baseline failures in agents/product
   suites; it is not a clean release result
-  ([M387](build-log/m387-shared-action-trail.md)).
+  ([M387](../build-log/m387-shared-action-trail.md)).
 - Collaboration has local integration coverage, but live authenticated coverage and
   deployment were left outstanding
-  ([M342](build-log/m342-supabase-live-probe.md),
-  [M347](build-log/m347-collab-operations.md)).
+  ([M342](../build-log/m342-supabase-live-probe.md),
+  [M347](../build-log/m347-collab-operations.md)).
 
 ## Wave 1 — Make the existing product dependable
 
@@ -57,9 +57,9 @@ Implementation slices:
 2. Close visible truth gaps: carry unreadable transcript counts into chat and Replay;
    show “1 of 2 allowed — waiting for a teammate” after the owner's partial team approval;
    restore the reported model context window on relaunch. Those are explicitly owed in
-   [M383](build-log/m383-replay-sheet.md),
-   [M378](build-log/m378-team-asks-needs-you.md), and
-   [M380](build-log/m380-cache-burn.md).
+   [M383](../build-log/m383-replay-sheet.md),
+   [M378](../build-log/m378-team-asks-needs-you.md), and
+   [M380](../build-log/m380-cache-burn.md).
 3. Exercise the primary journey with each supported backend's actual capabilities,
    including a Codex-only installation, missing tools, failed setup, stopped processes,
    app relaunch and stale checks. The old audit is input to this pass, not proof those

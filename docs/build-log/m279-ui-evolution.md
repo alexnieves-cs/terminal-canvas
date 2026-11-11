@@ -1,6 +1,6 @@
 # M279 — the UI evolution: navy material, live status, illumination, an Activity tab
 
-The plan and audit are [docs/ui-evolution-plan.md](../ui-evolution-plan.md). This ledger is
+The plan and audit are [docs/archive/ui-evolution-plan.md](../archive/ui-evolution-plan.md). This ledger is
 the run's state: what landed per step, the token re-valuations with their reasons, the
 gate, and the critic's sentence for every golden that changed.
 

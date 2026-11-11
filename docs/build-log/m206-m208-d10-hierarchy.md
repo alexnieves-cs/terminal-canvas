@@ -23,7 +23,7 @@ changed.
 
 ## Audit reconciliation
 
-**Read** `docs/ux-audit-4.1.md`, backlog #86 and #88 against HEAD. Already closed before this act:
+**Read** `docs/archive/ux-audit-4.1.md`, backlog #86 and #88 against HEAD. Already closed before this act:
 workflow block metadata is sentence case with `·` (`workflow-diagram.ts`); turn pluralisation is
 present (`Inspector.tsx`); compact drawer top has `compact.1`; the skill menu stays beside its
 wrapping name; lineup preview is a sentence; run facts are one data line; tool groups already have

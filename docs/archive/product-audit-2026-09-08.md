@@ -1,6 +1,6 @@
 # Terminal Canvas — product, UX, and engineering audit
 
-Saved from the evidence-based diagnosis delivered on 2026-09-08. This preserves the audit's observations and recommendations as delivered; checkout details describe the time of that audit, not necessarily the current checkout. The execution sequence is in [the ordered development guide](product-development-guide-2026-09-08.md).
+Saved from the evidence-based diagnosis delivered on 2026-09-08. This preserves the audit's observations and recommendations as delivered; checkout details describe the time of that audit, not necessarily the current checkout. The execution sequence is in [the ordered development guide](../product-development-guide-2026-09-08.md).
 
 ## 1. EXECUTIVE DIAGNOSIS
 
@@ -31,7 +31,7 @@ These are integration problems with substantial architectural reuse available.
 
 ## 2. PRODUCT STRENGTHS
 
-**The issue-to-agent path is real.** Board dispatch already connects a work item, teammate, repository, isolated worktree, conversation, and PR. This is the best candidate for the product’s primary workflow—not an idea that needs an entirely new foundation. See [dispatch implementation](../src/renderer/canvas/Canvas.tsx) and [work-item records](../src/shared/work-items.ts).
+**The issue-to-agent path is real.** Board dispatch already connects a work item, teammate, repository, isolated worktree, conversation, and PR. This is the best candidate for the product’s primary workflow—not an idea that needs an entirely new foundation. See [dispatch implementation](../../src/renderer/canvas/Canvas.tsx) and [work-item records](../../src/shared/work-items.ts).
 
 **The lifecycle architecture supports spatial work.** Session ownership outside React makes view culling compatible with continuing terminal work. Pure geometry, viewport math, and tier assignment are valuable product infrastructure, not merely implementation details.
 
@@ -88,9 +88,9 @@ I would not remove a major capability from this evidence alone. I would remove r
 | Returning user | Restore layout, transcripts, camera, sessions | Must reconstruct purpose and next action | “Resume work” summary derived from retained facts |
 | Large workspace | Rail, attention, minimap, fit, groups | Can find objects, but must infer relationships | “Show this task” and “Show related” navigation |
 
-A particularly strong defect is visible in source: [useFileTree](../src/renderer/canvas/useFileTree.ts) recognizes terminal and review roots, then returns no root for other kinds. [useInspectorDetail](../src/renderer/canvas/useInspectorDetail.ts) similarly excludes chats from Toolbox directory resolution.
+A particularly strong defect is visible in source: [useFileTree](../../src/renderer/canvas/useFileTree.ts) recognizes terminal and review roots, then returns no root for other kinds. [useInspectorDetail](../../src/renderer/canvas/useInspectorDetail.ts) similarly excludes chats from Toolbox directory resolution.
 
-The starter golden even says a chat has no directory. Its [persisted model](../src/shared/chat-panel.ts) says otherwise.
+The starter golden even says a chat has no directory. Its [persisted model](../../src/shared/chat-panel.ts) says otherwise.
 
 **This is a historical terminal-first assumption expressed as present-day product behavior.**
 
@@ -193,13 +193,13 @@ The weak point is **the translation from runtime events to human understanding**
 
 ### Specific gaps
 
-**Run diagrams cannot currently express actual pending approvals through their persisted outcome model.** `wants-you` is reserved, but no run entry records the pending question. See [run-outcome.ts](../src/shared/run-outcome.ts).
+**Run diagrams cannot currently express actual pending approvals through their persisted outcome model.** `wants-you` is reserved, but no run entry records the pending question. See [run-outcome.ts](../../src/shared/run-outcome.ts).
 
 **A finished turn is not a completed task.** The run classifier treats `a turn` as finished. That is reasonable for an execution node; the UI must not let it imply that the requested work passed review.
 
 **Review state means a PR was opened.** That is a specific runtime fact, not the same as “changes ready for local review.”
 
-**History remains tied to canvas membership.** [Run parsing](../src/shared/layout-schema.ts) drops runs with no surviving panels. Tidying a canvas can therefore undermine the retained execution story.
+**History remains tied to canvas membership.** [Run parsing](../../src/shared/layout-schema.ts) drops runs with no surviving panels. Tidying a canvas can therefore undermine the retained execution story.
 
 **Backend support differs.** Capability-driven controls are correct. Product language should explain consequences without presenting process mechanics as onboarding copy.
 
@@ -261,7 +261,7 @@ A short, ordered backlog:
 6. **Decision capture.** Accept a conversation conclusion into existing memory with its source attached.
 7. **Related-object navigation.** Frame or highlight existing relationships without rearranging the canvas.
 
-A useful reliability finding belongs with search: [panel-search.ts](../src/main/panel-search.ts) catches reader failures and substitutes empty results. That can make an unreadable source look like “no matches.” Search needs partial-result honesty before broader indexing.
+A useful reliability finding belongs with search: [panel-search.ts](../../src/main/panel-search.ts) catches reader failures and substitutes empty results. That can make an unreadable source look like “no matches.” Search needs partial-result honesty before broader indexing.
 
 ## 11. 10X OPPORTUNITIES
 

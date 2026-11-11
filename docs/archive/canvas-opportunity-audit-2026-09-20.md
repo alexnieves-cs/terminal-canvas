@@ -46,10 +46,10 @@ for the current checkout.
 - **What could break:** native `node-pty` packaging, the `terminal-canvas://` protocol handler,
   existing user-data separation, and Keychain access. Test on both a clean account and an upgrade
   from the current unsigned build.
-- **Evidence:** [README.md:11](../README.md:11),
-  [build/builder-config.cjs:102](../build/builder-config.cjs:102),
-  [docs/load-bearing.md:2330](load-bearing.md:2330),
-  [docs/build-log/m180-m200-ledger.md:1634](build-log/m180-m200-ledger.md:1634).
+- **Evidence:** [README.md:11](../../README.md:11),
+  [build/builder-config.cjs:102](../../build/builder-config.cjs:102),
+  [docs/load-bearing.md:2330](../load-bearing.md:2330),
+  [docs/build-log/m180-m200-ledger.md:1634](../build-log/m180-m200-ledger.md:1634).
 
 ### P0 — There is no clean release-quality verification result for this checkout
 
@@ -68,10 +68,10 @@ for the current checkout.
 - **What could break:** tests share Electron/tmux timing constraints; parallel Electron runs have
   documented false failures. This is a release procedure and evidence gap, not an invitation to
   weaken the gate.
-- **Evidence:** [docs/build-log/m180-m200-ledger.md:1583](build-log/m180-m200-ledger.md:1583),
-  [docs/build-log/m180-m200-ledger.md:1626](build-log/m180-m200-ledger.md:1626),
-  [docs/build-log/m299-orchestrate-chrome.md:108](build-log/m299-orchestrate-chrome.md:108),
-  [scripts/verify-all.cjs:1](../scripts/verify-all.cjs:1).
+- **Evidence:** [docs/build-log/m180-m200-ledger.md:1583](../build-log/m180-m200-ledger.md:1583),
+  [docs/build-log/m180-m200-ledger.md:1626](../build-log/m180-m200-ledger.md:1626),
+  [docs/build-log/m299-orchestrate-chrome.md:108](../build-log/m299-orchestrate-chrome.md:108),
+  [scripts/verify-all.cjs:1](../../scripts/verify-all.cjs:1).
 
 ### P0 — Visual regressions are knowingly unresolved
 
@@ -89,9 +89,9 @@ for the current checkout.
   justified goldens. Resolve or explicitly scope the remaining Orchestrate visual defects.
 - **What could break:** first-run discoverability, shell responsive layout, scene legibility and
   the screenshot harness itself. Goldens must change on purpose, not merely to turn a test green.
-- **Evidence:** [docs/build-log/m299-orchestrate-chrome.md:131](build-log/m299-orchestrate-chrome.md:131),
-  [docs/build-log/m299-orchestrate-chrome.md:159](build-log/m299-orchestrate-chrome.md:159),
-  [docs/product-rules.md:52](product-rules.md:52).
+- **Evidence:** [docs/build-log/m299-orchestrate-chrome.md:131](../build-log/m299-orchestrate-chrome.md:131),
+  [docs/build-log/m299-orchestrate-chrome.md:159](../build-log/m299-orchestrate-chrome.md:159),
+  [docs/product-rules.md:52](../product-rules.md:52).
 
 ## Must complete before expanding beyond a controlled beta
 
@@ -110,8 +110,8 @@ for the current checkout.
   dev server.
 - **What could break:** onboarding's no-mint-before-validation rule, path grants, composer focus,
   and first-run layout. Pair fixes with existing gates and visual review.
-- **Evidence:** [docs/build-log/m180-m200-ledger.md:1597](build-log/m180-m200-ledger.md:1597),
-  [docs/build-log/m205-d09-intent-led-onboarding.md:173](build-log/m205-d09-intent-led-onboarding.md:173).
+- **Evidence:** [docs/build-log/m180-m200-ledger.md:1597](../build-log/m180-m200-ledger.md:1597),
+  [docs/build-log/m205-d09-intent-led-onboarding.md:173](../build-log/m205-d09-intent-led-onboarding.md:173).
 
 ### P1 — Codex-only users cannot start the primary folder-based workflow
 
@@ -125,8 +125,8 @@ for the current checkout.
   absent, and exercise both CLI-only configurations.
 - **What could break:** dispatch idempotency, worktree creation, agent-session adapter rules and
   permission mode argument construction.
-- **Evidence:** [README.md:7](../README.md:7),
-  [docs/build-log/m205-d09-intent-led-onboarding.md:181](build-log/m205-d09-intent-led-onboarding.md:181).
+- **Evidence:** [README.md:7](../../README.md:7),
+  [docs/build-log/m205-d09-intent-led-onboarding.md:181](../build-log/m205-d09-intent-led-onboarding.md:181).
 
 ### P1 — Security- and integration-critical paths are only faked or manually checked once
 
@@ -143,9 +143,9 @@ for the current checkout.
   and never run them as part of the normal offline suite.
 - **What could break:** user credentials, accidental remote writes, paid agent usage and privacy.
   Keep outward tests fenced to disposable resources and require human confirmation.
-- **Evidence:** [docs/load-bearing.md:2301](load-bearing.md:2301),
-  [docs/load-bearing.md:4113](load-bearing.md:4113),
-  [docs/load-bearing.md:4130](load-bearing.md:4130).
+- **Evidence:** [docs/load-bearing.md:2301](../load-bearing.md:2301),
+  [docs/load-bearing.md:4113](../load-bearing.md:4113),
+  [docs/load-bearing.md:4130](../load-bearing.md:4130).
 
 ## Important product work, but not a prerequisite for an initial release
 
@@ -161,8 +161,8 @@ The exception is D13's reader-failure/honest-coverage work: it is designed to be
 if a beta journey is blocked, and should be prioritized if users encounter an unavailable result
 presented as an empty one.
 
-**Evidence:** [docs/build-log/m193-m224-ledger.md:56](build-log/m193-m224-ledger.md:56),
-[docs/build-log/m193-m224-ledger.md:67](build-log/m193-m224-ledger.md:67).
+**Evidence:** [docs/build-log/m193-m224-ledger.md:56](../build-log/m193-m224-ledger.md:56),
+[docs/build-log/m193-m224-ledger.md:67](../build-log/m193-m224-ledger.md:67).
 
 ### P2 — Resolve known Canvas presentation debt when it affects beta usability
 
@@ -171,7 +171,7 @@ Backlog #86 needs an authoritative repository root propagated from main to file/
 empty states. These are real, bounded defects/debt, but neither should delay signing and a clean
 release gate unless beta users hit it in the first-run or review journey.
 
-**Evidence:** [docs/build-log/m206-m208-d10-hierarchy.md:35](build-log/m206-m208-d10-hierarchy.md:35).
+**Evidence:** [docs/build-log/m206-m208-d10-hierarchy.md:35](../build-log/m206-m208-d10-hierarchy.md:35).
 
 ## Explicitly not required for this release
 
@@ -183,9 +183,9 @@ release gate unless beta users hit it in the first-run or review journey.
   extension registry. The release notes correctly reject shipping these without an adequate trust
   and verification design.
 
-**Evidence:** [README.md:11](../README.md:11),
-[docs/release-notes/5.0.0.md:47](release-notes/5.0.0.md:47),
-[docs/build-log/m193-m224-ledger.md:75](build-log/m193-m224-ledger.md:75).
+**Evidence:** [README.md:11](../../README.md:11),
+[docs/release-notes/5.0.0.md:47](../release-notes/5.0.0.md:47),
+[docs/build-log/m193-m224-ledger.md:75](../build-log/m193-m224-ledger.md:75).
 
 ## Recommended release sequence
 

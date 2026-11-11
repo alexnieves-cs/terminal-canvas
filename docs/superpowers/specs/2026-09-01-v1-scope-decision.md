@@ -169,7 +169,7 @@ lists as gone are not repeated.
 | 76 | An app icon | **In — M50.** Vector artwork in the repository, converted with `sips` and `iconutil`. |
 | 77 | Link-drawing leftovers | **In, the two code items — M36.** The badge/label overlap stays a hand check; the double-fire correction stands. |
 
-**The UI follow-up list** (`docs/ui-followup-work.md`): items 1–7 (mono inspector
+**The UI follow-up list** (`docs/archive/ui-followup-work.md`): items 1–7 (mono inspector
 values, shortcut chips, the dot-grid decision, 24px targets, an SVG icon set,
 hover-revealed row controls, self-hosted type) are all **in — M40**. Item 8, a
 visual regression suite, stays **cut** for the reason its author gave: it is a

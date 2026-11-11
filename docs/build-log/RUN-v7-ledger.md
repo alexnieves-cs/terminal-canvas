@@ -30,7 +30,7 @@ assigned in order and never reused; a milestone that is declined keeps its numbe
 | M146 | II | #23 — zoom to fit, a camera flight, named apart from maximise |
 | M147 | II | #34 — per-preset environment overrides and template sets (needed by Act V) |
 | M148 | III | The visual-regression suite over the shot harness (goldens, tolerant diff, gated like `verify:packaged`) |
-| M149 | III | `docs/ux-audit-4.0.md`: every scene viewed, findings fixed; empty/loading/error states; motion, reduced motion, focus order; chrome a11y; density |
+| M149 | III | `docs/archive/ux-audit-4.0.md`: every scene viewed, findings fixed; empty/loading/error states; motion, reduced motion, focus order; chrome a11y; density |
 | M150 | IV.1 | Tags on the vault's file lineage (wikilinks and backlinks were M85's): `#tag` parsed beside the links, a TAGS section that filters, a chip in the note — spec `2026-09-07-v7-act4-tags-design.md` |
 | M151 | IV.2 | A conditional / loop workflow block on the live Run caller — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
 | M152 | IV.3 | #55 — ad-hoc task panels — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
@@ -149,7 +149,7 @@ Build log: `docs/build-log/m148-m149-act3-visual.md`. Spec and plan:
 - **M148 `verify:visual`**: red `visual.1` at `720798e`; the suite at `41fabf6`; goldens at
   half scale (54 scenes); watchdog 200 s from two runs of 159.2 s. Outside the chain beside
   `verify:packaged` (`verify:meta` 19's second exclusion).
-- **M149 the audit** (`docs/ux-audit-4.0.md`): every golden walked. Found in the CODE and
+- **M149 the audit** (`docs/archive/ux-audit-4.0.md`): every golden walked. Found in the CODE and
   fixed with a red first: M142's ledger read never wired (F.8); M147's workspace minted before
   its sheet (F.8); the `⋯` menu invisible over a live terminal since M144 (F.12); the
   attention popover invisible since 2.3.0 (F.14); the toolbox Open door's line (F.2); the

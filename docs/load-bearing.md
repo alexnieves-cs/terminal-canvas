@@ -2468,7 +2468,7 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   release) was confirmed once by hand; `verify:panels overview.2` drives a synthetic click.
   **M148 changed half of this:** `verify:visual` now compares every scene with a committed
   golden, so a scene that CHANGES is red; what stays manual is whether the golden is RIGHT —
-  a person looked, once, at every golden it holds (`docs/ux-audit-4.0.md`).
+  a person looked, once, at every golden it holds (`docs/archive/ux-audit-4.0.md`).
 - **The 100 % density (M149).** Every golden is one machine's capture at a device scale
   factor of 2. A `scale-100` scene was tried through `Emulation.setDeviceMetricsOverride`
   and dropped: `capturePage` renders at the display's own scale whatever the override says

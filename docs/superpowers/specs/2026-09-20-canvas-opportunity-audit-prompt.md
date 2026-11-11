@@ -96,7 +96,7 @@ with no evidence line is worse than nothing here.
 
 ## Output
 
-Write **one file**: `docs/canvas-opportunity-audit-2026-09-20.md`, structured as:
+Write **one file**: `docs/archive/canvas-opportunity-audit-2026-09-20.md`, structured as:
 
 1. **Summary** — the three things you would do first, and why those three.
 2. **Confirmed findings** — ranked, in the per-finding format above.

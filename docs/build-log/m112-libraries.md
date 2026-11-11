@@ -89,7 +89,7 @@ stays owed; no Sentry project was available during this run.
 
 ## §4 — ACP against `BACKENDS`
 
-`docs/acp-registry-diff.md` re-reads the Act I "declined by name" premise against a table of
+`docs/archive/acp-registry-diff.md` re-reads the Act I "declined by name" premise against a table of
 ACP's methods versus `BACKENDS`' current shape; the Act I spec and CLAUDE.md's M99 entry are
 amended in place with a dated note. No `BackendDef` field added — the customer-free-abstraction
 rule (M23-spec §9.1) says a field lands only when an `acp` row does, and none does this
@@ -97,7 +97,7 @@ milestone.
 
 ## §5 — tldraw's camera API against `viewport.ts`
 
-`docs/canvas-camera-comparison.md`: `viewport.ts` and tldraw's `Editor` already agree on the
+`docs/archive/canvas-camera-comparison.md`: `viewport.ts` and tldraw's `Editor` already agree on the
 core primitives (`screenToWorld`/`worldToScreen`, `zoomAt`, `panBy`, `centreOn`, `clampScale`).
 No adoption — live WebGL xterm nodes cannot become canvas-drawn shapes, and tldraw's DOM
 ceiling is the exact problem `lod.ts` already solves for this app's case. Two backlog ideas
