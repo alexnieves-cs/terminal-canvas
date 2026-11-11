@@ -26,7 +26,7 @@ import type { AgentBackend } from '@shared/agent-session'
 // stays out of this file; the palette only needs the id/label/help triple
 // SERVICES already carries, and the label lookup for a REFUSAL message lives
 // in Canvas.tsx, where the input-mode re-prompt actually happens.
-import { SERVICES, notConnectedReason } from '@shared/credential-schema'
+import { SERVICES } from '@shared/credential-schema'
 import type { PaletteContext } from './commands/context'
 // `export *` below re-exports these for consumers but does NOT bind them in
 // this module’s scope — buildCommands names them directly, so they are imported too.
@@ -546,7 +546,6 @@ export interface PaletteActions {
   openReplay(id: string): void
   /** M74. A chat's session, continued in a terminal with `claude --resume`. */
   openInTerminal(id: string): void
-  openJira(): void
   /**
    * M96. The verb line: opens the palette's text mode on `Run a verb…`,
    * parses and builds the plan against the live canvas, confirms a
@@ -1024,7 +1023,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M89. Every service on one page: the door is the navigator's pane, and
   // this row enters the Credentials scope the page's verbs open, so there
   // is one path from either side.
-  out.push({ id: 'manage.integrations', title: 'Manage connections…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'connections integrations services connected github jira credentials tokens', run: () => {} })
+  out.push({ id: 'manage.integrations', title: 'Manage connections…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'connections integrations services connected github credentials tokens', run: () => {} })
   // M88. PRESENT at rest and disabled with the Connect reason when no
   // github credential exists — the Jira door below only exists once a
   // credential does, which is the "row that disappears" rule broken by a
@@ -1033,13 +1032,6 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     withReason(
       { id: 'github.open', title: 'Open GitHub work', subtitle: 'issues assigned to you and pull requests waiting on you', searchText: 'github issues pull requests review assigned work', group: 'manage', run: () => actions.openGithub() },
       ctx.credentials.some((credential) => credential.service === 'github') ? undefined : REASON_NO_GITHUB
-    )
-  )
-  // M89. Present at rest and disabled by the one sentence, like GitHub's door.
-  out.push(
-    withReason(
-      { id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openJira() },
-      ctx.credentials.some((credential) => credential.service === 'jira') ? undefined : notConnectedReason('jira')
     )
   )
 

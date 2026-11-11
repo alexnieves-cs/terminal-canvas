@@ -1005,22 +1005,22 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           { kind: 'review', rect: { id: 'fR', x: 60, y: 320, w: 300, h: 200 }, z: 2, subject: { subjectId: 'fA', label: 'fA', repoRoot: fixtureDir, baselineSha: '0000000000000000000000000000000000000000' } },
           { kind: 'file', rect: { id: 'fF', x: 400, y: 320, w: 300, h: 200 }, z: 3, source: { path: join(fixtureDir, 'note.txt') } },
           { kind: 'toolbox', rect: { id: 'fT', x: 740, y: 320, w: 300, h: 200 }, z: 4, source: { cwd: fixtureDir, label: 'frame' } },
-          { kind: 'jira', rect: { id: 'fJ', x: 60, y: 560, w: 300, h: 200 }, z: 5 }
+          { kind: 'github', rect: { id: 'fG', x: 60, y: 560, w: 300, h: 200 }, z: 5 }
         ]
         layoutStore.save({ panels: fromPanels([term('fA', 60), ...kinds]),
           camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
         await reloadWithin(wc)
         const seeded = await waitUntil(async () => wc.executeJavaScript(
-          `['fA', 'fR', 'fF', 'fT', 'fJ'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+          `['fA', 'fR', 'fF', 'fT', 'fG'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const frames = await wc.executeJavaScript(`(() => {
           const out = {}
-          for (const id of ['fA', 'fR', 'fF', 'fT', 'fJ']) {
+          for (const id of ['fA', 'fR', 'fF', 'fT', 'fG']) {
             const p = document.querySelector('.panel[data-panel-id="' + id + '"]')
             out[id] = p ? { pf: p.classList.contains('pf'), kind: p.dataset.panelKind, chrome: !!p.querySelector('.pf__chrome.panel__chrome'), title: !!p.querySelector('.pf__title.panel__title'), body: !!p.querySelector('.pf__body') } : null
           }
           return out })()`)
-        const allFramed = seeded === true && ['fA', 'fR', 'fF', 'fT', 'fJ'].every((id) => frames[id] && frames[id].pf && frames[id].chrome && frames[id].title && frames[id].body)
+        const allFramed = seeded === true && ['fA', 'fR', 'fF', 'fT', 'fG'].every((id) => frames[id] && frames[id].pf && frames[id].chrome && frames[id].title && frames[id].body)
         ok(IDS[0], allFramed, JSON.stringify({ seeded, frames }))
 
         // frame.2. Source text first: the built stylesheet has no rule that
@@ -2480,7 +2480,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
 
     // -------------------------------------------------------------------
     // drop.1 (M59). The drop door, hit-tested: a path dropped OVER a live
-    //   terminal panel is PASTED into it (bracketed, the same door Jira
+    //   terminal panel is PASTED into it (bracketed, the same door ticket
     //   context uses) and opens no file panel; the same path over empty
     //   canvas opens a file panel; a drop with the palette open does
     //   neither. Through __m59Drop, the same function the real handler
@@ -3646,7 +3646,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
     // -------------------------------------------------------------------
     // M68 — context.2 / context.3 / context.4. THE CONTEXT PANE FINISHED.
     // Work shows three headings each with a first-arm line for a plain shell
-    // in a non-repository (context.2); the Jira panel's no-credential note
+    // in a non-repository (context.2); the GitHub panel's no-credential note
     // offers a Connect verb that opens the palette's Credentials scope
     // (context.3); the Files pane names its root panel and the Workspaces
     // pane's merged row toggles the merged view and reads pressed (context.4).
@@ -3657,7 +3657,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       wc.on('console-message', onC)
       const IDS = [
         'context.2 the Work tab renders Changes, Run and Cost with a first-arm line each for a plain shell outside a repository, and Commands stays absent — an empty section is not actionable',
-        'context.3 the Jira panel with no credential offers Connect Jira…, which opens the palette in its Credentials scope',
+        'context.3 the GitHub panel with no credential offers Connect GitHub…, which opens the palette in its Credentials scope',
         'context.4 the Files pane names the panel its root belongs to, and the Workspaces pane\'s merged row toggles the merged view'
       ]
       try {
@@ -3666,7 +3666,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         layoutStore.save({
           panels: fromPanels([
             { kind: 'terminal', rect: { id: 'cxA', x: 60, y: 60, w: 420, h: 280 }, z: 1, spec: { panelId: 'cxA', cwd: plainDir, command: '/bin/cat', args: [] }, title: 'plain shell' },
-            { kind: 'jira', rect: { id: 'cxJ', x: 520, y: 60, w: 320, h: 220 }, z: 2 }
+            { kind: 'github', rect: { id: 'cxJ', x: 520, y: 60, w: 320, h: 220 }, z: 2 }
           ]),
           groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
         })
@@ -3702,14 +3702,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         ok(IDS[0], work !== null && work.changes !== null && work.run !== null && work.cost !== null && work.runs === null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Run', 'Cost']) && /not a repository/.test(work.changes) && /no agent on this panel/.test(work.cost),
           JSON.stringify({ work, log: cLog.slice(-3) }))
 
-        // The Jira panel: the verb, then the scope it opens.
-        const connect = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="cxJ"] [data-jira-connect]'); return b ? b.textContent.trim() : false })()`), 6000)
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="cxJ"] [data-jira-connect]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        // The GitHub panel (Jira's panel was removed in M683): the verb, then the scope it opens.
+        const connect = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="cxJ"] [data-github-connect]'); return b ? b.textContent.trim() : false })()`), 6000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="cxJ"] [data-github-connect]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await settle()
         const scope = await wc.executeJavaScript(`(() => ({ open: document.querySelector('.palette') !== null, scope: document.querySelector('.palette__scope')?.textContent ?? null }))()`)
         await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
         await settle()
-        ok(IDS[1], connect === 'Connect Jira…' && scope.open === true && scope.scope === 'Credentials', JSON.stringify({ connect, scope, log: cLog.slice(-3) }))
+        ok(IDS[1], connect === 'Connect GitHub…' && scope.open === true && scope.scope === 'Credentials', JSON.stringify({ connect, scope, log: cLog.slice(-3) }))
 
         // Files names its panel; Workspaces has the door.
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="files"]') || document.querySelector('.dock__button[data-navigator="files"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
@@ -3900,7 +3900,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             { kind: 'terminal', rect: { id: 'ovA', x: 60, y: 60, w: 420, h: 280 }, z: 1, spec: { panelId: 'ovA', cwd: oDir, command: '/bin/cat', args: [] }, title: 'ringer' },
             { kind: 'file', rect: { id: 'ovF', x: 540, y: 60, w: 300, h: 200 }, z: 2, source: { path: join(oDir, 'note.txt') } },
             { kind: 'toolbox', rect: { id: 'ovT', x: 900, y: 60, w: 300, h: 200 }, z: 3, source: { cwd: oDir, label: 'overview' } },
-            { kind: 'jira', rect: { id: 'ovJ', x: 60, y: 400, w: 300, h: 200 }, z: 4 },
+            { kind: 'github', rect: { id: 'ovG', x: 60, y: 400, w: 300, h: 200 }, z: 4 },
             { kind: 'file', rect: { id: 'ovN', x: 400, y: 400, w: 300, h: 200 }, z: 6, source: { path: join(oDir, 'plan.md'), prose: true } },
             { kind: 'terminal', rect: { id: 'ovB', x: 3000, y: 1800, w: 420, h: 280 }, z: 5, spec: { panelId: 'ovB', cwd: oDir, command: '/bin/cat', args: [] }, title: 'far' }
           ]),
@@ -3914,7 +3914,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const scale = () => wc.executeJavaScript(`window.__m4aViewport().scale`)
         const zoomBelow = async (target) => { for (let i = 0; i < 80; i += 1) { if ((await scale()) < target) return true; await cmd('-'); await sleep(20) } return false }
         const readFar = () => wc.executeJavaScript(`(() => { const out = {}
-          for (const id of ['ovF', 'ovT', 'ovJ', 'ovN']) { const p = document.querySelector('.panel[data-panel-id="' + id + '"]')
+          for (const id of ['ovF', 'ovT', 'ovG', 'ovN']) { const p = document.querySelector('.panel[data-panel-id="' + id + '"]')
             out[id] = p ? { block: p.querySelector('[data-card-block]')?.getAttribute('data-tone') ?? null, blockTitle: p.querySelector('[data-card-block] .panel__card-block-title')?.textContent ?? null, summary: p.querySelector('[data-card-summary] .panel__card-summary-state')?.textContent ?? null } : null }
           return out })()`)
         const atSummary = await zoomBelow(0.24); await settle()
@@ -3923,10 +3923,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const atBlock = await zoomBelow(0.155); await settle()
         const block = await readFar()
         await resetZoom(wc); await settle()
-        const words = { ovF: 'file', ovT: 'toolbox', ovJ: 'Jira', ovN: 'note' }
+        const words = { ovF: 'file', ovT: 'toolbox', ovG: 'GitHub', ovN: 'note' }
         ok(IDS[0], atSummary && atBlock &&
-          ['ovF', 'ovT', 'ovJ', 'ovN'].every((id) => summary[id] && summary[id].summary === words[id] && summary[id].block === null) &&
-          ['ovF', 'ovT', 'ovJ', 'ovN'].every((id) => block[id] && block[id].block === 'kind' && typeof block[id].blockTitle === 'string' && block[id].blockTitle.length > 0),
+          ['ovF', 'ovT', 'ovG', 'ovN'].every((id) => summary[id] && summary[id].summary === words[id] && summary[id].block === null) &&
+          ['ovF', 'ovT', 'ovG', 'ovN'].every((id) => block[id] && block[id].block === 'kind' && typeof block[id].blockTitle === 'string' && block[id].blockTitle.length > 0),
           JSON.stringify({ atSummary, atBlock, summary, block, log: oLog.slice(-3) }))
 
         // The minimap: five blocks, the ringer's turning amber, a click that lands.
@@ -3953,7 +3953,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`window.canvas.settings.set('canvas.minimap', true)`)
         await settle()
         const tones = Object.fromEntries(blocks)
-        const tonesRight = tones.ovA === 'needs-you' && tones.ovF === 'kind' && tones.ovT === 'kind' && tones.ovJ === 'kind' && tones.ovN === 'kind' && tones.ovB === 'asleep'
+        const tonesRight = tones.ovA === 'needs-you' && tones.ovF === 'kind' && tones.ovT === 'kind' && tones.ovG === 'kind' && tones.ovN === 'kind' && tones.ovB === 'asleep'
         ok(IDS[1], amber === true && blocks.length === 6 && tonesRight && nearFar && gone === true,
           JSON.stringify({ amber, blocks, before, after, nearFar, gone, log: oLog.slice(-3) }))
 

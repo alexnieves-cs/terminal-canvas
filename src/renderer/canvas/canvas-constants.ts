@@ -1,6 +1,6 @@
 import { triggerWord } from '@shared/watch-trigger'
 import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
-  isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
+  isFilePanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 import type { CredentialMeta } from '@shared/credential-schema'
@@ -98,7 +98,6 @@ export function panelLabel(panel: Panel): string {
   // because two panels on one canvas can easily hold two files of the same
   // name from different directories.
   if (isFilePanel(panel)) return `file: ${panel.source.path} (${panel.rect.id})`
-  if (isJiraPanel(panel)) return `jira tickets (${panel.rect.id})`
   // The DIRECTORY, not a basename: a toolbox answers for a whole cwd, and two
   // repositories with the same leaf name are the ordinary case.
   if (isToolboxPanel(panel)) return `toolbox: ${panel.source.cwd} (${panel.rect.id})`

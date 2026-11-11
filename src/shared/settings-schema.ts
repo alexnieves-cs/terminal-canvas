@@ -891,15 +891,6 @@ export const SETTINGS: readonly SettingDef[] = [
     category: LABS_CATEGORY
   },
   {
-    id: 'labs.jira',
-    label: 'Show the Jira panel',
-    description: 'offer Open Jira tickets; a Jira panel already on a canvas still works',
-    keywords: ['jira', 'tickets', 'atlassian', 'issues', 'labs'],
-    type: 'boolean',
-    default: false,
-    category: LABS_CATEGORY
-  },
-  {
     id: 'labs.toolbox',
     label: 'Show the toolbox and memory panels',
     description: 'offer Open toolbox and Open memory…; one already on a canvas still works',

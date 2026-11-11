@@ -3372,10 +3372,10 @@ const FRESH = () => ctx({
   ok('labs.2 every row a lab hides is a row the palette builds', stale.length === 0, JSON.stringify(stale))
 
   // The no-dead-end rule: what acts on an object already on a canvas stays.
-  const kept = ['deck.edit', 'deck.export-pptx', 'sheet.edit', 'sheet.review', 'credential.set.jira', 'credential.verify.jira', 'team.allow.w1.a1', 'spawn.sheet', 'object.create.note', 'capability.open']
+  const kept = ['deck.edit', 'deck.export-pptx', 'sheet.edit', 'sheet.review', 'credential.set.github', 'credential.verify.github', 'team.allow.w1.a1', 'spawn.sheet', 'object.create.note', 'capability.open']
   ok('labs.3 no lab hides a verb on an existing object, a credential row, a team ask or a near-namesake',
     kept.every((id) => P.labOfRow(id) === undefined) &&
-      P.labOfRow('object.create.deck') === 'decks' && P.labOfRow('object.create.sheet') === 'sheets' && P.labOfRow('jira.open') === 'jira' &&
+      P.labOfRow('object.create.deck') === 'decks' && P.labOfRow('object.create.sheet') === 'sheets' &&
       P.labOfRow('world.view') === 'world' && P.labOfRow('share.open') === 'accounts' && P.labOfRow('object.create.relay') === 'relay' && P.labOfRow('panel.memory') === 'toolbox',
     JSON.stringify(kept.map((id) => [id, P.labOfRow(id)])))
 

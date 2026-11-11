@@ -2518,25 +2518,25 @@ await (async () => {
   }
 
   if (need('pack.requires.1 a missing credential is named PER FIELD; connected, rejected, not-connected and unknown-service are distinct rows; a tool is found, missing or unanswered')) {
+    // M683. Jira was the multi-field service here; with it gone, a rejected
+    // credential is GitHub's and the per-field case is an unknown service.
     const manifest = { name: 'devrel', version: '1.0.0', contents: [],
       credentials: [
         { service: 'github', fields: [{ id: 'token', label: 'personal access token' }] },
-        { service: 'jira', fields: [{ id: 'site', label: 'site URL' }, { id: 'email', label: 'Atlassian email' }, { id: 'token', label: 'API token' }] },
-        { service: 'twitter', fields: [{ id: 'key', label: 'API key' }] }
+        { service: 'twitter', fields: [{ id: 'key', label: 'API key' }, { id: 'secret', label: 'API secret' }] }
       ],
       tools: [{ command: 'gh' }, { command: 'pandoc' }, { command: 'ffmpeg' }] }
-    const none = F.packRequirements(manifest, [{ service: 'jira', label: 'me@x', addedAt: 'a', rejectedAt: 'b' }], { gh: true, pandoc: false })
+    const none = F.packRequirements(manifest, [], { gh: true, pandoc: false })
+    const rejected = F.packRequirements(manifest, [{ service: 'github', label: 'ada', addedAt: 'a', rejectedAt: 'b' }], {})
     const connected = F.packRequirements(manifest, [{ service: 'github', label: 'ada', addedAt: 'a' }], {})
     const gh = none.credentials.find((r) => r.service === 'github')
-    const jira = none.credentials.filter((r) => r.service === 'jira')
-    const tw = none.credentials.find((r) => r.service === 'twitter')
+    const tw = none.credentials.filter((r) => r.service === 'twitter')
     const tool = (c) => none.tools.find((t) => t.command === c)
     ok('pack.requires.1 a missing credential is named PER FIELD; connected, rejected, not-connected and unknown-service are distinct rows; a tool is found, missing or unanswered',
-      none.credentials.length === 5 &&
+      none.credentials.length === 3 &&
         gh.state === 'not-connected' && /GitHub · personal access token/.test(gh.sentence) && /not connected/.test(gh.sentence) && /Credentials/.test(gh.sentence) &&
-        jira.length === 3 && jira.every((r) => r.state === 'rejected') &&
-        ['site URL', 'Atlassian email', 'API token'].every((label, i) => jira[i].sentence.includes(`Jira · ${label}`)) &&
-        tw.state === 'unknown-service' && /twitter/.test(tw.sentence) && /API key/.test(tw.sentence) &&
+        rejected.credentials.find((r) => r.service === 'github').state === 'rejected' &&
+        tw.length === 2 && tw.every((r) => r.state === 'unknown-service' && /twitter/.test(r.sentence)) && /API key/.test(tw[0].sentence) && /API secret/.test(tw[1].sentence) &&
         connected.credentials.find((r) => r.service === 'github').state === 'connected' && connected.credentials.find((r) => r.service === 'github').sentence === undefined &&
         tool('gh').state === 'found' && tool('pandoc').state === 'missing' && /pandoc/.test(tool('pandoc').sentence) &&
         tool('ffmpeg').state === 'unanswered',

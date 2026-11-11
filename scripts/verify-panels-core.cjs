@@ -3515,7 +3515,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       //      scope entered WITHOUT traversing its door, which is what separated
       //      "derive the door from entersScope" from "stash the entered row").
       //      The gear now opens the Settings page, so no UI path enters a scope
-      //      door-less any more except the Jira panel's Connect verb (agents
+      //      door-less any more except the GitHub panel's Connect verb (agents
       //      context.3) and the grid's ninth cell. What is left to pin here is
       //      the half that still lives in this part: the gear opens the page
       //      and NOT a scope, and Escape leaves it with the palette untouched.

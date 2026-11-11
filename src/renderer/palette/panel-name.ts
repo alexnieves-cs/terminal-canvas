@@ -1,5 +1,5 @@
 import { shapeSummary } from '@shared/flowchart'
-import { isTerminalPanel, isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { isTerminalPanel, isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import { noteSummary } from '@shared/notes'
 import { displayPath } from '@shared/display-path'
@@ -225,7 +225,6 @@ export function panelName(panel: Panel, resolvedCommand?: string, opts?: PanelNa
   if (panel.title !== undefined) return panel.title
   if (isReviewPanel(panel)) return `review: ${panel.subject.label}`
   if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
-  if (isJiraPanel(panel)) return 'Jira tickets'
   if (isGithubPanel(panel)) return 'GitHub work'
   if (isToolboxPanel(panel)) {
     const cwd = panel.source.cwd.replace(/\/+$/, '')
@@ -272,7 +271,7 @@ export function panelName(panel: Panel, resolvedCommand?: string, opts?: PanelNa
 
 /** The provenance a row trails: a directory. Absent for a review or Jira panel. */
 export function panelPath(panel: Panel): string | undefined {
-  if (isReviewPanel(panel) || isJiraPanel(panel) || isGithubPanel(panel)) return undefined
+  if (isReviewPanel(panel) || isGithubPanel(panel)) return undefined
   if (isFilePanel(panel)) return panel.source.path.slice(0, Math.max(0, panel.source.path.lastIndexOf('/'))) || '/'
   if (isToolboxPanel(panel)) return panel.source.cwd
   if (isChatPanel(panel)) return panel.chat.cwd

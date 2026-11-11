@@ -1936,8 +1936,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     //     with no credential the node says so and offers Connect GitHub…;
     //     with one it lists the recorded items by id and title; a Start
     //     session on an item spawns a terminal whose title is the item's and
-    //     whose opening context carries the item's body — Jira's own flow
-    //     reached by a second kind through ONE verb. Closing the node sends
+    //     whose opening context carries the item's body through ONE verb. Closing the node sends
     //     no pty.kill (the sessionless non-vacuity shape).
     // -------------------------------------------------------------------
     {
@@ -1999,7 +1998,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       mkdirSync(harnessCredentialDir, { recursive: true })
       // Earlier blocks leave credentials in the shared store; the bare arm
       // needs NONE, or the reload flips the verb to Verify under the click.
-      credentialStore.delete('github'); credentialStore.delete('jira')
+      credentialStore.delete('github')
       const IDS = ['integrations.1 the Integrations pane lists every declared service — not connected with Connect… opening the Credentials scope when nothing is stored, connected as its label with Verify when one is — and shows the broker audit rows under a service newest first, an empty audit as a sentence']
       const iLog = []
       const onI = (_e, _l, m) => { iLog.push(String(m).slice(0, 200)) }
@@ -2011,7 +2010,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="integrations"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await settle()
-        const bare = await waitUntil(() => wc.executeJavaScript(`(() => { const secs = [...document.querySelectorAll('[data-integration]')].map((s) => ({ id: s.getAttribute('data-integration'), state: s.getAttribute('data-integration-state'), sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', empty: s.querySelector('[data-integration-audit-arm="empty"]')?.textContent ?? null })); return secs.length >= 2 ? secs : false })()`), 8000)
+        const bare = await waitUntil(() => wc.executeJavaScript(`(() => { const secs = [...document.querySelectorAll('[data-integration]')].map((s) => ({ id: s.getAttribute('data-integration'), state: s.getAttribute('data-integration-state'), sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', empty: s.querySelector('[data-integration-audit-arm="empty"]')?.textContent ?? null })); return secs.length >= 1 ? secs : false })()`), 8000)
         // Connect… opens the palette in its Credentials scope.
         const clickedConnect = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-integration="github"] [data-integration-verb]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
         // A timeline rather than one read: whether the chip ever appears, and when it leaves.
@@ -2027,7 +2026,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const connected = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-integration="github"]'); if (!s || s.getAttribute('data-integration-state') !== 'connected' || s.querySelectorAll('[data-integration-row]').length < 2) return false; return { sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', rows: [...s.querySelectorAll('[data-integration-row]')].map((r) => r.getAttribute('data-integration-row')) } })()`), 8000)
         credentialStore.delete('github')
         ok(IDS[0],
-          Array.isArray(bare) && bare.some((s) => s.id === 'github' && s.state === 'not-connected' && /not connected/.test(s.sentence) && /Connect/.test(s.verb) && typeof s.empty === 'string' && /no calls/.test(s.empty)) && bare.some((s) => s.id === 'jira') &&
+          Array.isArray(bare) && bare.some((s) => s.id === 'github' && s.state === 'not-connected' && /not connected/.test(s.sentence) && /Connect/.test(s.verb) && typeof s.empty === 'string' && /no calls/.test(s.empty)) &&
             clickedConnect === true && scope && scope.open === true && scope.chip === 'Credentials' &&
             connected && /connected as octocat/.test(connected.sentence) && /Verify/.test(connected.verb) && connected.rows.length === 2 && /POST/.test(connected.rows[0]) && /GET/.test(connected.rows[1]),
           JSON.stringify({ bare, scope, connected, auditSeen, log: iLog.slice(-3) }))

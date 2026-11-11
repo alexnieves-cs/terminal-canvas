@@ -1483,8 +1483,6 @@ body {
 .rail-row--door { margin-top: var(--sp-3); border-top: 1px solid var(--line); padding-top: var(--sp-2); }
 .rail-row--door .rail-row__main[aria-pressed="true"] .rail-row__label { color: var(--iris); }
 .shell__tree-panel { flex: 1 1 0; text-transform: none; letter-spacing: 0; font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); margin-left: var(--sp-2); }
-.jira-node__connect { align-self: flex-start; min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font: inherit; font-size: var(--t-xs); cursor: pointer; }
-.jira-node__connect:hover { background: var(--s-4); }
 .rail-row__go {
   flex: none;
   font-size: var(--t-xs);
@@ -4642,8 +4640,7 @@ body {
 }
 .review-node__discard-confirm:hover:not(:disabled) { background: var(--red-dim); }
 .review-node__discard-confirm:disabled { color: var(--fg-4); border-color: var(--line); cursor: default; }
-.review-node__commit-input,
-.jira-node__comment-input {
+.review-node__commit-input {
   width: 100%;
   box-sizing: border-box;
   background: var(--s-3);
@@ -4706,14 +4703,6 @@ body {
   overflow-wrap: anywhere;
 }
 
-.jira-node__item { border-bottom: 1px solid var(--line); padding: var(--sp-3) 0; }
-.jira-node__item small { display: block; color: var(--fg-3); margin-top: var(--sp-1); }
-.jira-node__item p { white-space: pre-wrap; margin: var(--sp-2) 0; }
-.jira-node__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
-.jira-node__transitions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
-.jira-node__comment-form { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-2); }
-.jira-node__comment-input { min-height: var(--sp-8); resize: vertical; }
-.jira-node__outcome { color: var(--fg-3); margin-top: var(--sp-2); }
 
 /* The edit control keeps its place beside the heading. */
 .file-node__edit { flex: none; }
@@ -4846,9 +4835,7 @@ body {
 /* Small text buttons inside a node body: the save control, the conflict
    choices, a Jira transition. One shape. */
 .file-node__save,
-.file-node__conflict button,
-.jira-node__actions button,
-.jira-node__transitions button {
+.file-node__conflict button {
   flex: none;
   min-height: 24px;
   border: 1px solid var(--border);
@@ -4863,8 +4850,6 @@ body {
 .file-node__save { min-height: 22px; padding: 0 var(--sp-3); font-size: var(--t-xs); }
 .file-node__save:hover,
 .file-node__conflict button:hover,
-.jira-node__actions button:hover,
-.jira-node__transitions button:hover { background: var(--s-4); border-color: var(--line-strong); }
 
 /* --amber-dim, the same wash the wants-you card uses for "this needs you,
    but it is not an error" — a conflict is exactly that. */
@@ -6009,8 +5994,7 @@ body {
 .workflow-node__verbs [data-workflow-verb="run"],
 .chat__verb--send,
 .inspector__action--primary,
-.rail-run .rail-row__verb,
-.jira-node__connect {
+.rail-run .rail-row__verb {
   background: var(--iris);
   color: var(--on-iris);
   border-color: transparent;
@@ -6021,8 +6005,7 @@ body {
 .workflow-node__verbs [data-workflow-verb="run"]:hover:not(:disabled),
 .chat__verb--send:hover:not(:disabled),
 .inspector__action--primary:hover:not(:disabled),
-.rail-run .rail-row__verb:hover:not(:disabled),
-.jira-node__connect:hover:not(:disabled) {
+.rail-run .rail-row__verb:hover:not(:disabled) {
   background: var(--iris);
   color: var(--on-iris);
   border-color: transparent;
@@ -6032,8 +6015,7 @@ body {
 .workflow-node__verbs [data-workflow-verb="run"]:disabled,
 .chat__verb--send:disabled,
 .inspector__action--primary:disabled,
-.rail-run .rail-row__verb:disabled,
-.jira-node__connect:disabled {
+.rail-run .rail-row__verb:disabled {
   background: transparent;
   color: var(--fg-4);
   border-color: var(--line);
@@ -8029,16 +8011,13 @@ body {
 /* A STATE PILL in the board's words (providerState), painted in its tone;
    the quiet tones (a document at rest, an unmapped status) read in the
    secondary text colour, because their --tone is a hairline, not a hue. */
-.github-item__pill, .jira-node__pill, .board-row__remote {
+.github-item__pill, .board-row__remote {
   display: inline-flex; align-items: center; min-height: 18px; padding: 0 var(--sp-3);
   border-radius: var(--r-full); background: var(--tone-dim); color: var(--tone);
   font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
 }
 .github-item__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="asleep"]),
-.jira-node__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="asleep"]),
 .board-row__remote:is([data-tone="kind"], [data-tone="none"], [data-tone="asleep"]) { color: var(--fg-2); }
-/* A move Jira has not confirmed yet: the target, marked pending — never dressed as Jira's answer. */
-.jira-node__pill[data-pending] { background: transparent; border: 1px dashed var(--iris); color: var(--iris); }
 
 /* SYNC FRESHNESS: a word in the header; amber once the copy may be stale. */
 .sync-word { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
@@ -8068,16 +8047,6 @@ body {
 
 /* JIRA TICKETS: the same order — status and assignee, then the title, the
    description at two lines until asked, then the verbs. */
-.jira-node__item { display: flex; flex-direction: column; gap: var(--sp-2); }
-.jira-node__head { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
-.jira-node__assignee { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
-.jira-node__key { margin-left: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-4); }
-.jira-node__title { font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
-.jira-node__item p.jira-node__description { margin: 0; font-size: var(--t-xs); color: var(--fg-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.jira-node__item p.jira-node__description--open { display: block; }
-.jira-node__expand { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--iris); font: inherit; font-size: var(--t-xs); cursor: pointer; }
-.jira-node__item p.jira-node__move { margin: 0; font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; color: var(--green); }
-.jira-node__item p.jira-node__move[data-jira-move-result="rolled-back"] { color: var(--red); }
 
 /* THE BOARD: while it is the navigator's pane the column WIDENS — a work
    card needs a title, a repository, an assignee and a state side by side,

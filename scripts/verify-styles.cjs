@@ -671,7 +671,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // The title bar's Create LEFT this list (repeated entry points): it is the
   // global door, present on every screen, so filling it would give every screen
   // two dominant actions. It is refused here the way Commit is.
-  const SITES = ['.chat__verb--send', '.inspector__action--primary', '.rail-run .rail-row__verb', '.jira-node__connect', '.launcher__start']
+  const SITES = ['.chat__verb--send', '.inspector__action--primary', '.rail-run .rail-row__verb', '.launcher__start']
   const sel = rule ? rule.sel.replace(/\s+/g, ' ') : ''
   const missing = SITES.filter((s) => !sel.includes(s))
   const commit = sel.includes('.review-node__commit')

@@ -515,7 +515,8 @@ export function parsePanel(
     if (source === null) return null
     return { ...base, kind: 'file', source }
   }
-  if (kind === 'jira') return { ...base, kind: 'jira' }
+  // M683. 'jira' was a kind until the Jira surface was removed; a saved one
+  // now falls through to the unrecognised-kind drop below like any other.
   if (kind === 'github') return { ...base, kind: 'github' }
   if (kind === 'toolbox') {
     const source = parseToolboxSource(raw.source, id, warnings)

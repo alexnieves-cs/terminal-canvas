@@ -4,7 +4,7 @@ import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
 import type { ShapeRecord } from '@shared/flowchart'
-import { isShapePanel, isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
+import { isShapePanel, isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isMemoryPanel, isFilePanel, isGithubPanel,
   isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, isBrowserPanel, isRelayPanel, type Panel } from './panels'
 
 /**
@@ -85,7 +85,6 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
         source: { path: p.source.path, ...(p.source.prose === true ? { prose: true as const } : {}), ...(p.source.checklist === undefined ? {} : { checklist: p.source.checklist }), ...(p.source.sheet === undefined ? {} : { sheet: p.source.sheet }), ...(p.source.imported === undefined ? {} : { imported: p.source.imported }), ...(p.source.deck === undefined ? {} : { deck: p.source.deck }) }
       }
     }
-    if (p.kind === 'jira') return { ...base, kind: 'jira' as const }
     if (p.kind === 'github') return { ...base, kind: 'github' as const }
     if (p.kind === 'toolbox') {
       return {
@@ -200,7 +199,6 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
         source: { path: panel.source.path, ...(panel.source.prose === true ? { prose: true as const } : {}), ...(panel.source.checklist === undefined ? {} : { checklist: panel.source.checklist }), ...(panel.source.sheet === undefined ? {} : { sheet: panel.source.sheet }), ...(panel.source.imported === undefined ? {} : { imported: panel.source.imported }), ...(panel.source.deck === undefined ? {} : { deck: panel.source.deck }) }
       }
     }
-    if (isJiraPanel(panel)) return { ...base, kind: 'jira' as const }
     if (isGithubPanel(panel)) return { ...base, kind: 'github' as const }
     // Same no-cwd/no-args rule as the two branches above, for the same reason.
     if (isToolboxPanel(panel)) {

@@ -277,12 +277,10 @@ module.exports = {
   /* M145. The clipboard file writer, pure over its directory. */
   writeClipboardImage: require('../src/main/clipboard-file.ts').writeClipboardImage,
   IPC_EVENTS: require('../src/shared/ipc-contract').IPC_EVENTS,
-  // Check 174's own reason: window.canvas.jira is deep-frozen by
-  // contextBridge (Electron's own protection against exactly this kind of
-  // tampering), so the check cannot fake it from the renderer's main world —
-  // a plain assignment there silently no-ops. It fakes the MAIN-side handler
-  // instead, via ipcMain.removeHandler/ipcMain.handle in verify-panels.cjs,
-  // and needs the real channel names to do it rather than restating them.
+  // The bridge is deep-frozen by contextBridge, so a check cannot fake a
+  // channel from the renderer's main world — a plain assignment there
+  // silently no-ops. Checks fake the MAIN-side handler instead, via
+  // ipcMain.removeHandler/ipcMain.handle, and need the real channel names.
   IPC: require('../src/shared/ipc-contract').IPC,
   /* Task 9's end-to-end review:panel check needs registerIpcHandlers wired to
      a REAL engine over a REAL git runner — a stub here would prove nothing

@@ -110,15 +110,6 @@ function describeCallBase(service: string, row: AuditRowLike): string {
     if (row.path.startsWith('/issues')) return 'list assigned issues'
     if (row.path === '/user') return 'check the connected account'
   }
-  if (service === 'jira') {
-    let m = row.path.match(/\/issue\/([^/?]+)\/comment/)
-    if (m) return `comment on ${m[1]}`
-    m = row.path.match(/\/issue\/([^/?]+)\/transitions/)
-    if (m) return `move ${m[1]}`
-    m = row.path.match(/\/issue\/([^/?]+)/)
-    if (m) return `read ${m[1]}`
-    if (/\/search\b/.test(row.path)) return 'search Jira'
-  }
   return `${row.method} ${row.path}`
 }
 

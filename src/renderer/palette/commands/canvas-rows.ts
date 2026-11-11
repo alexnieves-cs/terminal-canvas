@@ -222,7 +222,7 @@ export function canvasRows(ctx: PaletteContext): Command[] {
     title, subtitle, searchText: `recipe start work ${words}`, group: 'canvas', run: () => actions.beginStartWork({ recipeId: id })
   })
   out.push({ id: 'recipe.fix-test', ...recipeRow('recipe-fix-test', 'Fix a failing test…', 'reproduce, fix the cause, prove it passes', 'fix failing test red broken ci') })
-  out.push({ id: 'recipe.implement-issue', ...recipeRow('recipe-implement-issue', 'Implement an issue…', 'from the issue to a reviewed change with tests', 'implement issue feature ticket github jira') })
+  out.push({ id: 'recipe.implement-issue', ...recipeRow('recipe-implement-issue', 'Implement an issue…', 'from the issue to a reviewed change with tests', 'implement issue feature ticket github') })
   out.push({ id: 'recipe.review-change', ...recipeRow('recipe-review-change', 'Review a change…', 'findings ranked by severity, no edits', 'review change diff branch pr pull request code review') })
   // The UX pass. A person's OWN recipes were reachable only from New task ›
   // Options; each is a row now, beside the built-ins, opening the same sheet.

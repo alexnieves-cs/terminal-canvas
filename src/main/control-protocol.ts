@@ -338,7 +338,7 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       const path = optionalString(fields['path'])
       const body = fields['body']
       const panelId = optionalString(fields['panelId'])
-      if (service === null || service === undefined) return { kind: 'bad', error: 'api needs a service — github or jira' }
+      if (service === null || service === undefined) return { kind: 'bad', error: 'api needs a service — github' }
       if (method === null || method === undefined) return { kind: 'bad', error: 'api needs a method — GET, POST, PUT, PATCH or DELETE' }
       if (path === null || path === undefined) return { kind: 'bad', error: 'api needs a path, starting with /' }
       if (body !== undefined && typeof body !== 'string') return { kind: 'bad', error: 'body must be a string (JSON, already encoded)' }

@@ -441,7 +441,6 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   newNote: 'opens the palette\'s text mode',
   openAsChat: 'moves a conversation between front-ends — the user\'s decision (M74)',
   openInTerminal: 'moves a conversation between front-ends — the user\'s decision (M74)',
-  openJira: 'a work panel is opened by the user',
   runAgentPlan: 'agent transport for the same executor, not a recursively callable product verb',
   beginWorkflowEdit: 'the palette\'s text mode over the workflow-* verbs — a plan names the verb itself',
   updateBoundTemplate: 'the Save-selection text mode\'s submit over bound panels; an agent edits the record through the workflow-* verbs',
