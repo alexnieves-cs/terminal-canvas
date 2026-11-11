@@ -29,7 +29,7 @@ const { execFileSync, spawn } = require('node:child_process')
 const { mkdtempSync, rmSync, existsSync } = require('node:fs')
 const { join } = require('node:path')
 const { tmpdir } = require('node:os')
-const { buildConfig } = require('../build/builder-config.cjs')
+const { MAC_DIR } = require('../build/builder-config.cjs')
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -38,7 +38,10 @@ const ok = (n, pass, detail) => {
 }
 
 const ROOT = join(__dirname, '..')
-const config = buildConfig()
+// M631. The ENTRY POINT's config, not builder-config's default: it is the one
+// electron-builder is about to load, so TC_MAC_ARCH=x64 (release.yml's Intel
+// job) moves this suite's bundle path together with the build's.
+const config = require('../electron-builder.config.cjs')
 
 /* Deliberately contains a SPACE, like every real macOS userData path
    (~/Library/Application Support/...). The pane-died hook's redirect target
@@ -97,13 +100,13 @@ process.on('exit', cleanup)
 
   // The output dir and productName are DERIVED from the same config the
   // builder used, so productName lives in exactly one place. macOS puts the
-  // executable at Contents/MacOS/<productName>. The 'mac-arm64' arch segment
-  // is NOT derived — it is electron-builder's own directory-naming convention
-  // for a single-arch dir target, hardcoded here rather than computed from
-  // config.mac.target, which this repo can do because Global Constraints
-  // fixes it arm64-only; widening to universal would need this literal to
-  // change too.
-  const appPath = join(ROOT, config.directories.output, 'mac-arm64', `${config.productName}.app`)
+  // executable at Contents/MacOS/<productName>. The arch segment is
+  // electron-builder's own directory-naming convention, and builder-config's
+  // MAC_DIR is the one place it is written down (M631: the Intel job builds
+  // into `mac`, not `mac-arm64`). The arch is read back from the config the
+  // builder used, so TC_MAC_ARCH reaches this path through one door.
+  const builtArch = config.mac.target[0].arch[0]
+  const appPath = join(ROOT, config.directories.output, MAC_DIR[builtArch], `${config.productName}.app`)
   const binary = join(appPath, 'Contents', 'MacOS', config.productName)
   ok('2 the .app bundle is where the config says it is', existsSync(binary), binary)
   if (!existsSync(binary)) return finish()

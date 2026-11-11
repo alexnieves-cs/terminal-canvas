@@ -48,7 +48,7 @@
         </div>
         <p class="fine">
           The demo runs in your browser with scripted agents and nothing to install.
-          The app is an unsigned build for Apple Silicon; <a href="#install">install notes</a> below.
+          The app is an unsigned build for Apple Silicon and Intel Macs; <a href="#install">install notes</a> below.
         </p>
         <figure class="shot shot--hero">
           <img
@@ -131,7 +131,12 @@
       <section id="install" class="install" aria-labelledby="install-title">
         <h2 id="install-title">Install</h2>
         <ol>
-          <li>Download the <code>.dmg</code> from the <a href="https://github.com/alexnieves-cs/terminal-canvas/releases/latest">latest release</a>, open it, and drag <b>Terminal Canvas</b> to Applications.</li>
+          <li>
+            With Homebrew:
+            <pre><code>brew tap alexnieves-cs/terminal-canvas https://github.com/alexnieves-cs/terminal-canvas
+brew install --cask terminal-canvas</code></pre>
+            Or download the <code>.dmg</code> for your Mac (<code>-arm64</code> for Apple Silicon, <code>-x64</code> for Intel) from the <a href="https://github.com/alexnieves-cs/terminal-canvas/releases/latest">latest release</a>, open it, and drag <b>Terminal Canvas</b> to Applications.
+          </li>
           <li>
             The build is <b>unsigned</b>, so macOS refuses the first launch. Open
             <b>System Settings → Privacy &amp; Security</b> and choose <b>Open Anyway</b>, or clear the

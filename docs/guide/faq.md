@@ -34,7 +34,8 @@ past the warning.
 
 ## Does it run on Intel Macs, Linux or Windows?
 
-The download is for Apple Silicon Macs. An Intel Mac can [build from source](install.md#build-from-source).
+Both Macs: from 6.1.1 each release has an Apple Silicon (`-arm64.dmg`) and an Intel (`-x64.dmg`)
+download, and [Homebrew](install.md#homebrew) picks the right one.
 Linux and Windows are not supported as a desktop app. The [live demo](https://alexnieves-cs.github.io/terminal-canvas/demo/)
 runs in any browser.
 

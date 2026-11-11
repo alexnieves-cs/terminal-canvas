@@ -1,12 +1,26 @@
 # Install
 
-Terminal Canvas runs on macOS. The download is built for Apple Silicon (M1 and later).
+Terminal Canvas runs on macOS, on Apple Silicon (M1 and later) and on Intel Macs.
+
+## Homebrew
+
+```sh
+brew tap alexnieves-cs/terminal-canvas https://github.com/alexnieves-cs/terminal-canvas
+brew install --cask terminal-canvas
+```
+
+Homebrew picks the right build for your Mac. `brew upgrade --cask terminal-canvas` gets a newer
+release later.
 
 ## Download
 
-1. Get the `.dmg` from the [latest release](https://github.com/alexnieves-cs/terminal-canvas/releases/latest).
+1. Get the `.dmg` for your Mac from the [latest release](https://github.com/alexnieves-cs/terminal-canvas/releases/latest):
+   the one ending in `-arm64.dmg` for Apple Silicon, or `-x64.dmg` for Intel. Not sure? Apple
+   menu → **About This Mac**: *Chip: Apple M…* is Apple Silicon, *Processor: Intel* is Intel.
 2. Open it and drag **Terminal Canvas** to Applications.
 3. Open the app.
+
+Releases before 6.1.1 had an Apple Silicon download only.
 
 ## If macOS refuses to open it
 
@@ -66,6 +80,7 @@ npm run dev
 ## Updates
 
 The app checks GitHub for a newer release and tells you when there is one. It does not replace
-itself. Download the new `.dmg` and drag it over the old app.
+itself. Download the new `.dmg` and drag it over the old app, or run
+`brew upgrade --cask terminal-canvas` if you installed with Homebrew.
 
 Next: [your first task](first-task.md).
