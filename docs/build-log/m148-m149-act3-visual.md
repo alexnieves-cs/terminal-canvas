@@ -22,7 +22,7 @@ artifact; the verifier is right that it is unrecorded, and it is not claimed.)
 
 ## M149 — the audit
 
-`docs/ux-audit-4.0.md`, from looking at every golden — twice, because the first goldens were
+`docs/archive/ux-audit-4.0.md`, from looking at every golden — twice, because the first goldens were
 wrong from `runs` on (below). Fourteen findings, each FIXED with a check, DECLINED by name, or
 OWED with what would close it. The ones that mattered:
 

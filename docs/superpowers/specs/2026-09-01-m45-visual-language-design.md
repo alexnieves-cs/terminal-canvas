@@ -3,7 +3,7 @@
 **Status:** designed 2026-09-01. Criterion 3 of the 1.0 brief, and the one
 milestone the scope decision exempts from "do not widen": a single
 considered design reaches every component's styling by definition.
-**Backlog entries:** #10 (light/dark), the whole of `docs/ui-followup-work.md`
+**Backlog entries:** #10 (light/dark), the whole of `docs/archive/ui-followup-work.md`
 items 1–7, and the "M23" interface-architecture spec's Phase 0 and Phase 5.
 
 ## Where the app is, measured

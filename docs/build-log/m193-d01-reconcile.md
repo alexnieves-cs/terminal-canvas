@@ -2,7 +2,7 @@
 
 The build log for the first milestone of the v10 run, which executes
 [the ordered product development guide](../product-development-guide-2026-09-08.md) over
-[the product audit](../product-audit-2026-09-08.md). The run's state, its phase → milestone map and
+[the product audit](../archive/product-audit-2026-09-08.md). The run's state, its phase → milestone map and
 its per-phase status live in [the ledger](m193-m224-ledger.md); this file is the milestone.
 
 **The rule this log is written under.** Every line below is marked with how it was learned:
@@ -282,7 +282,7 @@ Adopted as the contract for every phase of this run. Recorded here and summarise
 so it is resident in a session that has not read this file.
 
 **7.1 The entities, and the three that must not merge.** The audit's map is adopted as written
-(`docs/product-audit-2026-09-08.md` §5): workspace, canvas, project, panel, session, teammate,
+(`docs/archive/product-audit-2026-09-08.md` §5): workspace, canvas, project, panel, session, teammate,
 work item, workflow/template, run, memory, vault, artifact. Two rulings carry into every
 milestone:
 

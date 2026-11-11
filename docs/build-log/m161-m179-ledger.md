@@ -703,7 +703,7 @@ act: `notice.1` (the update link's click, M178); the audit's own findings.
   m177-agents.log, m177-agents2.log) — the 109 s watchdog had 1.2× of that after the three
   checks Acts II–III added, and a chained run tripped it; re-pinned at 113 s (1.25× the
   slower run, the M135 rule).
-- **M178 — the second full audit.** `docs/ux-audit-4.1.md`: a fresh-context critic walked all
+- **M178 — the second full audit.** `docs/archive/ux-audit-4.1.md`: a fresh-context critic walked all
   55 goldens with the five rules as the lens; 26 findings, dispositioned there. Fixed in the
   audit's wave, red-first where a check pins it: F.1 (the enabled Restart painted white on
   white since M46 — a `(0,2,1)` grid rule's background over the primary's fill; shell

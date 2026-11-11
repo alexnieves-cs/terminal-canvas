@@ -45,7 +45,7 @@ shape; the existing sentences are kept where a check reads them and restyled.
 
 ## M178 — the second full audit
 
-`docs/ux-audit-4.1.md`: every golden walked on both themes with the brief's five rules as
+`docs/archive/ux-audit-4.1.md`: every golden walked on both themes with the brief's five rules as
 the lens, the way M149 walked 4.0. Each finding FIXED (with the check that pins it),
 DECLINED (with the rule it defers to) or OWED (with a backlog number). Fix what the walk
 finds before closing the act; the goldens that change get their sentences.

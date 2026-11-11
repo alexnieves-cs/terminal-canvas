@@ -63,7 +63,7 @@ user-facing commitment; otherwise derive and pin it with a narrow metadata check
 ### The product audit is duplicated
 
 docs/product-development-guide-2026-09-08.md repeats the complete fourteen-section product audit
-after its D01–D20 plan. A diff against docs/product-audit-2026-09-08.md shows the same body under a
+after its D01–D20 plan. A diff against docs/archive/product-audit-2026-09-08.md shows the same body under a
 different heading and introduction. The guide already links the audit, so these are competing copies.
 
 Keep the dated product audit as evidence. Replace the repeated section in the development guide with

@@ -1,7 +1,7 @@
 # Terminal Canvas v10 — ledger, M193 onward
 
 The run that executes [the ordered product development guide](../product-development-guide-2026-09-08.md)
-(`D01`–`D20`) over the audit at [docs/product-audit-2026-09-08.md](../product-audit-2026-09-08.md).
+(`D01`–`D20`) over the audit at [docs/archive/product-audit-2026-09-08.md](../archive/product-audit-2026-09-08.md).
 The v9 run's ledger is [m180-m200-ledger.md](m180-m200-ledger.md); it closed at M192 = 5.0.0 and
 nothing here reuses a number it assigned.
 

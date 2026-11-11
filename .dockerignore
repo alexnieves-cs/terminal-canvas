@@ -8,8 +8,4 @@ release
 *.log
 *.tsbuildinfo
 docs
-reports
-research_notes
-notes
-output
 verify

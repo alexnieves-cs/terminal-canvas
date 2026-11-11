@@ -260,7 +260,7 @@ no longer owed.
 
 ### Output
 
-`docs/acp-registry-diff.md`; the Act I spec's "ACP, declined by name" amended in place with a
+`docs/archive/acp-registry-diff.md`; the Act I spec's "ACP, declined by name" amended in place with a
 dated note; CLAUDE.md's M99 bullet gains one sentence. **No new `BackendDef` field**: each
 dimension is recorded with the consumer that would want it, per the customer-free-abstraction
 rule (M23-spec §9.1). A field lands when an `acp` row does.
@@ -296,7 +296,7 @@ an `acp` row with `adoptsThreadId: true`, `asksPermission: true`, capabilities f
 
 ### Output
 
-`docs/canvas-camera-comparison.md` and two entries in `docs/ideas-backlog.md`. No adoption —
+`docs/archive/canvas-camera-comparison.md` and two entries in `docs/ideas-backlog.md`. No adoption —
 live WebGL xterm nodes cannot be canvas-drawn shapes, and React Flow's DOM ceiling is the problem
 `lod.ts` already solves for this case.
 
