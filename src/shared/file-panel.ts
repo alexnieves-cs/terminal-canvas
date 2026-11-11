@@ -26,8 +26,6 @@ export interface FileSource {
   path: string
   /** M244. Structured Markdown note view; absent accepted content requires human review. */
   checklist?: import('./checklist').ChecklistView
-  /** M245. A spreadsheet view of a .csv/.tsv/.xlsx file. Presentation and consent only — cells live in the file. */
-  sheet?: import('./sheet').SheetView
   /** M248. Slides view of a Markdown file: the slide on show and a door's staged proposal. */
   deck?: import('./deck').DeckView
   /**

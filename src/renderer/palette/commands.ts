@@ -82,10 +82,6 @@ export interface PaletteActions {
   createObject(kind: string, value?: string): Promise<CreationResult>
   editChecklist(panel: string, operation: string, value?: string): Promise<CreationResult>
   handChecklist(panel: string, line: number, agent: string): Promise<CreationResult>
-  /** M245. Set one cell of an open sheet, through its guarded write. M246: with an agent caller it proposes. */
-  editSheet(panel: string, cell: string, value: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
-  /** M246. Keep or discard a sheet's draft cells; keeping is refused to an agent caller. */
-  reviewSheet(panel: string, operation: string, target?: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
   /** M247. Show, hide or toggle the agent → object links (the `canvas.agentLinks` setting). */
   setAgentLinks(mode: string): Promise<CreationResult>
   /** M248. `origin` is 'door' when the step came through runAgentPlan (the agent door or a workflow node): edits then stage. */
@@ -655,8 +651,6 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'deck.export-pdf', title: 'Deck: export to PDF…', subtitle: 'one page per slide, through a save dialog', group: 'canvas', searchText: 'deck slides export pdf print', hiddenAtRest: true, run: () => actions.beginRunVerb('deck-export-pdf') })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'send one line to an idle conversation', group: 'canvas', searchText: 'checklist hand task agent teammate send', hiddenAtRest: true, run: () => actions.beginRunVerb('checklist-hand') })
   out.push({ id: 'canvas.agent-links', title: 'Agent links: show or hide', subtitle: 'the lines from each agent to what it read, wrote or drafted', group: 'canvas', searchText: 'agent links edges lines files touched read wrote draft show hide toggle', run: () => { void actions.setAgentLinks('toggle') } })
-  out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'an agent\'s draft cells, a range or all', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', hiddenAtRest: true, run: () => actions.beginRunVerb('sheet-review') })
-  out.push({ id: 'sheet.edit', title: 'Sheet: set a cell…', subtitle: 'a value or a formula', group: 'canvas', searchText: 'sheet spreadsheet csv xlsx cell edit formula set', hiddenAtRest: true, run: () => actions.beginRunVerb('sheet-edit') })
 
   // --- Panels (commands/panel-rows.ts) ---
   out.push(...panelRows(ctx))

@@ -15,7 +15,6 @@ import { type Viewport, type WorldRect, screenToWorld, type Point, hitTest } fro
 import type { ChecklistView } from '@shared/checklist'
 import type { DeckView } from '@shared/deck'
 import type { ImportedNote } from '@shared/imported-note'
-import type { SheetView } from '@shared/sheet'
 import type { Registry } from '@renderer/session/session-registry'
 /**
  * M507 (E4, the Canvas.tsx split). The drop (M59): one function behind the
@@ -29,7 +28,7 @@ export interface UseDropVerbsDeps {
   registry: Registry
   hitOrderRef: RefObject<WorldRect[]>
   navGridIsOpenRef: RefObject<() => boolean>
-  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true; }) => void
+  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true; }) => void
   palette: PaletteController
   paletteActionsRef: RefObject<PaletteActions | null>
   panelsRef: RefObject<Panel[]>

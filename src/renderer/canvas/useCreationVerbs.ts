@@ -16,7 +16,6 @@ import { makeFilePanel, makePanel, makeImagePanel, makeWorkflowPanel, makeWorkPa
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
 import { DECK_SEED, type DeckView } from '@shared/deck'
-import type { SheetView } from '@shared/sheet'
 import type { ToolGenerateResult } from '@shared/tool-spec'
 import { RELAY_PROGRAM, RELAY_SESSION_ID } from '@shared/relay-protocol'
 import { markDraftRead } from '@renderer/workflow/template-draft-store'
@@ -58,7 +57,7 @@ export interface UseCreationVerbsDeps {
   noteRootRef: RefObject<string | null>
   onSpawn: (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true; atCursor?: true; }) => void
   openBrowserPanel: (url: string, preview?: PreviewBinding, at?: Point) => void
-  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true; }) => void
+  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true; }) => void
   openRelayPanel: (relay: { program: string; sessionId?: string; shareId?: string; }, at?: Point) => void
   openWorkflowPanel: (templateId: string, at?: Point) => void
   palette: PaletteController
@@ -247,11 +246,6 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
     setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id && panel.source.imported !== undefined
       ? { ...panel, source: { ...panel.source, imported: { ...panel.source.imported, reviewed: true as const } } } : panel))
   }, [])
-  // M245. Widths and loss consent, never cells — the file holds those.
-  const setSheetView = useCallback((id: string, view: SheetView) => {
-    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
-      ? { ...panel, source: { ...panel.source, sheet: view } } : panel))
-  }, [])
   const creationWorkspaceRef = useRef<string | undefined>(undefined)
   creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
   // M338. The active workspace's share, for a relay session started in it.
@@ -286,17 +280,6 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
       document: async (view, name) => {
         const root = noteRootRef.current
         if (!root) return { kind: 'refused', reason: 'select a panel with a workspace folder first' }
-        if (view === 'sheet') {
-          // M245. A new sheet is an empty CSV. xlsx is opened, never minted: an
-          // empty workbook is a file nobody asked for in a format they did not choose.
-          const filename = name?.trim() || `sheets/sheet-${Date.now()}.csv`
-          if (!/\.(csv|tsv)$/i.test(filename)) return { kind: 'refused', reason: 'choose a filename ending in .csv or .tsv' }
-          const made = await window.canvas.file.create({ root, name: filename, seed: '' })
-          if (made.kind !== 'created') return { kind: 'refused', reason: made.kind === 'exists' ? 'that file already exists — choose another filename' : made.detail }
-          if (!current()) return { kind: 'refused', reason: `created ${made.path}; the workspace changed, so open the file there explicitly` }
-          openFilePanel(made.path, worldCentre(), { sheet: {} })
-          return { kind: 'ran' }
-        }
         const checklist = view === 'checklist'
         const filename = name?.trim() || `notes/${view}-${Date.now()}.md`
         if (!/\.md$/i.test(filename)) return { kind: 'refused', reason: 'choose a Markdown filename ending in .md' }
@@ -526,5 +509,5 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
   }, [beginNewChat])
 
 
-  return { applyStarter, askWithoutFolder, chatInFolder, createObject, creationShareRef, markPreviewRead, markTemplateRead, relayNameFor, setChecklistView, setDeckView, setImportReviewed, setSheetView, startFirstWork }
+  return { applyStarter, askWithoutFolder, chatInFolder, createObject, creationShareRef, markPreviewRead, markTemplateRead, relayNameFor, setChecklistView, setDeckView, setImportReviewed, startFirstWork }
 }

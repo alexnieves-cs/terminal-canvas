@@ -25,7 +25,6 @@ import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { NoteNode } from '@renderer/note/NoteNode'
 import { RelayNode } from '@renderer/relay/RelayNode'
 import { ReviewNode, type ReviewTaskContext } from '@renderer/review/ReviewNode'
-import { SheetNode } from '@renderer/file/SheetNode'
 import { SkillNode } from '@renderer/skills/SkillNode'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
@@ -42,7 +41,6 @@ import type { RailRow } from '@renderer/shell/rail-rows'
 import type { Registry } from '@renderer/session/session-registry'
 import type { ReviewHandoff } from '@shared/review-readiness'
 import type { SharedCanvas } from '@renderer/shared-canvas/useSharedCanvas'
-import type { SheetView } from '@shared/sheet'
 import type { VaultIndex } from '@shared/vault'
 import type { CardDetail } from './card-detail'
 import type { DragState } from './panel-interaction'
@@ -138,7 +136,6 @@ export interface PanelNodeContext {
   setPreviewWidth: (device: string, paneId?: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
   setRelaySession: (panelId: string, sessionId: string | undefined) => void
   setRetainedOutcomes: Dispatch<SetStateAction<RetainedOutcome[]>>
-  setSheetView: (id: string, view: SheetView) => void
   setWatcherArmed: (id: string, armed: boolean) => void
   shared: SharedCanvas
   skillSources: { panelId: string; cwd: string; label: string; }[]
@@ -161,7 +158,7 @@ export interface PanelNodeContext {
 
 export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Element | null {
   const {
-    activeWorkspaceId, addGithubToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSheetView, setWatcherArmed, shared, skillSources, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
+    activeWorkspaceId, addGithubToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setWatcherArmed, shared, skillSources, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
   } = ctx
   // The partition, at the last hop. onSelect is selectAndRaise and
   // NOT onSelectPanel: the latter clears the dormant id and calls
@@ -211,10 +208,6 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
       selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
       onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
       onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setDeckView} />
-    if (panel.source.sheet !== undefined) return <SheetNode key={panel.rect.id} panel={panel}
-      selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
-      onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
-      onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setSheetView} />
     if (panel.source.checklist !== undefined) return <ChecklistNode key={panel.rect.id} panel={panel}
       selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
       onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
