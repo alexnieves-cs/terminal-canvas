@@ -105,8 +105,9 @@ export function shellProbeFacts(): { shells: string[]; timedOut: boolean } {
  * shell. `probed`/`outcome` always report the latest probe.
  */
 export async function reprobeShellEnv(): Promise<Record<string, string>> {
+  // M660. The cache is NOT cleared first, as the note above says it must
+  // not be: a create racing this re-probe keeps the answer it had.
   const before = cached
-  cached = null
   const next = await probe()
   if (!outcome.ok && before) cached = before
   return cached ?? next
@@ -117,7 +118,20 @@ export async function resolveShellEnv(): Promise<Record<string, string>> {
   return probe()
 }
 
-async function probe(): Promise<Record<string, string>> {
+/**
+ * M660. One probe in flight, shared: a restored canvas creates every panel at
+ * once, and each `create` awaits this before the first answer is cached —
+ * twenty panels were twenty interactive login shells (`-ilc`, every dotfile
+ * sourced) racing each other at boot. A second caller now joins the first.
+ */
+let inflight: Promise<Record<string, string>> | null = null
+
+function probe(): Promise<Record<string, string>> {
+  if (inflight === null) inflight = probeOnce().finally(() => { inflight = null })
+  return inflight
+}
+
+async function probeOnce(): Promise<Record<string, string>> {
 
   const shell = process.env.SHELL || userInfo().shell || '/bin/zsh'
   probed = { shells: [shell], timedOut: false }

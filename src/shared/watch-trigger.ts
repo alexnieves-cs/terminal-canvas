@@ -26,6 +26,18 @@ export const WATCH_TRIGGER_KINDS: readonly WatchTrigger['kind'][] = ['path', 'gi
 /** The shortest honest interval: below this a watcher is a busy loop with a UI. */
 export const WATCH_TIMER_MIN_MS = 10_000
 
+/**
+ * M660. The longest interval a timer can hold: Node and Chromium store a
+ * delay in a signed 32-bit int, and a longer one is not clamped DOWN to this
+ * but replaced by 1ms — `every 1000h` fired a watcher, or a routine's fresh
+ * chat, a thousand times a second. About 24.8 days. Every interval that
+ * reaches setInterval is refused above it, by name.
+ */
+export const TIMER_MAX_MS = 2_147_483_647
+
+/** The refusal sentence for an interval above TIMER_MAX_MS. */
+export const TIMER_MAX_WORD = 'the longest interval is 24 days'
+
 /** How much of a run's output the node keeps. Memory only; the ledger keeps none. */
 export const WATCH_TAIL_BYTES = 8 * 1024
 

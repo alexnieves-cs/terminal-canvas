@@ -215,6 +215,7 @@ module.exports = {
      process here — a stub would leave watch.1 proven no further than the
      preload, which is the reason every other real export here is real. */
   createWatchRunner: require('../src/main/watch-runner').createWatchRunner,
+  watchGitHead: require('../src/main/git-head-watch').watchGitHead,
   /* M103. The browser pane's read over a real guest, and the parser so a
      check can assert a file: record was dropped by name at parse. */
   createBrowserHandlers: require('../src/main/browser-read').createBrowserHandlers,

@@ -2770,6 +2770,69 @@ await (async () => {
   rmSync(dir, { recursive: true, force: true })
 }
 
+// M660 — githead.1/.2. A git watcher's "when the branch moves" is the
+// commit HEAD names. `.git/HEAD` reads `ref: refs/heads/main` before a commit
+// and after it, so the first version never fired on a commit; and a linked
+// worktree's `.git` is a FILE, so it had no `.git/HEAD` to watch at all.
+{
+  const { execFileSync } = require('node:child_process')
+  const repo = mkdtempSync(join(tmpdir(), 'tc githead '))
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_NOSYSTEM: '1', HOME: repo }
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim()
+  const detail = {}
+  let pass = false
+  try {
+    git(repo, 'init', '-q', '-b', 'main')
+    const dirs = F.gitDirsOf(repo)
+    detail.unborn = F.headCommit(dirs)
+    writeFileSync(join(repo, 'a.txt'), '1')
+    git(repo, 'add', 'a.txt'); git(repo, 'commit', '-qm', 'one')
+    const one = F.headCommit(dirs)
+    writeFileSync(join(repo, 'a.txt'), '2')
+    git(repo, 'commit', '-qam', 'two')
+    const two = F.headCommit(dirs)
+    git(repo, 'pack-refs', '--all')
+    const packed = F.headCommit(dirs)
+    detail.shas = [one, two, packed]
+    pass = detail.unborn === 'unborn:refs/heads/main' && one === git(repo, 'rev-parse', 'HEAD~1') && two === git(repo, 'rev-parse', 'HEAD') && packed === two &&
+      F.gitDirsOf(join(repo, 'nope')) === null
+    // A linked worktree: `.git` is a file; HEAD is its own, the refs shared.
+    const wt = join(repo, 'wt')
+    git(repo, 'worktree', 'add', '-q', '-b', 'side', wt)
+    const wtDirs = F.gitDirsOf(wt)
+    detail.wt = wtDirs
+    pass = pass && wtDirs !== null && require('node:fs').realpathSync(wtDirs.commonDir) === require('node:fs').realpathSync(join(repo, '.git')) && F.headCommit(wtDirs) === two
+  } catch (e) { detail.threw = String(e) }
+  ok('githead.1 HEAD resolves to its commit through a loose ref, packed-refs and an unborn branch, and a linked worktree resolves through its .git file', pass, JSON.stringify(detail))
+
+  // The watch itself, over an injected watcher: an event after a commit
+  // fires once; an event that changed nothing (an object write) does not.
+  let fired = 0
+  let emit = () => {}
+  const fake = { on() { return fake }, close() {} }
+  const w = F.watchGitHead(repo, () => { fired += 1 }, () => {}, { debounceMs: 5, watch: (_dir, cb) => { emit = cb; return fake } })
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+  emit(); await wait(30)
+  const quiet = fired
+  writeFileSync(join(repo, 'a.txt'), '3')
+  git(repo, 'commit', '-qam', 'three')
+  emit(); emit(); await wait(30)
+  w && w.close()
+  ok('githead.2 a commit on the current branch fires the watcher once; an event that moved nothing does not', w !== null && quiet === 0 && fired === 1, JSON.stringify({ quiet, fired }))
+  rmSync(repo, { recursive: true, force: true })
+}
+
+// M660 — timer.max.1. An interval past what a timer holds is refused (a
+// longer delay is not clamped by Node, it becomes 1ms), and a stored one is
+// kept at the cap.
+{
+  const teammate = { name: 'Ada', scheduling: true }
+  const base = { id: 'r1', name: 'nightly', teammateId: 't1', everyMs: 60_000, prompt: 'look', paused: false }
+  const fine = F.routineRefusal({ ...base, everyMs: 24 * 24 * 3600_000 }, teammate)
+  const long = F.routineRefusal({ ...base, everyMs: 30 * 24 * 3600_000 }, teammate)
+  ok('timer.max.1 a routine of 24 days is accepted and one of 30 days is refused by name', fine === null && typeof long === 'string' && long.includes('24 days'), JSON.stringify({ fine, long }))
+}
+
 // telemetry.6 (M652). THE OPT-IN TOGGLE, AND THE ADDRESS IT DOES NOT HAVE YET.
 // Five facts, each one a way the toggle could send something a person did not
 // agree to: off is off; on with no project address is off BY NAME (never a

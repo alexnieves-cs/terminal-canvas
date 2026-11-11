@@ -718,6 +718,24 @@ const ok = (n, pass, detail = '') => {
         answered.ok === true && proposed.op === 'propose' && proposed.swarm === 'review',
       JSON.stringify({ built, parsed, bad, proposed }))
   }
+  // M660 — cli.cwd.1. A relative --cwd / --root is the CALLER's: the app at
+  //     the socket's other end runs in `/`, so `tc open --cwd .` opened a
+  //     panel there. Absolute and `~` paths go as written.
+  {
+    const env = { PWD: '/home/u/repo' }
+    const line = (argv) => { const b = C.buildRequest(argv, env); return b.kind === 'ok' ? JSON.parse(b.line) : b }
+    const open = line(['open', '--cwd', '.'])
+    const up = line(['open', '--cwd', '../other'])
+    const abs = line(['open', '--cwd', '/tmp'])
+    const home = line(['open', '--cwd', '~/x'])
+    const task = line(['task', 'fix', '--cwd', 'sub'])
+    const mem = line(['memory', 'list', '--root', 'pkg'])
+    const noPwd = C.buildRequest(['open', '--cwd', 'rel'], {})
+    ok('cli.cwd.1 a relative --cwd (open, task) and memory --root resolve against the caller\'s PWD; absolute and ~ paths go as written',
+      open.cwd === '/home/u/repo' && up.cwd === '/home/u/other' && abs.cwd === '/tmp' && home.cwd === '~/x' &&
+        task.cwd === '/home/u/repo/sub' && mem.root === '/home/u/repo/pkg' && noPwd.kind === 'ok' && JSON.parse(noPwd.line).cwd === 'rel',
+      JSON.stringify({ open, up, abs, home, task, mem }))
+  }
   // M369 fix — cli.list.1. Every no-argument verb builds ITSELF. M369 first
   //     put `case 'audit'` between `case 'list':` and `case 'status':`, so
   //     `tc list` fell through and asked for the audit, and no check built

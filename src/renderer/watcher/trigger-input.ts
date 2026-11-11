@@ -1,4 +1,4 @@
-import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '@shared/watch-trigger'
+import { TIMER_MAX_MS, WATCH_TIMER_MIN_MS, type WatchTrigger } from '@shared/watch-trigger'
 
 /**
  * M84. What a person types in the palette's trigger line, as a trigger.
@@ -41,6 +41,8 @@ export function parseTriggerWords(text: string, root: string, source?: { id: str
     // second must be told the shortest interval, not quietly given a
     // different watcher from the one they described.
     if (ms < WATCH_TIMER_MIN_MS) return null
+    // M660. Above it too: a longer delay overflows the timer and fires every millisecond.
+    if (ms > TIMER_MAX_MS) return null
     return { kind: 'timer', everyMs: ms }
   }
   // Anything that ENDS in a duration was meant to be a timer, however it was

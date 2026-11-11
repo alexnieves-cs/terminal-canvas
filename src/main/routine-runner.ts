@@ -1,4 +1,5 @@
 import { missedAt, type PersistedRoutine } from '@shared/routines'
+import { TIMER_MAX_MS } from '@shared/watch-trigger'
 
 /**
  * M101. THE ROUTINE RUNNER: one interval per routine, armed in main, with NO
@@ -77,7 +78,9 @@ export function createRoutineRunner(deps: RoutineRunnerDeps): RoutineRunner {
           deps.save(routine)
           missed.push(r.id)
         }
-        const handle = deps.setInterval(() => { const a = armed.get(r.id); if (a) fire(a.routine) }, r.everyMs)
+        // M660. Never past what a timer holds: a longer delay is not clamped
+        // by Node but replaced by 1ms, a fresh chat every millisecond.
+        const handle = deps.setInterval(() => { const a = armed.get(r.id); if (a) fire(a.routine) }, Math.min(r.everyMs, TIMER_MAX_MS))
         armed.set(r.id, { routine, handle })
       }
       return missed
