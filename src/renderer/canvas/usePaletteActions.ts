@@ -58,7 +58,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef,
     centreOn, worldCentre, goToViewport, cameraBack, cameraForward, undoCanvas, redoCanvas, bookmarksRef, setBookmarks,
     viewportRef, selectAndRaise, onSelectPanel, onClosePanel, openReview, openFilePanel,
-    openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
+    beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
     lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
     restartWithSpec, commitHistory, switchWorkspace, movePanelsToWorkspace, toggleMerged,
     reloadPresets, reloadPrompts, reloadSettings, reloadCredentials, reloadWorkspaces,
@@ -133,7 +133,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
-       openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
+       openFilePanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, undoCanvas, redoCanvas, bookmarksRef, setBookmarks, viewportRef,
        registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, setCenterView, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef, createObjectNow, flowchartVerbs, connectorVerbs, flowchartIO])

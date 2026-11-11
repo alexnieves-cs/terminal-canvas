@@ -34,7 +34,7 @@ import { getChat } from '@renderer/chat/chat-store'
 import { templateRefusal } from '@renderer/palette/template-model'
 import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 import { normaliseShapeText } from '@shared/flowchart'
-import { isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel, isImagePanel, isNotePanel, isShapePanel, isRelayPanel, isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel, type Panel } from '@renderer/panels/panels'
+import { isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel, isImagePanel, isNotePanel, isShapePanel, isRelayPanel, isChatPanel, isFilePanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel, type Panel } from '@renderer/panels/panels'
 import type { CapturedPanel } from '@shared/ipc-contract'
 import { railLabel } from '../../shell/rail-rows'
 import { commandPanelCwd } from '@renderer/palette/command-panel'
@@ -543,7 +543,6 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
           if (isWorkflowPanel(p)) {
             return { kind: p.kind, rect: p.rect, workflow: p.workflow, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
           }
-          if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
           if (isToolboxPanel(p)) {
             return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
           }

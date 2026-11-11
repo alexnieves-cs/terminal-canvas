@@ -520,12 +520,6 @@ const bridge: CanvasBridge = {
     list: (panelId) => ipcRenderer.invoke(IPC.GITHUB_LIST, panelId),
     publish: (req) => ipcRenderer.invoke(IPC.GITHUB_PUBLISH, req)
   },
-  jira: {
-    list: () => ipcRenderer.invoke(IPC.JIRA_LIST),
-    transitions: (itemId: string) => ipcRenderer.invoke(IPC.JIRA_TRANSITIONS, itemId),
-    comment: (req: { itemId: string; body: string }) => ipcRenderer.invoke(IPC.JIRA_COMMENT, req),
-    transition: (req: { itemId: string; transitionId: string }) => ipcRenderer.invoke(IPC.JIRA_TRANSITION, req)
-  },
   file: {
     open: () => ipcRenderer.invoke(IPC.FILE_OPEN),
     read: (req: FileReadRequest) => ipcRenderer.invoke(IPC.FILE_READ, req),

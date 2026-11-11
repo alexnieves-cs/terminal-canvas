@@ -29,22 +29,16 @@ import { bindFitTask } from '@renderer/canvas/flight'
 import type { ActionCtx } from './types'
 
 /**
- * M310. The open issues a task can start FROM — GitHub's and Jira's lists,
- * read through the same doors their nodes use, merged. A service that is not
- * connected contributes nothing; when neither answers, the sheet says why
- * rather than showing an empty list that reads as "you have no issues".
+ * M310. The open issues a task can start FROM — GitHub's list, read through
+ * the same door its node uses. When GitHub is not connected the sheet says
+ * why rather than showing an empty list that reads as "you have no issues".
+ * (Jira's list joined this until M683 removed the Jira surface.)
  */
 async function readOpenIssues(): Promise<{ kind: 'items'; items: IssueChoice[] } | { kind: 'none'; reason: string }> {
-  const [gh, jira] = await Promise.all([
-    window.canvas.github.list().catch(() => null),
-    window.canvas.jira.list().catch(() => null)
-  ])
-  const items: IssueChoice[] = [
-    ...(gh?.kind === 'items' ? gh.items.map((i) => ({ source: 'github' as const, key: i.id, title: i.title, url: i.url, description: i.description })) : []),
-    ...(jira?.kind === 'items' ? jira.items.map((i) => ({ source: 'jira' as const, key: i.id, title: i.title, url: i.url, description: i.description })) : [])
-  ]
+  const gh = await window.canvas.github.list().catch(() => null)
+  const items: IssueChoice[] = gh?.kind === 'items' ? gh.items.map((i) => ({ source: 'github' as const, key: i.id, title: i.title, url: i.url, description: i.description })) : []
   if (items.length > 0) return { kind: 'items', items }
-  const why = gh !== null && gh.kind !== 'items' ? gh.reason : jira !== null && jira.kind !== 'items' ? jira.reason : 'no open issues were found'
+  const why = gh !== null && gh.kind !== 'items' ? gh.reason : 'no open issues were found'
   return { kind: 'none', reason: `no issues — ${why}` }
 }
 
@@ -77,7 +71,6 @@ export type BoardActions = Pick<PaletteActions,
   | 'openReview'
   | 'reviewAcross'
   | 'openGithub'
-  | 'openJira'
   | 'openMemory'
   | 'openFile'
   | 'newNote'
@@ -87,7 +80,7 @@ export type BoardActions = Pick<PaletteActions,
 export function boardActions(ctx: ActionCtx): BoardActions {
   const {
     palette, panelsRef, presetRows, settingRows, worldCentre, openReview, openFilePanel,
-    openJiraPanel, openMemoryPanel, openGithubPanel, openReviewAcross, beginWatcher,
+    openMemoryPanel, openGithubPanel, openReviewAcross, beginWatcher,
     beginNewNote, setPanels, setInputMode, teammatesRef, chooseNavigator, workItemsRef,
     setWorkItems, boardVerbsRef, self
   } = ctx
@@ -489,7 +482,6 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     openReview,
     reviewAcross: (id) => openReviewAcross(id),
     openGithub: () => openGithubPanel(),
-    openJira: () => openJiraPanel(),
     // M83. The project memory for the captured panel's repository — resolved
     // by MAIN (only it knows what a directory's repository root is), so the
     // node's subject is the same root `tc memory` writes under.

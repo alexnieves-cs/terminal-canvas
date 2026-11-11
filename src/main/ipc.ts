@@ -69,14 +69,6 @@ import { parseRendererOp, parseWorkspaceRole, type CanvasOp, type CanvasSharedVi
 import { parseTextCursor, type LocalPresence, type PresenceRoster } from '../shared/presence'
 import { OBSERVING_MODE, type TeamListResult, type TeamObserveRequest } from '../shared/team'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
-import {
-  commentOnWorkItem,
-  createJiraRequester,
-  listAssignedWorkItems,
-  listWorkItemTransitions,
-  transitionWorkItem,
-  verifyJiraCredential
-} from './jira-client'
 import type { FileWatchers } from './file-watch'
 import { readDir } from './fs-tree'
 import type { ToolboxCache } from './toolbox-cache'
@@ -1430,27 +1422,12 @@ export function registerIpcHandlers(
   // answers with what the service said. No handler in this file may call
   // read() directly — that would put a token on the IPC boundary.
   ipcMain.handle(IPC.CREDENTIAL_VERIFY, (_event, service: string) =>
-    service === 'jira'
-      ? verifyJiraCredential({ store: credentialStore, requester: createJiraRequester() })
-      : verifyCredential({ store: credentialStore, fetcher: createHttpsFetcher() }, service))
+    verifyCredential({ store: credentialStore, fetcher: createHttpsFetcher() }, service))
 
-  // M88. The same injected shape as Jira's, so the harness drives the node
+  // M88. An injected requester, so the harness drives the node
   // over a recorded requester through `palette.githubList`.
   ipcMain.handle(IPC.BROKER_AUDIT, (_event, limit: number, service?: string) => palette.brokerAudit(Number.isInteger(limit) && limit > 0 ? Math.min(limit, 500) : 100, typeof service === 'string' && service !== '' ? service : undefined))
   ipcMain.handle(IPC.GITHUB_LIST, (_event, panelId?: string) => palette.githubList(typeof panelId === 'string' && panelId !== '' ? panelId : undefined))
-  ipcMain.handle(IPC.JIRA_LIST, () =>
-    listAssignedWorkItems({ store: credentialStore, requester: createJiraRequester() }))
-
-  ipcMain.handle(IPC.JIRA_TRANSITIONS, (_event, itemId: string) =>
-    listWorkItemTransitions({ store: credentialStore, requester: createJiraRequester() }, itemId))
-  // The two writes. Each performs ONE named mutation and returns an arm —
-  // never the stored `email`, never the stored `token`, and never anything
-  // derived from either. Named per field rather than as "the credential
-  // bundle", because `site` legitimately DOES cross, inside `WorkItem.url`.
-  ipcMain.handle(IPC.JIRA_COMMENT, (_event, req: { itemId: string; body: string }) =>
-    commentOnWorkItem({ store: credentialStore, requester: createJiraRequester() }, req.itemId, req.body))
-  ipcMain.handle(IPC.JIRA_TRANSITION, (_event, req: { itemId: string; transitionId: string }) =>
-    transitionWorkItem({ store: credentialStore, requester: createJiraRequester() }, req.itemId, req.transitionId))
 
   ipcMain.handle(IPC.FILE_OPEN, async () => {
     const win = getWindow()

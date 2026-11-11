@@ -303,23 +303,20 @@ const SCENES = [
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
   { name: 'integrations', intent: 'The Integrations page: the navigator\'s Connections pane (headed CONNECTIONS), every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker\'s audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place.',
     run: async (kit) => {
-      // Two of the three states on screen: GitHub connected as octocat, Jira
-      // with a token the last verify rejected. Seeded through the harness's
-      // own store and cleared after, so the Jira panel elsewhere keeps its
-      // no-credential arm.
+      // GitHub connected as octocat (Jira, the second service, was removed
+      // in M683). Seeded through the harness's own store and cleared after,
+      // so the GitHub panel elsewhere keeps its recorded broker.
       credentialStore.set('github', 'ghp_shot_token_000000000000000000000000')
       credentialStore.setLabel('github', 'octocat')
-      credentialStore.set('jira', JSON.stringify({ site: 'https://acme.atlassian.net', email: 'me@acme.test', token: 'shot' }))
-      credentialStore.markRejected('jira')
       await kit.js(`(() => { const b = document.querySelector('[data-dock="integrations"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
       await sleep(900)
       await kit.js(`(() => { const b = document.querySelector('[data-integrations-refresh]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
       await sleep(900)
       await kit.shot('integrations')
-      credentialStore.delete('github'); credentialStore.delete('jira')
+      credentialStore.delete('github')
       await kit.js(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
     } },
-  { name: 'github', intent: 'The GitHub work panel: the issues assigned to you and the pull requests waiting on your review as one list, each item led by its owner/repo#N in mono with its state, the title, the body\'s first line dim, and two verbs — Start session, which spawns an agent with the item as its opening context, and open on GitHub. Jira\'s shape reached by a second service, through the broker, so the panel\'s reads sit in the same audit as the agents\' own calls.',
+  { name: 'github', intent: 'The GitHub work panel: the issues assigned to you and the pull requests waiting on your review as one list, each item led by its owner/repo#N in mono with its state, the title, the body\'s first line dim, and two verbs — Start session, which spawns an agent with the item as its opening context, and open on GitHub. Reached through the broker, so the panel\'s reads sit in the same audit as the agents\' own calls.',
     run: async (kit) => {
       await kit.goTo('GitHub work')
       await sleep(900)
@@ -1743,7 +1740,6 @@ app.whenReady().then(async () => {
         { id: 'file', kind: 'file', x: 410, y: 310, w: 360, h: 230, z: 4, source: { path: join(REPO, 'src', 'server.ts') } },
         { id: 'note', kind: 'file', x: 800, y: 310, w: 340, h: 420, z: 5, source: { path: NOTE, prose: true } },
         { id: 'toolbox', kind: 'toolbox', x: 30, y: 570, w: 380, h: 210, z: 6, source: { cwd: REPO } },
-        { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
         // M88. The GitHub work panel over a recorded broker.
         { id: 'github', kind: 'github', x: 1800, y: 900, w: 460, h: 440, z: 15 },
         // M103. A dev server beside the browser pane that shows it, with a

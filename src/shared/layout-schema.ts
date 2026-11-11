@@ -49,7 +49,6 @@ export type {
   PersistedFilePanel,
   PersistedGithubPanel,
   PersistedImagePanel,
-  PersistedJiraPanel,
   PersistedMemoryPanel,
   PersistedNotePanel,
   PersistedPanel,

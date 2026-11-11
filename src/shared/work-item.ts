@@ -9,14 +9,3 @@ export interface WorkItem {
   url: string
 }
 
-/**
- * One legal next state for a work item. Provider-neutral like WorkItem, and
- * for the same reason: a second provider, not Jira alone, decides any wider
- * surface. `toState` is nullable because the state a transition leads to is
- * a display convenience, while the id is the fact the write needs.
- */
-export interface WorkItemTransition {
-  id: string
-  name: string
-  toState: string | null
-}

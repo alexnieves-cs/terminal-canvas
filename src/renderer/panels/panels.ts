@@ -144,10 +144,7 @@ export interface FilePanel extends PanelBase {
   source: FileSource
 }
 
-/** Jira's first concrete panel. It deliberately carries no provider machinery:
- * the next provider decides what, if anything, generalises. */
-export interface JiraPanel extends PanelBase { kind: 'jira' }
-/** M88. The GitHub work panel — the ninth kind, the second work panel, sessionless like Jira's. */
+/** M88. The GitHub work panel, sessionless. (Jira's panel, the first work panel, was removed in M683.) */
 export interface GithubPanel extends PanelBase { kind: 'github' }
 
 /**
@@ -314,7 +311,7 @@ export interface ShapePanel extends PanelBase {
   shape: ShapeRecord
 }
 
-export type Panel = ShapePanel | NotePanel | MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel | RelayPanel
+export type Panel = ShapePanel | NotePanel | MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel | RelayPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -340,7 +337,6 @@ export function isReviewPanel(panel: Panel): panel is ReviewPanel {
 export function isFilePanel(panel: Panel): panel is FilePanel {
   return panel.kind === 'file'
 }
-export function isJiraPanel(panel: Panel): panel is JiraPanel { return panel.kind === 'jira' }
 export function isGithubPanel(panel: Panel): panel is GithubPanel { return panel.kind === 'github' }
 
 export function isMemoryPanel(panel: Panel): panel is MemoryPanel {
@@ -536,7 +532,7 @@ export function makeNotePanel(id: string, centre: Point, z: number, form: NoteFo
  */
 export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
-    !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
+    !isReviewPanel(panel) && !isFilePanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
     !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel) && !isWorkPanel(panel) && !isWorkflowPanel(panel) &&
     // M128. The thirteenth kind joins the partition HERE, and forgetting it
@@ -1340,10 +1336,6 @@ export const JIRA_W = 640
 export const JIRA_H = 520
 export function makeGithubPanel(id: string, centre: Point, z: number): GithubPanel {
   return { kind: 'github', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'GitHub work' }
-}
-
-export function makeJiraPanel(id: string, centre: Point, z: number): JiraPanel {
-  return { kind: 'jira', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'Jira tickets' }
 }
 
 /** M116. A card is a ROW, not a list: the work panels' width and a short height (above MIN_PANEL_H). */

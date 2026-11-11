@@ -447,8 +447,8 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 // M87 — readers.1. THE READERS OF A CREDENTIAL'S PLAINTEXT, pinned as a LIST.
 //      `read(` on a credential store is the one call that yields a token,
 //      and the set of modules that make it is exactly three: the verifier
-//      (M14), the Jira client (M24) and the broker (M87) — the store's LAST
-//      reader. A fourth would be a new place a token can leak from, and it
+//      (M14), the broker (M87) — the store's LAST reader — and the account
+//      session. (The Jira client was a fourth until M683 removed Jira.) A fourth would be a new place a token can leak from, and it
 //      fails the build with its own name rather than joining quietly.
 {
   const { readdirSync } = require('node:fs')
@@ -459,8 +459,8 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   // account-session.ts is the fourth: the Terminal Canvas account's session
   // (supabase:github:<id>) is attached to requests to the account server and
   // returned by no function there — verify:account login.3 pins that.
-  const expected = ['account-session.ts', 'broker.ts', 'credential-verify.ts', 'jira-client.ts']
-  ok('readers.1 exactly four modules read a credential\'s plaintext — credential-verify, jira-client, the broker and the account session',
+  const expected = ['account-session.ts', 'broker.ts', 'credential-verify.ts']
+  ok('readers.1 exactly three modules read a credential\'s plaintext — credential-verify, the broker and the account session',
     JSON.stringify(readers) === JSON.stringify(expected),
     JSON.stringify(readers))
 }
@@ -675,62 +675,16 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     offenders.length ? offenders.join(',') : `${stores} stores, none numbered`)
 }
 
-// The two checks below arrived from the M24 Jira-writes branch numbered 22 and
-// 23 — the same integers main had independently just used above. That is the
-// exact collision check 22 exists to catch, and it would have flagged itself
-// here. Renumbered to scoped ids on merge, per CLAUDE.md's convention: a NEW
-// check takes a SCOPED id, never the next global integer.
-// jira-write.1 / jira-write.2. M24's rule: NO AGENT-REACHABLE PATH TRIGGERS A JIRA WRITE. Both
-// checks read source text rather than behaviour, for check 20 and 21's own
-// reason — a violation has NO RUNTIME SYMPTOM. Add a channel that let an
-// agent's output drive a write and the app works exactly as it does now,
-// plus one capability nobody asked for.
-//
-// Both reads are COMMENT-STRIPPED, because jira-client.ts and ipc-contract.ts
-// each carry prose naming the very things that must not appear — a bare
-// substring search fails against the correct tree.
-//
-// jira-write.1 is an ALLOWLIST, never a test for a forbidden spelling. Testing for
-// `jira:delete` would pin THAT spelling and let a sibling named
-// JIRA_DELETE_ISSUE sail through, which is exactly the trap check 20 records.
-//
-// jira-write.1 CARRIES A THIRD LIMIT OF ITS OWN, beside the two 23 records below, and it
-// is stated here so a green run is not over-read: this is a PREFIX-KEYED
-// allowlist. It matches /JIRA_[A-Z_]+/ inside the `IPC` object alone, so a
-// write channel named without that prefix — WORKITEM_DELETE, TICKET_UPDATE —
-// is invisible to it, as is anything added to IPC_EVENTS. That is inherent to
-// keying on a prefix and is the right trade (the alternative, an allowlist
-// over EVERY channel, goes red on every unrelated milestone and is therefore
-// the kind that gets widened until it means nothing), but it means a green jira-write.1
-// says "no unexpected JIRA_* invoke exists", never "no write channel exists".
+// jira.gone.1 (M683). Jira was removed. Its two writes were the reason for
+// jira-write.1/.2 (no agent-reachable path to a Jira write); with no Jira
+// channel and no Jira client left, the rule holds by absence, and this keeps
+// it that way: a JIRA_* channel or a jira-client module coming back must
+// bring its own write rule with it.
 {
   const contract = stripComments(read('src/shared/ipc-contract.ts') ?? '')
-  const objMatch = contract.match(/export const IPC = \{([\s\S]*?)\n\} as const/)
-  const body = objMatch ? objMatch[1] : ''
-  const keys = [...body.matchAll(/\bJIRA_[A-Z_]+\b/g)].map((m) => m[0])
-  const ALLOWED = ['JIRA_LIST', 'JIRA_TRANSITIONS', 'JIRA_COMMENT', 'JIRA_TRANSITION']
-  const unexpected = keys.filter((k) => !ALLOWED.includes(k))
-  const missing = ALLOWED.filter((k) => !keys.includes(k))
-
-  ok('jira-write.1 the JIRA_* channel set is exactly {list,transitions,comment,transition}',
-    objMatch !== null && unexpected.length === 0 && missing.length === 0,
-    `parsed=${objMatch !== null} unexpected=${JSON.stringify(unexpected)} missing=${JSON.stringify(missing)}`)
-}
-
-// jira-write.2 carries the SAME two honest limits check 21 records, and they are stated
-// here rather than left for a reader to discover: it greps each offender
-// file's OWN source, so a second hop through some other, non-Jira module is
-// unchecked; and the three-file offender list is a HARDCODED SNAPSHOT of "the
-// modules that build a process environment" as of M24, so a fourth such
-// module added later is unchecked by construction. A green run means these
-// shapes hold. It is not proof the rule holds.
-{
-  const offenders = ['src/main/shell-env.ts', 'src/main/pty-manager.ts', 'src/main/session-backend.ts']
-    .filter((f) => /jira-client/.test(stripComments(read(f) ?? '')))
-
-  ok('jira-write.2 no env-building module imports the Jira client',
-    offenders.length === 0,
-    offenders.length ? offenders.join(',') : 'none')
+  const keys = [...contract.matchAll(/\bJIRA_[A-Z_]+\b/g)].map((m) => m[0])
+  const client = require('node:fs').existsSync('src/main/jira-client.ts')
+  ok('jira.gone.1 no JIRA_* channel and no Jira client remain (M683)', keys.length === 0 && !client, JSON.stringify({ keys, client }))
 }
 
 console.log('\n' + '='.repeat(60))
@@ -1064,7 +1018,13 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { gitErr = String(e && e.message || e).split('\n')[0] }
   const newIds = new Set()
   for (const f of parts) for (const id of idsOf(read(join('scripts', f)) || '')) newIds.add(id)
-  const lost = [...oldIds].filter((id) => !newIds.has(id))
+  // RETIRED: ids whose FEATURE was deleted on purpose, so the check went with
+  // it — not lost in a move. Each entry names the milestone that removed it;
+  // an id lands here only with its feature, never to quiet a lost check.
+  const RETIRED = new Set([
+    'jira-comment.1', // M683: the Jira panel was removed (docs/streams/cut-list.md)
+  ])
+  const lost = [...oldIds].filter((id) => !newIds.has(id) && !RETIRED.has(id))
   // The parser sees a literal first argument only (222 of the 357 `ok(` calls
   // at pre-v7-run; the rest take a variable, `IDS[0]` and its siblings, whose
   // ids are pinned by those blocks' own `IDS` arrays moving with them). The
@@ -1514,7 +1474,7 @@ console.log('\n' + '='.repeat(60))
   const users = runnerMod.suites().filter((s) => affected.sourcesOf(s.body).files.has('scripts/lib/checks.cjs')).length
   const none = affected.select(['docs/no-such-file.md'])
   ok('affected.2 a canvas module selects its suite and the build consumers but no main-process-only suite; the shared ok() selects every suite requiring it; an unread file is UNMAPPED',
-    vp.includes('verify:viewport') && vp.includes('verify:panels:core') && !vp.includes('verify:jira') &&
+    vp.includes('verify:viewport') && vp.includes('verify:panels:core') && !vp.includes('verify:credentials') &&
       users >= 30 && lib.length === users && none.picked.length === 0 && none.unmapped.length === 1,
     JSON.stringify({ viewport: vp, lib: lib.length, users, unmapped: none.unmapped }))
 }

@@ -2149,7 +2149,7 @@ const inventory = (over) => ({
 //     wrong thing of the one kind that owns a process.
 {
   const PROCESS_WORDS = ['not started', 'dormant', 'asleep', 'exited', 'pid ', 'starting', 'running', 'working', 'needs you']
-  const SESSIONLESS = ['review', 'file', 'toolbox', 'jira', 'memory', 'github']
+  const SESSIONLESS = ['review', 'file', 'toolbox', 'memory', 'github']
   const tails = {}
   for (const k of SESSIONLESS) tails[k] = R.railTail(undefined, false, k)
   const bad = SESSIONLESS.filter((k) => PROCESS_WORDS.some((w) => tails[k].includes(w)))
@@ -2183,7 +2183,6 @@ const inventory = (over) => ({
     review: R_.buildInspectorModel(mk('review', { subject: { subjectId: 'p1', repoRoot: '/r', baselineSha: 'abc', label: 'x' } }), undefined, undefined, []).kind,
     file: R_.buildInspectorModel(mk('file', { source: { path: '/a/b.txt' } }), undefined, undefined, []).kind,
     toolbox: R_.buildInspectorModel(mk('toolbox', { source: { cwd: '/a', label: 'a' } }), undefined, undefined, []).kind,
-    jira: R_.buildInspectorModel(mk('jira', { title: 'Jira tickets' }), undefined, undefined, []).kind,
     // M88. The second work panel joins the same rule.
     // Guarded: an unknown kind falls through to the terminal arm and THROWS
     // on its absent spec, which would abort the suite — a red row is the
@@ -3157,10 +3156,10 @@ const session = (id, over = {}) => ({
 //     file locally consistent); and railTail, now a wrapper, agrees with
 //     panelState for every fixture the older checks use (state.3).
 {
-  const KINDS = ['terminal', 'review', 'file', 'note', 'toolbox', 'jira', 'chat', 'memory', 'github']
+  const KINDS = ['terminal', 'review', 'file', 'note', 'toolbox', 'chat', 'memory', 'github']
   const STATUSES = [undefined, { kind: 'idle' }, { kind: 'starting' }, { kind: 'running', pid: 4, command: '/bin/sh' }, { kind: 'exited', code: 0 }, { kind: 'exited', code: 1 }, { kind: 'error', message: 'spawn failed' }]
   const AGENTS = [undefined, 'starting', 'busy', 'idle', 'wants-you', 'exited']
-  const WORDS = new Set(['asleep', 'not started', 'starting', 'running', 'working', 'idle', 'needs you', 'exited', 'review', 'file', 'note', 'toolbox', 'jira', 'memory', 'github'])
+  const WORDS = new Set(['asleep', 'not started', 'starting', 'running', 'working', 'idle', 'needs you', 'exited', 'review', 'file', 'note', 'toolbox', 'memory', 'github'])
   const bad = []
   let count = 0
   for (const kind of KINDS) for (const status of STATUSES) for (const dormant of [false, true]) for (const agent of AGENTS) {

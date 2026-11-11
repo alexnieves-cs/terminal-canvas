@@ -8,7 +8,7 @@
  *   tc toolbox <skill|command|agent|mcp-server>
  *   tc memory list [--root <dir> | --teammate <id>] [--limit <n>]
  *   tc memory add --kind <decided|tried|failed|note> --text "…" [--root <dir> | --teammate <id>]
- *   tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]
+ *   tc api github <METHOD> </path> [body-json] [--panel <id>]
  *   tc login | tc logout [--user <github-id>]
  *   tc invite --role <member|admin> [--org <org-id>] | tc join <code>
  *   tc accounts | tc use <github-login>
@@ -42,7 +42,7 @@ export const USAGE = [
   '       tc plan "focus n3; read n3"',
   '       tc memory list [--root <dir> | --teammate <id>] [--limit <n>]',
   '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir> | --teammate <id>]',
-  '       tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]',
+  '       tc api github <METHOD> </path> [body-json] [--panel <id>]',
   '       tc login | tc logout [--user <github-id>]',
   '       tc invite --role <member|admin> [--org <org-id>] | tc join <code>',
   '       tc accounts | tc use <github-login>',

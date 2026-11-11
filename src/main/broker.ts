@@ -1,5 +1,4 @@
 import type { CredentialStore } from './credential-store'
-import { parseJiraCredential } from './jira-client'
 import { NOT_CONNECTED_CODE, notConnectedReason } from '../shared/credential-schema'
 import { NOT_GRANTED_CODE, NOT_ANSWERED_CODE, NOT_ASKED_CODE } from './broker-refusal'
 
@@ -148,22 +147,14 @@ function resolve(service: string, secret: string, path: string): { url: string; 
   if (service === 'github') {
     return { url: `https://api.github.com${path}`, origin: 'https://api.github.com', prefix: '/', headers: { authorization: `Bearer ${secret}`, accept: 'application/vnd.github+json', 'user-agent': 'terminal-canvas', 'content-type': 'application/json' }, secrets: [secret] }
   }
-  if (service === 'jira') {
-    const cred = parseJiraCredential(secret)
-    if (cred === null) return { refused: 'the jira credential is not usable — set it again in ⌘K › Credentials' }
-    const basic = Buffer.from(`${cred.email}:${cred.token}`).toString('base64')
-    let origin: string
-    try { origin = new URL(cred.site).origin } catch { return { refused: 'the jira credential names no usable site — set it again in ⌘K › Credentials' } }
-    return { url: `${origin}/rest/api/3${path}`, origin, prefix: '/rest/api/3/', headers: { authorization: `Basic ${basic}`, accept: 'application/json', 'content-type': 'application/json' }, secrets: [secret, cred.token, `${cred.email}:${cred.token}`, basic] }
-  }
-  return { refused: `unknown service ${JSON.stringify(service)} — the broker knows github and jira` }
+  return { refused: `unknown service ${JSON.stringify(service)} — the broker knows github` }
 }
 
 /**
  * The URL as the wire will see it: percent-encoded dots (`%2e%2e`) are a
  * double-dot segment to the WHATWG parser `node:https` uses, so a string
  * check on the INPUT path lets `/%2e%2e/%2e%2e/rest/api/2/…` walk out from
- * under the Jira prefix with basic auth attached (M87's verifier). The
+ * under a service's prefix with its credential attached (M87's verifier). The
  * NORMALISED origin and pathname are what get checked, and the normalised
  * path is what the audit records.
  */
@@ -222,7 +213,7 @@ export function createBroker(deps: BrokerDeps): Broker {
       const pathProblem = checkPath(req.path)
       if (pathProblem !== null) return refuse(req, pathProblem)
       if (req.body !== undefined && Buffer.byteLength(req.body) > BROKER_BODY_MAX) return refuse(req, `the body is over the ${BROKER_BODY_MAX / 1024 / 1024} MB cap`)
-      if (req.service !== 'github' && req.service !== 'jira') return refuse(req, `unknown service ${JSON.stringify(req.service)} — the broker knows github and jira`)
+      if (req.service !== 'github') return refuse(req, `unknown service ${JSON.stringify(req.service)} — the broker knows github`)
       // M102. The grant, BEFORE the credential is read: a refused teammate
       // never causes a read, so the store's readers stay what they are and
       // the audit shows the attempt with no token behind it.

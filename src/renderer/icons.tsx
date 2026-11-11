@@ -149,10 +149,6 @@ export const KindNote = (p: IconProps): JSX.Element => (
 export const KindToolbox = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="5" width="12" height="8" rx="1" /><path d="M6 5V3h4v2M2 9h12" /></Svg>
 )
-/* M258. A ticket: the stub with its tear notch. */
-export const KindJira = (p: IconProps): JSX.Element => (
-  <Svg {...p}><path d="M2 4.5h12v2a1.5 1.5 0 0 0 0 3v2H2v-2a1.5 1.5 0 0 0 0-3z" /><path d="M10 4.5v7" strokeWidth="1" strokeDasharray="1 1.5" /></Svg>
-)
 /* M74. A terminal: the prompt chevron and a line. */
 export const KindTerminal = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M3 4l4 4-4 4" /><path d="M8 12h5" /></Svg>
@@ -253,7 +249,7 @@ export const KindRelay = (p: IconProps): JSX.Element => (
 export const KindShape = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="1.5" y="2.5" width="6" height="4" rx="1" /><path d="M11.5 8.5l3 3-3 3-3-3z" /><path d="M4.5 6.5v5h4" strokeWidth="1" /></Svg>
 )
-export const KIND_GLYPH = { shape: KindShape, review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow, image: KindImage, relay: KindRelay } as const
+export const KIND_GLYPH = { shape: KindShape, review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow, image: KindImage, relay: KindRelay } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */
 export const Lock = (

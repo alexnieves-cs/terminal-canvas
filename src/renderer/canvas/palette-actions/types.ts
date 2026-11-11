@@ -145,7 +145,6 @@ export interface PaletteActionsDeps {
   openReview: (subjectId: string) => void
   openFilePanel: (path: string, centre: Point, opts?: { prose?: true }) => void
   openToolboxPanel: (cwd: string, label: string, centre: Point) => void
-  openJiraPanel: () => void
   /** M83. Open the memory node for the captured panel's repository. */
   openMemoryPanel: () => Promise<void>
   /** M133. Open a template as a workflow panel — a VIEW of the shape. */

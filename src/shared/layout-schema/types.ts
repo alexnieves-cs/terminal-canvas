@@ -200,7 +200,6 @@ export interface PersistedFilePanel extends PersistedPanelBase {
    */
   source: FileSource
 }
-export interface PersistedJiraPanel extends PersistedPanelBase { kind: 'jira' }
 /** M88. The GitHub work panel: no source, no cwd, no args — its subject is the credential. */
 export interface PersistedGithubPanel extends PersistedPanelBase { kind: 'github' }
 
@@ -389,7 +388,6 @@ export type PersistedPanel =
   | PersistedTerminalPanel
   | PersistedReviewPanel
   | PersistedFilePanel
-  | PersistedJiraPanel
   | PersistedGithubPanel
   | PersistedToolboxPanel
   | PersistedChatPanel

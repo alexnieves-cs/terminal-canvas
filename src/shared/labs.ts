@@ -11,9 +11,8 @@
  * Two rules, both so that hiding can never strand anyone:
  *
  * - **Hide what mints, never what acts on what exists.** A deck already on a
- *   canvas still renders, edits and exports; a Jira panel already there still
- *   offers Connect Jira…. So `deck.edit` and the credential rows stay, and only
- *   `object.create.deck` and `jira.open` go. A row hidden here that a saved
+ *   canvas still renders, edits and exports. So `deck.edit` stays, and only
+ *   `object.create.deck` goes. A row hidden here that a saved
  *   object needs is a dead end, which `verify:palette labs.3` refuses.
  * - **The agent line and the workflow node stay.** `tc plan create-deck` is
  *   typed on purpose by someone who knows the verb; the four-doors rule
@@ -23,7 +22,7 @@
  * and the plain-node suites all read the same list.
  */
 
-export type LabId = 'world' | 'accounts' | 'relay' | 'decks' | 'sheets' | 'jira' | 'toolbox'
+export type LabId = 'world' | 'accounts' | 'relay' | 'decks' | 'sheets' | 'toolbox'
 
 export interface LabDef {
   id: LabId
@@ -54,7 +53,6 @@ export const LABS: readonly LabDef[] = [
   { id: 'relay', setting: 'labs.relay', shown: false, rows: ['object.create.relay'] },
   { id: 'decks', setting: 'labs.decks', shown: false, rows: ['object.create.deck'] },
   { id: 'sheets', setting: 'labs.sheets', shown: false, rows: ['object.create.sheet'] },
-  { id: 'jira', setting: 'labs.jira', shown: false, rows: ['jira.open'] },
   { id: 'toolbox', setting: 'labs.toolbox', shown: false, rows: ['panel.toolbox', 'panel.memory'] }
 ]
 

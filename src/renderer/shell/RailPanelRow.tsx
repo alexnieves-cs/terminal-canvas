@@ -59,7 +59,7 @@ function RailPanelRowImpl({
   const stateful = shown.tone !== 'kind'
   const running = toneIsRunning(shown.tone)
   const needsYou = toneNeedsYou(shown.tone)
-  const changed = last.unread || row.state.kind === 'review' || row.state.kind === 'github' || row.state.kind === 'jira'
+  const changed = last.unread || row.state.kind === 'review' || row.state.kind === 'github'
   const asleep = toneIsAsleep(shown.tone) || row.dormant
   return (
     <li
