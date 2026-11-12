@@ -362,7 +362,9 @@ app.whenReady().then(() => {
   // handoffs and shared review queue, read and written in the person's name.
   // +1: vm:lanes (M553, lane J) — the sandboxed lanes and the egress log, read
   // on load (their push, vm:lanes-changed, is an event and not counted here).
-  const EXPECTED_CHANNELS = 235
+  // -4: jira:list / jira:transitions / jira:comment / jira:transition (M683) —
+  // the Jira panel and its client were removed (docs/streams/cut-list.md).
+  const EXPECTED_CHANNELS = 231
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
