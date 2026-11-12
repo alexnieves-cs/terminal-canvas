@@ -587,7 +587,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <div className="launcher__env" data-launcher-env data-launcher-env-kind={outcome?.kind ?? 'pending'} data-launcher-startup={state} role="status" aria-live="polite">
             <p className="launcher__env-line">
               <span data-tone={state === 'ready' ? 'idle' : trouble ? 'needs-you' : 'running'} title={outcome?.sentence}>{STARTUP_LINE[state]}</span>
-              {state === 'ready' && <>{'. '}<span className="launcher__env-hint">The full report is Environment… in ⌘K.</span></>}
+              {state === 'ready' && <>{' · '}<span className="launcher__env-hint">the full report is Environment… in ⌘K</span></>}
               {trouble && onCheckAgain !== undefined && (
                 <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-try-again title="Ask the login shell again and report what it finds" {...shellControl(checkAgain)}>Try again</button>
               )}
@@ -611,7 +611,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
         return (
           <p className="launcher__env" data-launcher-update data-launcher-update-version={update.result.version}>
             <span data-tone="needs-you">{update.result.version} is out</span>
-            {'. '}<span className="launcher__env-hint">Download it from the release page; the app does not install updates itself.</span>
+            {' · '}<span className="launcher__env-hint">download it from the release page; the app does not install updates itself</span>
             {onOpenRelease !== undefined && (
               <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-open-release title={url} {...shellControl(() => onOpenRelease(url))}>Open release</button>
             )}
