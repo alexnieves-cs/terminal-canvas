@@ -211,7 +211,11 @@ const rec = (over = {}) => JSON.stringify({
     'claude-fable-5-1': [10, 50, 0.25],
     'claude-opus-5': [5, 25, 0.5],
     'claude-sonnet-5': [2, 10, 0.2],
-    'claude-haiku-4-5': [1, 5, 0.1]
+    'claude-haiku-4-5': [1, 5, 0.1],
+    // Checked 2026-11-12 against Anthropic's published model table.
+    'claude-fable-5-2': [8, 40, 0.2],
+    'claude-opus-5-5': [4, 20, 0.2],
+    'claude-sonnet-5-5': [2, 10, 0.1]
   }
   const off = Object.entries(pinned).filter(([m, [i, o, r]]) => {
     const x = U.MODEL_RATES[m]
