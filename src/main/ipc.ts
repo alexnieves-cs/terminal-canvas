@@ -4,8 +4,6 @@ import { statusPlaceFacts } from './home-dir'
 import type { CheckOutputRead } from '../shared/check-output'
 import type { LastExit } from '../shared/persistence'
 import { INERT_JOBS, type JobHandlers } from './job-recovery'
-import type { RelayClient } from './relay/relay-client'
-import { RELAY_SESSION_ID } from '../shared/relay-protocol'
 import { FULL_SETTING } from '../shared/labs'
 import { INERT_TASKS, type TaskHandlers } from './task-evidence'
 import type { UsageRow } from '@shared/run-ledger'
@@ -530,77 +528,6 @@ export const INERT_PRESENCE: PresenceHandlers = {
   writeTeamFlow: () => ({ ok: false, reason: SHARING_NOT_WIRED })
 }
 
-/**
- * The pty relay's doors (main/relay/relay-client.ts). Inert by default — every
- * open refused by name, every keystroke dropped — so a harness that did not
- * wire the relay opens no socket to anything.
- */
-export type RelayHandlers = Pick<RelayClient, 'spawn' | 'attach' | 'detach' | 'input' | 'resize' | 'control' | 'kill' | 'list' | 'view' | 'replay'>
-const RELAY_NOT_WIRED = 'the relay is not wired in this build'
-export const INERT_RELAY: RelayHandlers = {
-  spawn: async () => ({ kind: 'refused', reason: RELAY_NOT_WIRED }),
-  attach: async () => ({ kind: 'refused', reason: RELAY_NOT_WIRED }),
-  detach: () => {}, input: () => false, resize: () => {}, control: () => {}, kill: () => {},
-  list: async () => ({ kind: 'refused', reason: RELAY_NOT_WIRED }),
-  view: () => null, replay: () => {}
-}
-
-const RELAY_PANEL = /^[A-Za-z0-9_-]{1,128}$/
-const RELAY_USER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-
-/**
- * Every argument is untrusted renderer input and is typed here; the relay's
- * own parser (relay-protocol.ts) types it again on the other end. Input is
- * capped per call: a paste larger than that is the renderer's to chunk.
- */
-function registerRelayHandlers(relay: RelayHandlers): void {
-  const panel = (v: unknown): string | undefined => (typeof v === 'string' && RELAY_PANEL.test(v) ? v : undefined)
-  const dim = (v: unknown, hi: number): number | undefined => (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= hi ? v : undefined)
-  ipcMain.handle(IPC.RELAY_SPAWN, (_event, raw: unknown) => {
-    const r = (raw ?? {}) as Record<string, unknown>
-    const id = panel(r['panelId']), cols = dim(r['cols'], 1000), rows = dim(r['rows'], 500)
-    const program = typeof r['program'] === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(r['program']) ? r['program'] : undefined
-    const shareId = typeof r['shareId'] === 'string' && RELAY_USER.test(r['shareId']) ? r['shareId'] : undefined
-    if (id === undefined || program === undefined || cols === undefined || rows === undefined) return { kind: 'refused', reason: 'not a relay spawn' }
-    return relay.spawn(id, { program, cols, rows, ...(shareId === undefined ? {} : { shareId }) })
-  })
-  ipcMain.handle(IPC.RELAY_ATTACH, (_event, raw: unknown) => {
-    const r = (raw ?? {}) as Record<string, unknown>
-    const id = panel(r['panelId'])
-    const sessionId = typeof r['sessionId'] === 'string' && RELAY_SESSION_ID.test(r['sessionId']) ? r['sessionId'] : undefined
-    if (id === undefined || sessionId === undefined) return { kind: 'refused', reason: 'not a relay session' }
-    return relay.attach(id, sessionId)
-  })
-  ipcMain.handle(IPC.RELAY_DETACH, (_event, id: unknown) => { const p = panel(id); if (p !== undefined) relay.detach(p) })
-  ipcMain.handle(IPC.RELAY_INPUT, (_event, id: unknown, data: unknown) => {
-    const p = panel(id)
-    return p !== undefined && typeof data === 'string' && data.length <= 64 * 1024 ? relay.input(p, data) : false
-  })
-  ipcMain.handle(IPC.RELAY_RESIZE, (_event, raw: unknown) => {
-    const r = (raw ?? {}) as Record<string, unknown>
-    const p = panel(r['panelId']), cols = dim(r['cols'], 1000), rows = dim(r['rows'], 500)
-    if (p !== undefined && cols !== undefined && rows !== undefined && cols >= 2) relay.resize(p, cols, rows)
-  })
-  ipcMain.handle(IPC.RELAY_CONTROL, (_event, raw: unknown) => {
-    const r = (raw ?? {}) as Record<string, unknown>
-    const p = panel(r['panelId']), action = r['action']
-    if (p === undefined) return
-    if (action === 'request' || action === 'release' || action === 'revoke') relay.control(p, action)
-    else if ((action === 'grant' || action === 'deny') && typeof r['userId'] === 'string' && RELAY_USER.test(r['userId'])) relay.control(p, action, r['userId'])
-  })
-  ipcMain.handle(IPC.RELAY_KILL, (_event, id: unknown) => { const p = panel(id); if (p !== undefined) relay.kill(p) })
-  ipcMain.handle(IPC.RELAY_LIST, () => relay.list())
-  ipcMain.handle(IPC.RELAY_VIEW, (_event, id: unknown) => {
-    const p = panel(id)
-    if (p === undefined) return null
-    // The view now, and the whole screen again right after it: a reloaded
-    // renderer has an empty xterm and the relay's ring is the only copy.
-    const v = relay.view(p)
-    if (v !== null) queueMicrotask(() => relay.replay(p))
-    return v
-  })
-}
-
 /** A workspace id as the layout store mints them (ID_PATTERN's bound), for the text doors. */
 const WORKSPACE_ID = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -823,14 +750,17 @@ export function registerIpcHandlers(
   account: AccountHandlers = INERT_ACCOUNT,
   /** Presence. Appended last, like every collaborator before it. */
   presence: PresenceHandlers = INERT_PRESENCE,
-  /** The pty relay. Appended last, like every collaborator before it. */
-  relay: RelayHandlers = INERT_RELAY,
+  /**
+   * M685. The pty relay's slot, kept EMPTY rather than removed: the list is
+   * positional (src/main/CLAUDE.md rule 3), so deleting it would re-bind the
+   * flowchart and world doors below in every harness that builds this call.
+   */
+  _retiredRelay: undefined = undefined,
   /** The flowchart's file doors. Appended last, like every collaborator before it — an unwired harness gets a named refusal, never a dialog. */
   flowcharts: FlowchartHandlers = INERT_FLOWCHARTS,
   /** The world feed's status and retry. Appended last, like every collaborator before it. */
   world: WorldHandlers = INERT_WORLD
 ): void {
-  registerRelayHandlers(relay)
   ipcMain.handle(IPC.PRESENCE_LOCAL, (_event, raw: unknown) => {
     const report = parseLocalPresence(raw)
     if (report !== undefined) presence.local(report)

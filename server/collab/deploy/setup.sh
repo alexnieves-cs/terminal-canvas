@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs ON the VM (the relay's own, beside it), as a sudoer, from the directory
-# deploy.sh copied over:   ./setup.sh relay.example.com
+# Runs ON the team's VM, as a sudoer, from the directory
+# deploy.sh copied over:   ./setup.sh collab.example.com
 # Idempotent: re-running upgrades the three bundles and keeps collab.env.
 # M347 — docs/collab.md is the operator's page.
 set -euo pipefail
@@ -31,9 +31,9 @@ for f in main.cjs backup.cjs health.cjs; do sudo install -m 0644 "$HERE/$f" "/op
 for u in tc-collab.service tc-collab-backup.service tc-collab-backup.timer tc-collab-health.service tc-collab-health.timer; do
   sudo install -m 0644 "$HERE/$u" "/etc/systemd/system/$u"
 done
-# ONE Caddyfile for the VM — the relay's, which routes /collab too (TLS by
-# Caddy's own ACME: a certificate for $DOMAIN, renewed on its own).
-sed "s/relay.example.com/$DOMAIN/" "$HERE/Caddyfile" | sudo tee /etc/caddy/Caddyfile >/dev/null
+# The VM's Caddyfile routes /collab (TLS by Caddy's own ACME: a certificate
+# for $DOMAIN, renewed on its own).
+sed "s/collab.example.com/$DOMAIN/" "$HERE/Caddyfile" | sudo tee /etc/caddy/Caddyfile >/dev/null
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now tc-collab tc-collab-backup.timer tc-collab-health.timer

@@ -4,7 +4,7 @@
  * an object that is not null and not an array. A parser that needs a looser
  * or stricter shape names its own guard; this one is only the common case.
  * Dependency-free on purpose: the renderer, main, the host, the CLI and the
- * relay server all import it.
+ * collab server all import it.
  */
 export const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)

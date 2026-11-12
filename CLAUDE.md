@@ -123,36 +123,34 @@ credential:list credential:set credential:delete credential:verify auth:login au
 auth:sessions auth:use auth:status presence:local presence:rosters team:list team:observe
 team:asks team:ask-answer team:flow team:flow-write canvas:op canvas:shared-view
 workspace:share workspace:shares workspace:open-share workspace:share-member
-workspace:share-members text:open text:close text:update relay:spawn relay:attach relay:detach
-relay:input relay:resize relay:control relay:kill relay:list relay:view github:list
-broker:audit file:open file:read file:close fs:list toolbox:read toolbox:permissions file:write
-file:create diagnostics:sample diagnostics:export export:panel-text export:canvas-png
-export:deck-pdf export:flowchart film:night export:night-film deck:export-pptx tool:generate
-env:report tmux:adoptable link:open ledger:list ledger:usage ledger:timeline ledger:event
-check:output combine:run combine:inputs combine:integrate combine:receipts lane:merge
-lane:radar learn:read learn:record learn:propose learn:decide learn:prove setup:read setup:save
-setup:prepare setup:preflight editor:open recipe:list recipe:save recipe:delete recipe:history
-spawn:sheet spawn:recent spawn:recent-used agent:create agent:send agent:interrupt
-agent:dispose agent:cancel-queued agent:terminate agent:queue-edit agent:send-correction
-agent:answer agent:list agent:transcript agent:import agent:clipboard-image
-attachment:clipboard-file agent:auto-start agent:auto-stop tonight:start tonight:stop
-tonight:status vm:lanes fork:turns fork:branch tournament:start tournament:stop
-tournament:status cloud:list cloud:dispatch cloud:refresh cloud:forget cloud:merge cloud:radar
-agent:grants agent:revoke-grants agent:pool-start agent:pool-stop teammate:list teammate:save
-teammate:delete teammate:choose-place routine:list routine:save routine:delete routine:run
-shelf:list shelf:save plugin:details skill:write skill:create skill:rename skill:delete
-skill:trail browser:read preview:discover preview:capture asset:put asset:choose node:fetch
-portable:export portable:import pack:read pack:add pack:export preset:mark-reviewed
-github:publish pack:sample board:lane board:lane-status board:open-pr board:comment-pr
-board:repositories update:check image:read starter:prepare docx:import flowchart:read
-world:status world:retry pty:data pty:exit edit:copy edit:paste edit:undo edit:redo
-canvas:counts canvas:model canvas:reset preset:spawn preset:default preset:capture agent:state
-attention:jump settings:changed spawn:open-sheet agent:event presence:remote team:observed
-team:asks-changed team:flow-changed canvas:shared auth:changed text:remote relay:data
-relay:state world:events world:connection vm:lanes-changed watcher:state vault:changed
-session:live session:host session:recover subagent:state file:changed usage:panel routine:fire
-canvas:tidy canvas:feedback canvas:flip board:add canvas:plan pool:mint pool:event
-boot:progress cloud:changed
+workspace:share-members text:open text:close text:update github:list broker:audit file:open
+file:read file:close fs:list toolbox:read toolbox:permissions file:write file:create
+diagnostics:sample diagnostics:export export:panel-text export:canvas-png export:deck-pdf
+export:flowchart film:night export:night-film deck:export-pptx tool:generate env:report
+tmux:adoptable link:open ledger:list ledger:usage ledger:timeline ledger:event check:output
+combine:run combine:inputs combine:integrate combine:receipts lane:merge lane:radar learn:read
+learn:record learn:propose learn:decide learn:prove setup:read setup:save setup:prepare
+setup:preflight editor:open recipe:list recipe:save recipe:delete recipe:history spawn:sheet
+spawn:recent spawn:recent-used agent:create agent:send agent:interrupt agent:dispose
+agent:cancel-queued agent:terminate agent:queue-edit agent:send-correction agent:answer
+agent:list agent:transcript agent:import agent:clipboard-image attachment:clipboard-file
+agent:auto-start agent:auto-stop tonight:start tonight:stop tonight:status vm:lanes fork:turns
+fork:branch tournament:start tournament:stop tournament:status cloud:list cloud:dispatch
+cloud:refresh cloud:forget cloud:merge cloud:radar agent:grants agent:revoke-grants
+agent:pool-start agent:pool-stop teammate:list teammate:save teammate:delete
+teammate:choose-place routine:list routine:save routine:delete routine:run shelf:list
+shelf:save plugin:details skill:write skill:create skill:rename skill:delete skill:trail
+browser:read preview:discover preview:capture asset:put asset:choose node:fetch portable:export
+portable:import pack:read pack:add pack:export preset:mark-reviewed github:publish pack:sample
+board:lane board:lane-status board:open-pr board:comment-pr board:repositories update:check
+image:read starter:prepare docx:import flowchart:read world:status world:retry pty:data
+pty:exit edit:copy edit:paste edit:undo edit:redo canvas:counts canvas:model canvas:reset
+preset:spawn preset:default preset:capture agent:state attention:jump settings:changed
+spawn:open-sheet agent:event presence:remote team:observed team:asks-changed team:flow-changed
+canvas:shared auth:changed text:remote world:events world:connection vm:lanes-changed
+watcher:state vault:changed session:live session:host session:recover subagent:state
+file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip board:add
+canvas:plan pool:mint pool:event boot:progress cloud:changed
 ```
 <!-- /ipc:channels -->
 

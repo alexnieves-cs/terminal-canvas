@@ -1850,7 +1850,7 @@ app.whenReady().then(async () => {
   undefined, undefined, undefined,
   harnessAccountDoors,
   harnessPresence,
-  // Position 45 (the pty relay) takes its default. 46 is M388's flowchart
+  // Position 45 (the pty relay's slot, retired in M685) stays undefined. 46 is M388's flowchart
   // file doors: the PRODUCTION reader and exporter (the outward gate and every
   // refusal arm are theirs), with the two system sheets answered by what a
   // check planted — `state.flowchartOpenPath` / `state.flowchartSavePath`,

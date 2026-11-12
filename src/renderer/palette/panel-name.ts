@@ -1,5 +1,5 @@
 import { shapeSummary } from '@shared/flowchart'
-import { isTerminalPanel, isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { isTerminalPanel, isShapePanel, isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import { noteSummary } from '@shared/notes'
 import { displayPath } from '@shared/display-path'
@@ -257,8 +257,6 @@ export function panelName(panel: Panel, resolvedCommand?: string, opts?: PanelNa
   if (isImagePanel(panel)) return panel.title ?? `image · ${panel.image.path.split('/').pop() ?? 'image'}`
   // M187. A note names itself by its own first line — the rail, the Go-to row and the far view agree.
   if (isNotePanel(panel)) return panel.title ?? `${panel.note.form} · ${noteSummary(panel.note.text, panel.note.form)}`
-  // M338. `relay · <program>` — the rail's own label, so the Go-to row agrees.
-  if (isRelayPanel(panel)) return panel.title ?? `relay · ${panel.relay.program}`
   // M388. A shape names itself by its label's first line, like a note.
   if (isShapePanel(panel)) return shapeSummary(panel.shape.text, panel.shape.form)
   // M405 (D2). The place first; the program only when there is no place.
@@ -291,8 +289,6 @@ export function panelPath(panel: Panel): string | undefined {
   if (isImagePanel(panel)) return panel.image.path.slice(0, Math.max(0, panel.image.path.lastIndexOf('/'))) || '/'
   // A note has no directory: it is text on a canvas, not a file (three-state, never a made-up path).
   if (isNotePanel(panel)) return undefined
-  // M338. A relay terminal's directory is on the relay VM, not this Mac.
-  if (isRelayPanel(panel)) return undefined
   // M388. A shape is a mark on a canvas, not a place.
   if (isShapePanel(panel)) return undefined
   return panel.spec.cwd

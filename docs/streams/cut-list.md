@@ -13,7 +13,6 @@ records what was decided and what "hide" means in the code.
 |---|---|---|
 | World 3D view (**on** by default) | `labs.world` | the 2D \| World lens, ⌘⇧W, Sessions' Show in World, the `world.view` row |
 | Accounts, sharing, presence, People | `labs.accounts` | the account menu and avatars (until someone is signed in), the People segment, `account.sign-in`, `canvas.people`, `share.*` |
-| Relay terminals | `labs.relay` | `object.create.relay` |
 | Decks | `labs.decks` | `object.create.deck` |
 | Toolbox and Memory panels | `labs.toolbox` | `panel.toolbox`, `panel.memory` |
 
@@ -44,5 +43,14 @@ Alex chose to delete these for good on 2026-11-11. Each went in its own commit.
   the `sheet-edit` / `sheet-review` verbs, `labs.sheets`, `verify:sheet` and the `xlsx`
   dependency (served from cdn.sheetjs.com, a second host `npm ci` had to reach). A `.csv`
   opens as a plain file panel and a saved sheet view is dropped quietly.
-- **Relay terminals** are still listed above. They share the multiplayer server, the shared
-  canvas ops and presence, so their removal is its own, larger change.
+- **Relay terminals (M685).** The relay server (`server/relay/`, `npm run relay`), main's
+  relay client and wiring, the renderer panel, `shared/relay-protocol.ts`, the nine
+  `relay:*` channels and two events, the bridge member, `object.create.relay`, `labs.relay`,
+  `verify:relay` and the `relay` / `shared-canvas` scene's relay parts. In the shared canvas
+  the `relay-bind` op and the `relaySession` / `relayProgram` fields are gone, so a peer
+  still writing them is refused as an unrecognised change (`cs.relay.retired.1`). The collab
+  VM keeps one Caddyfile (`server/collab/deploy/`) that routes only `/collab`. A saved
+  `relay` panel falls to the layout parser's unrecognised-kind drop (`relay.retired.1`).
+  `registerIpcHandlers` keeps the relay's slot as an empty placeholder, because the list is
+  positional. `'relay-bind'` stays in the server's audit actions, since the database's
+  check constraint names it and old audit rows carry it.

@@ -7,7 +7,7 @@ import type { AgentPlanCaller } from '@shared/plan'
 import type { Annotation } from '@shared/annotations'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import { type LiveBinding, ShapeLayer } from '@renderer/flowchart/ShapeLayer'
-import { type Panel, RELAY_H, RELAY_W, isChatPanel, isTerminalPanel, type TerminalPanel, type ShapePanel } from '@renderer/panels/panels'
+import { type Panel, isChatPanel, isTerminalPanel, type TerminalPanel, type ShapePanel } from '@renderer/panels/panels'
 import type { PeerFlow } from '@renderer/flowchart/shared-shapes'
 import type { PersistedRun } from '@shared/layout-schema'
 import type { PersistedTeammate } from '@shared/teammates'
@@ -88,7 +88,6 @@ export interface RenderWorldLayersContext {
   collapsedPanelIds: Set<string>
   commitAnnotation: (id: string, text: string) => void
   connectors: Connectors
-  creationShareRef: RefObject<string | undefined>
   credentialRows: CredentialMeta[]
   deleteWorkflowTemplate: (templateId: string) => void
   demotingPanelIds: ReadonlySet<string>
@@ -143,7 +142,6 @@ export interface RenderWorldLayersContext {
   openFocusTask: (itemId: string, side?: FocusSide) => void
   openInTerminal: (id: string) => { kind: string; reason?: string; }
   openPreview: (url?: string) => Promise<{ kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }>
-  openRelayPanel: (relay: { program: string; sessionId?: string; shareId?: string; }, at?: Point) => void
   openSkillPanel: (scope: ToolScope, name: string, world: Point) => void
   openingContexts: Map<string, string>
   palette: PaletteController
@@ -159,7 +157,6 @@ export interface RenderWorldLayersContext {
   previewSubjectReason: string | undefined
   railRows: RailRow[]
   registry: Registry
-  relayNameFor: (userId: string) => string
   releaseFocusStable: () => void
   reloadWorkflowDraft: (templateId: string) => void
   removeLinkStable: (from: string, to: string) => void
@@ -187,7 +184,6 @@ export interface RenderWorldLayersContext {
   setNoteText: (panelId: string, text: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
   setNoteTint: (panelId: string, tint: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
   setPreviewWidth: (device: string, paneId?: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
-  setRelaySession: (panelId: string, sessionId: string | undefined) => void
   setRetainedOutcomes: Dispatch<SetStateAction<RetainedOutcome[]>>
   setSelectedAnnotation: Dispatch<SetStateAction<string | null>>
   setWatcherArmed: (id: string, armed: boolean) => void
@@ -220,7 +216,7 @@ export interface RenderWorldLayersContext {
 
 export function renderWorldLayers(ctx: RenderWorldLayersContext): JSX.Element {
   const {
-    activeWorkspaceId, addGithubToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, creationShareRef, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openRelayPanel, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, relayNameFor, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSelectedAnnotation, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
+    activeWorkspaceId, addGithubToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRetainedOutcomes, setSelectedAnnotation, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
   } = ctx
   return (
     <>
@@ -308,9 +304,7 @@ export function renderWorldLayers(ctx: RenderWorldLayersContext): JSX.Element {
       // M392. A teammate's drawable shape is the ShapeLayer's (peerFlow); the rest stay cards.
       <SharedPlaceholderLayer placeholders={peerFlow.cards} workspaceId={activeWorkspaceId}
         mayArrange={shared.mayArrange} mayRemove={shared.mayRemove} files={shared.view?.files ?? []}
-        onBeginDrag={onBeginPlaceholderDrag} onRemove={onRemovePlaceholder}
-        // M343. Beside the placeholder, never over it: both stay visible.
-        onAttachRelay={(p) => { if (p.relay !== undefined) openRelayPanel({ program: p.relay.program, sessionId: p.relay.session, ...(creationShareRef.current === undefined ? {} : { shareId: creationShareRef.current }) }, { x: p.x + p.w + 40 + RELAY_W / 2, y: p.y + RELAY_H / 2 }) }} />
+        onBeginDrag={onBeginPlaceholderDrag} onRemove={onRemovePlaceholder} />
     )}
     {/* M93. Notes in the margins, a sibling of the links so they pan and zoom with the world. */}
     <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation} draft={inkDraft} merged={merged}
@@ -351,7 +345,7 @@ export function renderWorldLayers(ctx: RenderWorldLayersContext): JSX.Element {
     ))}
     {/* M507. Each panel by kind, in PanelNode.tsx: a plain function called here, so the tree is unchanged. */}
     {displayPanels.map((panel) => renderPanelNode(panel, {
-        activeWorkspaceId, addGithubToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setWatcherArmed, shared, skillSources, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
+        activeWorkspaceId, addGithubToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRetainedOutcomes, setWatcherArmed, shared, skillSources, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
       }))}
     {/* M388. Every flowchart shape, in one memoised layer (ShapeLayer's
         header: why not PanelFrame). A fragment of boxes carrying

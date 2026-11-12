@@ -14,7 +14,6 @@ import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
-import { disposeRelayTerminal } from '@renderer/relay/RelayTerminal'
 import { clearBrowser } from '@renderer/browser/browser-store'
 import { clearUnread, clearLastLine } from '@renderer/session/last-line-store'
 import { clearLastActive } from '@renderer/session/last-active-store'
@@ -266,8 +265,7 @@ export function usePanelGestures(deps: UsePanelGesturesDeps) {
       // is still not a registry.dispose call site: the close ends the
       // process through agent:dispose and drops the durable file. A no-op
       // for the other sessionless kinds.
-      // M338. A relay panel DETACHES; the relay reaps a session nobody is attached to.
-      disposeChat(id, true); disposeWatcher(id); clearBrowser(id); disposeRelayTerminal(id)
+      disposeChat(id, true); disposeWatcher(id); clearBrowser(id)
       // M114. The lane's card stays, its state stays: `lane closed` is a note,
       // never a silent trip back to todo.
       markLaneClosed(id)

@@ -17,7 +17,6 @@ import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResu
 import type { ChecklistView } from '@shared/checklist'
 import { DECK_SEED, type DeckView } from '@shared/deck'
 import type { ToolGenerateResult } from '@shared/tool-spec'
-import { RELAY_PROGRAM, RELAY_SESSION_ID } from '@shared/relay-protocol'
 import { markDraftRead } from '@renderer/workflow/template-draft-store'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { onboardingReadiness, firstWorkPlan, firstWorkRepoAnswer, folderTeammatePlan, LANE_ENGINE, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
@@ -28,7 +27,6 @@ import type { BoardVerbs } from './useBoardVerbs'
 import type { PlaceFn } from './place-new'
 import type { Viewport, Point, WorldRect } from './viewport'
 import { viewCentre } from './safe-area'
-import { relayNameOf } from '../relay/relay-gate'
 
 /**
  * M502 (E4, the Canvas.tsx split). The creation verbs: the starter canvas,
@@ -58,14 +56,12 @@ export interface UseCreationVerbsDeps {
   onSpawn: (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true; atCursor?: true; }) => void
   openBrowserPanel: (url: string, preview?: PreviewBinding, at?: Point) => void
   openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true; }) => void
-  openRelayPanel: (relay: { program: string; sessionId?: string; shareId?: string; }, at?: Point) => void
   openWorkflowPanel: (templateId: string, at?: Point) => void
   palette: PaletteController
   paletteActionsRef: RefObject<PaletteActions | null>
   panelsRef: RefObject<Panel[]>
   placer: (opts?: { quiet?: true; lit?: true; exact?: boolean; }) => PlaceFn
   reloadTeammates: () => void
-  rosterNames: ReadonlyMap<string, string>
   setAnnotations: Dispatch<SetStateAction<Annotation[]>>
   setClusterArrival: Dispatch<SetStateAction<boolean>>
   setDormantIds: Dispatch<SetStateAction<ReadonlySet<string>>>
@@ -87,7 +83,7 @@ export interface UseCreationVerbsDeps {
 
 export function useCreationVerbs(deps: UseCreationVerbsDeps) {
   const {
-    addImageFromPath, annotationSeq, beginNewChat, boardVerbsRef, commitHistory, envReportRef, fitAll, fitSelection, frameReadable, hintsSeenRef, hostRef, mergedRef, nextGroupIdRef, nextIdRef, noteRootRef, onSpawn, openBrowserPanel, openFilePanel, openRelayPanel, openWorkflowPanel, palette, paletteActionsRef, panelsRef, placer, reloadTeammates, rosterNames, setAnnotations, setClusterArrival, setDormantIds, setFirstTask, setGroups, setInputMode, setPanels, setStarter, setTemplateRows, starterRef, teammatesRef, templateRowsRef, transitionRef, viewportRef, workItemsRef, workspaceRows, worldCentre
+    addImageFromPath, annotationSeq, beginNewChat, boardVerbsRef, commitHistory, envReportRef, fitAll, fitSelection, frameReadable, hintsSeenRef, hostRef, mergedRef, nextGroupIdRef, nextIdRef, noteRootRef, onSpawn, openBrowserPanel, openFilePanel, openWorkflowPanel, palette, paletteActionsRef, panelsRef, placer, reloadTeammates, setAnnotations, setClusterArrival, setDormantIds, setFirstTask, setGroups, setInputMode, setPanels, setStarter, setTemplateRows, starterRef, teammatesRef, templateRowsRef, transitionRef, viewportRef, workItemsRef, workspaceRows, worldCentre
   } = deps
   /**
    * M181. THE STARTER CANVAS, laid out around the conversation. Idempotent
@@ -248,10 +244,6 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
   }, [])
   const creationWorkspaceRef = useRef<string | undefined>(undefined)
   creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
-  // M338. The active workspace's share, for a relay session started in it.
-  const creationShareRef = useRef<string | undefined>(undefined)
-  creationShareRef.current = workspaceRows.find((w) => w.active)?.share?.id
-  const relayNameFor = useCallback((userId: string): string => relayNameOf(rosterNames, userId), [rosterNames])
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
     const entry = CREATABLE_OBJECTS.find((item) => item.id === kind)
     if (!entry) return { kind: 'refused', reason: `unknown object kind: ${kind}` }
@@ -313,30 +305,6 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
         openBrowserPanel(parsed.url)
         return { kind: 'ran' }
       },
-      relay: async (value) => {
-        // Asked FIRST: a relay that is not set up, or a person not signed in,
-        // is refused by name here rather than as a dead panel on the canvas.
-        const listed = await window.canvas.relay.list()
-        if (!current()) return refused()
-        if (listed.kind === 'refused') return { kind: 'refused', reason: listed.reason }
-        const typed = value?.trim() ?? ''
-        const attach = /^attach\s+(\S+)$/.exec(typed)
-        if (attach !== null) {
-          const sessionId = attach[1]!
-          if (!RELAY_SESSION_ID.test(sessionId)) return { kind: 'refused', reason: 'that is not a relay session id' }
-          const meta = listed.sessions.find((s) => s.sessionId === sessionId)
-          if (meta === undefined) return { kind: 'refused', reason: 'no session by that id that you may attach to — it may have ended' }
-          openRelayPanel({ program: meta.program, sessionId, ...(meta.shareId === null ? {} : { shareId: meta.shareId }) })
-          return { kind: 'ran' }
-        }
-        const program = typed === '' ? 'shell' : typed
-        if (!RELAY_PROGRAM.test(program)) return { kind: 'refused', reason: 'name a program on the relay (like shell), or attach <session id>' }
-        // A shared workspace's session is bound to its share, so its members
-        // may attach by their role; an unshared one is the owner's alone.
-        const shareId = creationShareRef.current
-        openRelayPanel({ program, ...(shareId === undefined ? {} : { shareId }) })
-        return { kind: 'ran' }
-      },
       tool: async (description) => {
         const folder = noteRootRef.current
         if (!folder) return { kind: 'refused', reason: 'select a panel with a workspace folder first — a tool is made inside one' }
@@ -355,7 +323,7 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
     }
     try { const result = await entry.create(host, value); if (result.kind === 'refused') paletteActionsRef.current?.say(result.reason); return result }
     catch (error) { const reason = `Could not create ${entry.label.toLowerCase()}: ${String(error)}`; paletteActionsRef.current?.say(reason); return { kind: 'refused', reason } }
-  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel, openRelayPanel, arriveTool, palette])
+  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel, arriveTool, palette])
   /**
    * M205 (D09). THE FIRST START — the launcher's primary. A sentence and a
    * folder, run through D05's own executor (`startWork` → `dispatchWorkItem`),
@@ -509,5 +477,5 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
   }, [beginNewChat])
 
 
-  return { applyStarter, askWithoutFolder, chatInFolder, createObject, creationShareRef, markPreviewRead, markTemplateRead, relayNameFor, setChecklistView, setDeckView, setImportReviewed, startFirstWork }
+  return { applyStarter, askWithoutFolder, chatInFolder, createObject, markPreviewRead, markTemplateRead, setChecklistView, setDeckView, setImportReviewed, startFirstWork }
 }

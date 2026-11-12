@@ -141,7 +141,6 @@ import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 const LANDING_LIT_MS = 900
 import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { getWatch } from '@renderer/watcher/watcher-store'
-import { disposeRelayTerminal } from '@renderer/relay/RelayTerminal'
 import { getDraft} from '@renderer/workflow/template-draft-store'
 import { displayPath } from '@shared/display-path'
 import { laneOfPath } from '@shared/work-scope'
@@ -1117,7 +1116,7 @@ export function Canvas({
         // panel can be redone, and the redone panel carries the same session
         // id — its transcript must still be there to render. Only an
         // explicit close, a reset and a workspace delete drop the file.
-        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id); disposeRelayTerminal(panel.rect.id) }
+        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id) }
         continue
       }
       if (!ids.has(panel.rect.id)) {
@@ -3273,8 +3272,8 @@ export function Canvas({
     beginNewChatRef, commitHistory, hostRef, instantiateTemplateRef, mergedRef, nextIdRef, paletteActionsRef, panelsRef, placer, presetRowsRef, reloadTemplates, runsRef, selectOnly, setInputMode, setPanels, setTemplateRows, stopPool, templateRowsRef, viewportRef
   })
 
-  // M503. The object verbs (notes, memory, browser, relay, packs, node runs), lifted into useObjectVerbs.ts at exactly this position.
-  const { addNote, addPack, beginNewNote, exportCanvas, exportPack, importCanvas, importPack, importSamplePack, markPresetRead, openBrowserPanel, openMemoryPanel, openRelayPanel, packPreview, prepareFeedback, runNodeRef, setNoteText, setNoteTint, setPackPreview, setRelaySession, testNode } = useObjectVerbs({
+  // M503. The object verbs (notes, memory, browser, packs, node runs), lifted into useObjectVerbs.ts at exactly this position.
+  const { addNote, addPack, beginNewNote, exportCanvas, exportPack, importCanvas, importPack, importSamplePack, markPresetRead, openBrowserPanel, openMemoryPanel, packPreview, prepareFeedback, runNodeRef, setNoteText, setNoteTint, setPackPreview, testNode } = useObjectVerbs({
     commitHistory, focusedIdRef, hostRef, nextIdRef, noteRootRef, openFilePanel, palette, paletteActionsRef, panelsRef, placer, reloadPresets, reloadTemplates, reloadWorkspacesRef, selectOnly, setDormantIds, setInputMode, setPanels, switchWorkspace, templateRowsRef, viewportRef, worldCentre
   })
 
@@ -3299,9 +3298,8 @@ export function Canvas({
   const shapeStepRef = useRef<{ nextStep: (id: string) => void; previousStep: (id: string) => void } | null>(null)
   // M395. The chrome and the world in view, read when a new object needs a free spot (safe-area.ts).
   const flowchart = useFlowchartVerbs({ setPanels, commitHistory, panelsRef, nextIdRef, mergedRef, selectedIdsRef, selectOnly, addToSelection, onBeginDrag, worldCentre, releaseKeyboard, visibleWorld, stepRef: shapeStepRef, placer })
-  // M344. The relay strip names people from this workspace's presence roster
-  // ("sam is in control"), not by the first eight characters of a uuid.
-  // M392. So does a teammate's shape's owner mark (below).
+  // M392. A teammate's shape's owner mark names people from this workspace's
+  // presence roster, not by the first eight characters of a uuid.
   const rosterNames = useRosterNames(activeWorkspaceId)
   // The shapes, in their own array for the ShapeLayer: a new array only when
   // `displayPanels` is (a panel changed) — never on a camera frame.
@@ -3503,8 +3501,8 @@ export function Canvas({
   }, [])
 
   // M502. The creation verbs (the starter, createObject, the first-run work doors), lifted into useCreationVerbs.ts at exactly this position.
-  const { applyStarter, askWithoutFolder, chatInFolder, createObject, creationShareRef, markPreviewRead, markTemplateRead, relayNameFor, setChecklistView, setDeckView, setImportReviewed, startFirstWork } = useCreationVerbs({
-    addImageFromPath, annotationSeq, beginNewChat, boardVerbsRef, commitHistory, envReportRef, fitAll, fitSelection, frameReadable, hintsSeenRef, hostRef, mergedRef, nextGroupIdRef, nextIdRef, noteRootRef, onSpawn, openBrowserPanel, openFilePanel, openRelayPanel, openWorkflowPanel, palette, paletteActionsRef, panelsRef, placer, reloadTeammates, rosterNames, setAnnotations, setClusterArrival, setDormantIds, setFirstTask, setGroups, setInputMode, setPanels, setStarter, setTemplateRows, starterRef, teammatesRef, templateRowsRef, transitionRef, viewportRef, workItemsRef, workspaceRows, worldCentre
+  const { applyStarter, askWithoutFolder, chatInFolder, createObject, markPreviewRead, markTemplateRead, setChecklistView, setDeckView, setImportReviewed, startFirstWork } = useCreationVerbs({
+    addImageFromPath, annotationSeq, beginNewChat, boardVerbsRef, commitHistory, envReportRef, fitAll, fitSelection, frameReadable, hintsSeenRef, hostRef, mergedRef, nextGroupIdRef, nextIdRef, noteRootRef, onSpawn, openBrowserPanel, openFilePanel, openWorkflowPanel, palette, paletteActionsRef, panelsRef, placer, reloadTeammates, setAnnotations, setClusterArrival, setDormantIds, setFirstTask, setGroups, setInputMode, setPanels, setStarter, setTemplateRows, starterRef, teammatesRef, templateRowsRef, transitionRef, viewportRef, workItemsRef, workspaceRows, worldCentre
   })
   // M246. The plan door's run: `runWorkflow`'s second parameter is the SOURCE
   // (click | fire), so passing it straight through would hand the caller in as
@@ -3963,7 +3961,7 @@ export function Canvas({
         >
           {/* M507. What the world layer holds, in WorldLayers.tsx: a plain function called here, so the tree is unchanged. */}
           {renderWorldLayers({
-            activeWorkspaceId, addGithubToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, creationShareRef, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openRelayPanel, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, relayNameFor, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSelectedAnnotation, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
+            activeWorkspaceId, addGithubToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRetainedOutcomes, setSelectedAnnotation, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
           })}
         </div>
         </PanelMarksContext.Provider>
