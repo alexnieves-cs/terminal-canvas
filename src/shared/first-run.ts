@@ -35,8 +35,10 @@ const basename = (dir: string): string => {
 export function lastUsedWords(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000))
   if (s < 60) return 'just now'
-  if (s < 3600) return `${Math.round(s / 60)} min ago`
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`
+  // Capped below the next unit: rounding alone said "60 min ago" at 59.5
+  // minutes and "24 h ago" just under a day.
+  if (s < 3600) return `${Math.min(59, Math.round(s / 60))} min ago`
+  if (s < 86400) return `${Math.min(23, Math.round(s / 3600))} h ago`
   const days = Math.round(s / 86400)
   if (days === 1) return 'yesterday'
   if (days < 7) return `${days} days ago`

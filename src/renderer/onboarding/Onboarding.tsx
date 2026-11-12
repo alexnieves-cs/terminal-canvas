@@ -55,7 +55,11 @@ export function Onboarding({
   // M600. The card owns the window on first run: Tab stays inside it.
   const rootRef = useRef<HTMLDivElement>(null)
   useModalFocus(rootRef)
-  const [name, setName] = useState(workspaceName)
+  // Untouched, the name follows `workspaceName` — the card mounts before the
+  // workspace list has loaded, so a value captured at mount was always '' and
+  // the field sat empty (Continue disabled) beside a top bar naming the workspace.
+  const [typedName, setName] = useState<string | null>(null)
+  const name = typedName ?? workspaceName
   // Untouched, the toggles follow `enabled` — the report can arrive after the
   // card mounts, and a found agent should not sit Off because it was late.
   const [touched, setTouched] = useState<string[] | null>(null)

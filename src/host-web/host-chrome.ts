@@ -57,10 +57,18 @@ function modal<T>(build: (box: HTMLElement, done: (value: T) => void) => void, o
       resolve(value)
     }
     const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); done(onEscape()); return }
+      // A key aimed INSIDE the dialog must still reach the dialog's own
+      // listeners — stopping it here, in the capture phase, never let the
+      // path field see its Enter, so Enter in Open/Save did nothing. Those
+      // keys are stopped on their way back out instead (below).
+      if (event.target instanceof Node && box.contains(event.target)) return
       // The dialog owns the keyboard while it is up: nothing reaches a terminal behind it.
       event.stopPropagation()
-      if (event.key === 'Escape') { event.preventDefault(); done(onEscape()) }
     }
+    // The bubble half: whatever the dialog's own controls did with a key, it
+    // goes no further than the dialog.
+    box.addEventListener('keydown', (event) => { event.stopPropagation() })
     document.addEventListener('keydown', onKey, true)
     build(box, done)
     document.body.append(scrim)

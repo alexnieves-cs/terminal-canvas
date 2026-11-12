@@ -25,7 +25,6 @@ import { costOf } from '@shared/pricing'
 import type { UsageRow } from '@shared/run-ledger'
 
 export const USAGE_SERIES_DAYS = 7
-const DAY_MS = 24 * 60 * 60 * 1000
 
 /** One day. `costUsd` is undefined when anything in the day is unpriced. */
 export interface UsageBucket {
@@ -63,12 +62,25 @@ function midnight (ms: number): number {
  * side by side and read as consecutive. This is the same reason the machine
  * series keeps its gaps rather than closing them.
  */
+/**
+ * Local midnight `back` CALENDAR days before `ms`'s day. Never `today - n *
+ * 86_400_000`: a window that spans a daylight-saving change has a 23- or 25-hour
+ * day in it, so the subtraction lands an hour off midnight, no row's
+ * `midnight(endedAt)` ever equals that key, and every session before the
+ * change silently fell out of the chart.
+ */
+function daysBefore (ms: number, back: number): number {
+  const d = new Date(midnight(ms))
+  d.setDate(d.getDate() - back)
+  return d.getTime()
+}
+
 export function buildUsageSeries (rows: readonly UsageRow[], now: number, days: number = USAGE_SERIES_DAYS): UsageSeries {
   const today = midnight(now)
-  const first = today - (days - 1) * DAY_MS
+  const first = daysBefore(now, days - 1)
   const byDay = new Map<number, UsageBucket>()
   for (let i = 0; i < days; i += 1) {
-    const dayStart = today - (days - 1 - i) * DAY_MS
+    const dayStart = daysBefore(now, days - 1 - i)
     byDay.set(dayStart, {
       dayStart,
       label: new Date(dayStart).toLocaleDateString(undefined, { weekday: 'short' }),

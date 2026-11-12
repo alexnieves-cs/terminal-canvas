@@ -343,6 +343,12 @@ export function Palette(props: PaletteProps): JSX.Element {
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail, props.canUndo, props.canRedo, controller.capturedDraft, props.canvasCovered,
      props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, teamAsks, teamFlow, library, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
+     // Every value prop the rows read: a missing one left its row stale while the
+     // palette stayed open. `workflowTemplateOf` stays out on purpose — the host
+     // passes a fresh arrow each render that reads a ref, so keying on it would
+     // rebuild every row on every render for nothing.
+     props.groups, props.broadcastReady, props.broadcastActive, props.noteRoot, props.pinnedCount, props.starterReason,
+     props.teammateCount,
      query, scope, props.searchResults, props.workSearch, props.scrollbackEnabled, props.capability]
   )
   // M496. The cut list's hidden surfaces leave the list HERE, after the rows are

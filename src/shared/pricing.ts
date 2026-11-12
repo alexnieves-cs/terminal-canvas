@@ -38,6 +38,18 @@ export interface ModelRates {
 }
 
 export const MODEL_RATES: Record<string, ModelRates> = {
+  // Added 2026-11-12 from Anthropic's published model table (input, output,
+  // cache read; writes by the same 1.25x rule as the rest). Without them every
+  // turn on the current models — the ones Claude Code runs by default — was
+  // "unpriced", and the run total around it blanked. Fable 5.2 and Opus 5.5
+  // read cache at a flat $0.20, not 10% of input.
+  'claude-fable-5-2': { input: 8, output: 40, cacheWrite: 10, cacheRead: 0.2 },
+  'claude-opus-5-5': { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+  'claude-sonnet-5-5': { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1 },
+  'claude-opus-4-8': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  'claude-opus-4-7': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  'claude-opus-4-6': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  'claude-sonnet-4-6': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
   // Fable 5.1's cache read is 2.5% of input, not 10% — the one row where
   // scaling from input would have been wrong even before the write rate.
   'claude-fable-5-1': { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 0.25 },
