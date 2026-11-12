@@ -4948,14 +4948,14 @@ would deliver a `text` arm the session treats as unreadable, and every external 
 as a failure instead of a named conflict. `ipc.ts` honours only the exact string, so a malformed
 value is the text path, never a surprise.
 
-**`sheetFocused()` is in `shouldIgnoreKeys` (`Canvas.tsx`, `sheet-controllers.ts`, M245).** A
+*(Removed in M684 with Sheets; kept as history.)* **`sheetFocused()` is in `shouldIgnoreKeys` (`Canvas.tsx`, `sheet-controllers.ts`, M245).** A
 sheet mousedown moves `focusedId` to the sheet, but keyboard or programmatic focus does not — so
 DOM focus can sit in the grid while `focusedId` names a live terminal. Unguarded, the menu's
 `edit:paste` goes into the agent and `edit:undo` runs the CANVAS undo as well as the sheet's (whose
 top entry can be a spawn — the panel disappears). `verify:panels` `sheet-clip.1`/`.2` arrange that
 state exactly, with a blurred positive control so the negative is not vacuous.
 
-**An xlsx's losses are read from its zip ENTRY LIST, not its parsed workbook (`sheet-xlsx.ts`'s
+*(Removed in M684 with Sheets; kept as history.)* **An xlsx's losses are read from its zip ENTRY LIST, not its parsed workbook (`sheet-xlsx.ts`'s
 `lossesOf`, M245).** SheetJS Community never parses charts, images, pivot tables or table
 definitions, so a list computed from what it parsed is always empty — a save that drops a chart
 with no warning. `bookFiles: true` exposes `wb.keys`, the zip's own names, and each part is counted

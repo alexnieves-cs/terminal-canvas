@@ -21,12 +21,10 @@ import { DeckNode } from '@renderer/file/DeckNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { GithubNode } from '@renderer/github/GithubNode'
 import { ImageNode } from '@renderer/image/ImageNode'
-import { JiraNode } from '@renderer/jira/JiraNode'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { NoteNode } from '@renderer/note/NoteNode'
 import { RelayNode } from '@renderer/relay/RelayNode'
 import { ReviewNode, type ReviewTaskContext } from '@renderer/review/ReviewNode'
-import { SheetNode } from '@renderer/file/SheetNode'
 import { SkillNode } from '@renderer/skills/SkillNode'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
@@ -34,7 +32,7 @@ import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { WorkNode } from '@renderer/work/WorkNode'
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
 import { backendOf } from '@shared/agent-backends'
-import { isBrowserPanel, isChatPanel, isFilePanel, isGithubPanel, isImagePanel, isJiraPanel, isMemoryPanel, isNotePanel, isRelayPanel, isReviewPanel, isShapePanel, isSkillPanel, isTerminalPanel, isToolboxPanel, isWatcherPanel, isWorkPanel, isWorkflowPanel, type Panel } from '@renderer/panels/panels'
+import { isBrowserPanel, isChatPanel, isFilePanel, isGithubPanel, isImagePanel, isMemoryPanel, isNotePanel, isRelayPanel, isReviewPanel, isShapePanel, isSkillPanel, isTerminalPanel, isToolboxPanel, isWatcherPanel, isWorkPanel, isWorkflowPanel, type Panel } from '@renderer/panels/panels'
 import { templateRefusal } from '@renderer/palette/template-model'
 import type { ChecklistView } from '@shared/checklist'
 import type { DeckView } from '@shared/deck'
@@ -43,7 +41,6 @@ import type { RailRow } from '@renderer/shell/rail-rows'
 import type { Registry } from '@renderer/session/session-registry'
 import type { ReviewHandoff } from '@shared/review-readiness'
 import type { SharedCanvas } from '@renderer/shared-canvas/useSharedCanvas'
-import type { SheetView } from '@shared/sheet'
 import type { VaultIndex } from '@shared/vault'
 import type { CardDetail } from './card-detail'
 import type { DragState } from './panel-interaction'
@@ -62,7 +59,6 @@ import type { LinkDraw } from './useLinkDraw'
 export interface PanelNodeContext {
   activeWorkspaceId: string | undefined
   addGithubToBoard: (item: WorkItem) => void
-  addJiraToBoard: (item: WorkItem) => void
   beginNewChatRef: RefObject<(opts?: { cwd?: string | undefined; title?: string | undefined; agentOptions?: AgentOptions | undefined; appendSystemPrompt?: string | undefined; message?: string | undefined; backend?: AgentBackend | undefined; teammateId?: string | undefined; sandbox?: true | undefined; routine?: true | undefined; } | undefined) => Promise<SpawnResult>>
   beginWorkflowTrigger: (templateId: string) => void
   bindPreview: (paneId?: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
@@ -140,12 +136,10 @@ export interface PanelNodeContext {
   setPreviewWidth: (device: string, paneId?: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
   setRelaySession: (panelId: string, sessionId: string | undefined) => void
   setRetainedOutcomes: Dispatch<SetStateAction<RetainedOutcome[]>>
-  setSheetView: (id: string, view: SheetView) => void
   setWatcherArmed: (id: string, armed: boolean) => void
   shared: SharedCanvas
   skillSources: { panelId: string; cwd: string; label: string; }[]
   spawnGithubItem: (item: WorkItem) => void
-  spawnJiraTicket: (item: WorkItem) => void
   startDevServer: (script?: string) => Promise<{ kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }>
   stopWorkflowRun: (templateId: string, runId?: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
   taskContextFor: (itemId: string | undefined) => ReviewTaskContext | undefined
@@ -164,7 +158,7 @@ export interface PanelNodeContext {
 
 export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Element | null {
   const {
-    activeWorkspaceId, addGithubToBoard, addJiraToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSheetView, setWatcherArmed, shared, skillSources, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
+    activeWorkspaceId, addGithubToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setWatcherArmed, shared, skillSources, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
   } = ctx
   // The partition, at the last hop. onSelect is selectAndRaise and
   // NOT onSelectPanel: the latter clears the dormant id and calls
@@ -214,10 +208,6 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
       selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
       onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
       onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setDeckView} />
-    if (panel.source.sheet !== undefined) return <SheetNode key={panel.rect.id} panel={panel}
-      selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
-      onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
-      onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setSheetView} />
     if (panel.source.checklist !== undefined) return <ChecklistNode key={panel.rect.id} panel={panel}
       selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
       onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
@@ -520,7 +510,6 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
       deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
       runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />
   }
-  if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
   const session = registry.get(panel.rect.id)
   if (!session) return null
   return (

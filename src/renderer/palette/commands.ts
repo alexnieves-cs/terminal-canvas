@@ -26,7 +26,7 @@ import type { AgentBackend } from '@shared/agent-session'
 // stays out of this file; the palette only needs the id/label/help triple
 // SERVICES already carries, and the label lookup for a REFUSAL message lives
 // in Canvas.tsx, where the input-mode re-prompt actually happens.
-import { SERVICES, notConnectedReason } from '@shared/credential-schema'
+import { SERVICES } from '@shared/credential-schema'
 import type { PaletteContext } from './commands/context'
 // `export *` below re-exports these for consumers but does NOT bind them in
 // this module’s scope — buildCommands names them directly, so they are imported too.
@@ -82,10 +82,6 @@ export interface PaletteActions {
   createObject(kind: string, value?: string): Promise<CreationResult>
   editChecklist(panel: string, operation: string, value?: string): Promise<CreationResult>
   handChecklist(panel: string, line: number, agent: string): Promise<CreationResult>
-  /** M245. Set one cell of an open sheet, through its guarded write. M246: with an agent caller it proposes. */
-  editSheet(panel: string, cell: string, value: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
-  /** M246. Keep or discard a sheet's draft cells; keeping is refused to an agent caller. */
-  reviewSheet(panel: string, operation: string, target?: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
   /** M247. Show, hide or toggle the agent → object links (the `canvas.agentLinks` setting). */
   setAgentLinks(mode: string): Promise<CreationResult>
   /** M248. `origin` is 'door' when the step came through runAgentPlan (the agent door or a workflow node): edits then stage. */
@@ -546,7 +542,6 @@ export interface PaletteActions {
   openReplay(id: string): void
   /** M74. A chat's session, continued in a terminal with `claude --resume`. */
   openInTerminal(id: string): void
-  openJira(): void
   /**
    * M96. The verb line: opens the palette's text mode on `Run a verb…`,
    * parses and builds the plan against the live canvas, confirms a
@@ -656,8 +651,6 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({ id: 'deck.export-pdf', title: 'Deck: export to PDF…', subtitle: 'one page per slide, through a save dialog', group: 'canvas', searchText: 'deck slides export pdf print', hiddenAtRest: true, run: () => actions.beginRunVerb('deck-export-pdf') })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'send one line to an idle conversation', group: 'canvas', searchText: 'checklist hand task agent teammate send', hiddenAtRest: true, run: () => actions.beginRunVerb('checklist-hand') })
   out.push({ id: 'canvas.agent-links', title: 'Agent links: show or hide', subtitle: 'the lines from each agent to what it read, wrote or drafted', group: 'canvas', searchText: 'agent links edges lines files touched read wrote draft show hide toggle', run: () => { void actions.setAgentLinks('toggle') } })
-  out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'an agent\'s draft cells, a range or all', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', hiddenAtRest: true, run: () => actions.beginRunVerb('sheet-review') })
-  out.push({ id: 'sheet.edit', title: 'Sheet: set a cell…', subtitle: 'a value or a formula', group: 'canvas', searchText: 'sheet spreadsheet csv xlsx cell edit formula set', hiddenAtRest: true, run: () => actions.beginRunVerb('sheet-edit') })
 
   // --- Panels (commands/panel-rows.ts) ---
   out.push(...panelRows(ctx))
@@ -1024,7 +1017,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M89. Every service on one page: the door is the navigator's pane, and
   // this row enters the Credentials scope the page's verbs open, so there
   // is one path from either side.
-  out.push({ id: 'manage.integrations', title: 'Manage connections…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'connections integrations services connected github jira credentials tokens', run: () => {} })
+  out.push({ id: 'manage.integrations', title: 'Manage connections…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'connections integrations services connected github credentials tokens', run: () => {} })
   // M88. PRESENT at rest and disabled with the Connect reason when no
   // github credential exists — the Jira door below only exists once a
   // credential does, which is the "row that disappears" rule broken by a
@@ -1033,13 +1026,6 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     withReason(
       { id: 'github.open', title: 'Open GitHub work', subtitle: 'issues assigned to you and pull requests waiting on you', searchText: 'github issues pull requests review assigned work', group: 'manage', run: () => actions.openGithub() },
       ctx.credentials.some((credential) => credential.service === 'github') ? undefined : REASON_NO_GITHUB
-    )
-  )
-  // M89. Present at rest and disabled by the one sentence, like GitHub's door.
-  out.push(
-    withReason(
-      { id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openJira() },
-      ctx.credentials.some((credential) => credential.service === 'jira') ? undefined : notConnectedReason('jira')
     )
   )
 

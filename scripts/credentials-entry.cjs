@@ -14,5 +14,4 @@ module.exports = {
   /* M87. The broker: the store's LAST reader, over an injected fetcher and audit. */
   ...require('../src/main/broker'),
   ...require('../src/main/broker-audit'),
-  ...require('../src/main/jira-client'),
 }

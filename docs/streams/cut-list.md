@@ -15,8 +15,6 @@ records what was decided and what "hide" means in the code.
 | Accounts, sharing, presence, People | `labs.accounts` | the account menu and avatars (until someone is signed in), the People segment, `account.sign-in`, `canvas.people`, `share.*` |
 | Relay terminals | `labs.relay` | `object.create.relay` |
 | Decks | `labs.decks` | `object.create.deck` |
-| Sheets | `labs.sheets` | `object.create.sheet` |
-| Jira panel | `labs.jira` | `jira.open` |
 | Toolbox and Memory panels | `labs.toolbox` | `panel.toolbox`, `panel.memory` |
 
 The list itself is `src/shared/labs.ts`; `verify:palette labs.*` pins it against the
@@ -25,8 +23,7 @@ schema and the palette. The switches live on Settings → General and as palette
 ## What "hide" means
 
 - **Hide what mints, never what acts on what exists.** A deck already on a canvas still
-  renders, edits (`deck.edit`) and exports; a Jira panel already there still offers
-  Connect Jira…, so the credential rows stay. Hiding them would leave a saved object
+  renders, edits (`deck.edit`) and exports. Hiding them would leave a saved object
   with a dead end, which `labs.3` refuses. This is narrower than the doc's first draft,
   which also hid the deck/sheet verb rows and the Jira credential row.
 - **A room opened anyway keeps its way out.** `#/world` still opens World (it is a typed
@@ -37,4 +34,15 @@ schema and the palette. The switches live on Settings → General and as palette
 
 ## Removed
 
-Nothing. A Remove happens only on a row the owner sets to Remove, in its own PR.
+Alex chose to delete these for good on 2026-11-11. Each went in its own commit.
+
+- **Jira panel (M683).** The panel, `main/jira-client.ts`, the `jira:*` channels, the
+  bridge member, the credential service, `jira.open`, `labs.jira` and `verify:jira`. A saved
+  `jira` panel falls to the layout parser's unrecognised-kind drop. `WorkItemSource 'jira'`
+  stays so saved board items still read.
+- **Sheets (M684).** The sheet view, its session, formula engine and xlsx reader, New Sheet,
+  the `sheet-edit` / `sheet-review` verbs, `labs.sheets`, `verify:sheet` and the `xlsx`
+  dependency (served from cdn.sheetjs.com, a second host `npm ci` had to reach). A `.csv`
+  opens as a plain file panel and a saved sheet view is dropped quietly.
+- **Relay terminals** are still listed above. They share the multiplayer server, the shared
+  canvas ops and presence, so their removal is its own, larger change.

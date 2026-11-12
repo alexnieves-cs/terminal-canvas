@@ -1558,7 +1558,8 @@ ok('74 a panel with no kind is not a review panel',
   const f = V.makeFilePanel('f3', { x: 0, y: 0 }, 1, { path: '/tmp/c' })
   const r = V.makeReviewPanel('r1', { x: 0, y: 0 }, 1,
     { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'x' })
-  const j = V.makeJiraPanel('j1', { x: 0, y: 0 }, 1)
+  // M683. Jira's panel was this check's sessionless work kind; GitHub's is now.
+  const j = V.makeGithubPanel('j1', { x: 0, y: 0 }, 1)
   const tb = V.makeToolboxPanel('t2', { x: 0, y: 0 }, 1, { cwd: '/r', label: 'r' })
   const legacy = { rect: { id: 'n9', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 'n9', cwd: '~', args: [] } }
   // M73. The SIXTH kind: a chat panel is plain DOM over a main-process
@@ -2604,7 +2605,6 @@ console.log('\n' + '='.repeat(60))
       { rect: { id: 'n9', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 'n9', cwd: '~', args: [] } },
       V.makeFilePanel('f1', c, 1, { path: '/tmp/c' }),
       V.makeReviewPanel('r1', c, 1, { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'x' }),
-      V.makeJiraPanel('j1', c, 1),
       V.makeGithubPanel('g1', c, 1),
       V.makeToolboxPanel('t1', c, 1, { cwd: '/r', label: 'r' }),
       V.makeChatPanel('c1', c, 1, { cwd: '/r', sessionId: 'u' }),
@@ -2615,12 +2615,12 @@ console.log('\n' + '='.repeat(60))
       V.makeSkillPanel('s1', c, 1, 'user', 'name'),
       V.makeWorkflowPanel('wf1', c, 1, 'tpl', 'wf')
     ]
-    const partitions = ['isTerminalPanel', 'isFilePanel', 'isReviewPanel', 'isJiraPanel', 'isGithubPanel', 'isToolboxPanel', 'isChatPanel', 'isMemoryPanel', 'isWatcherPanel', 'isBrowserPanel', 'isWorkPanel', 'isSkillPanel', 'isWorkflowPanel']
+    const partitions = ['isTerminalPanel', 'isFilePanel', 'isReviewPanel', 'isGithubPanel', 'isToolboxPanel', 'isChatPanel', 'isMemoryPanel', 'isWatcherPanel', 'isBrowserPanel', 'isWorkPanel', 'isSkillPanel', 'isWorkflowPanel']
     const admitted = partitions.filter((name) => typeof V[name] !== 'function' || V[name](img) === true)
     const leaked = others.filter((p) => V.isImagePanel(p) !== false).map((p) => p.rect.id)
     ok('image.kind.1 makeImagePanel centres on the point and carries path and title; isImagePanel is true for it alone and every other kind\'s partition is false for it',
       centred && img.kind === 'image' && img.z === 7 && img.image.path === '/tmp/welcome.png' && img.title === 'welcome.png' &&
-        V.isImagePanel(img) === true && admitted.length === 0 && leaked.length === 0 && others.length === 14,
+        V.isImagePanel(img) === true && admitted.length === 0 && leaked.length === 0 && others.length === 13,
       JSON.stringify({ rect: img.rect, admitted, leaked }))
   }
 }
@@ -2772,7 +2772,7 @@ console.log('\n' + '='.repeat(60))
     const sticky = V.makeNotePanel('nt1', { x: 100, y: 50 }, 3, 'sticky', 'first line\nsecond', 'blue')
     const text = V.makeNotePanel('nt2', { x: 0, y: 0 }, 1, 'text', '', 'blue')
     const frame = V.makeNotePanel('nt3', { x: 0, y: 0 }, 1, 'frame', '')
-    const partitions = ['isTerminalPanel', 'isReviewPanel', 'isFilePanel', 'isJiraPanel', 'isGithubPanel', 'isToolboxPanel', 'isMemoryPanel', 'isChatPanel', 'isWatcherPanel', 'isBrowserPanel', 'isWorkPanel', 'isSkillPanel', 'isWorkflowPanel', 'isImagePanel']
+    const partitions = ['isTerminalPanel', 'isReviewPanel', 'isFilePanel', 'isGithubPanel', 'isToolboxPanel', 'isMemoryPanel', 'isChatPanel', 'isWatcherPanel', 'isBrowserPanel', 'isWorkPanel', 'isSkillPanel', 'isWorkflowPanel', 'isImagePanel']
     const leaked = partitions.filter((name) => typeof V[name] === 'function' && V[name](sticky) === true)
     ok(NAME,
       sticky.kind === 'note' && sticky.note.form === 'sticky' && sticky.note.text === 'first line\nsecond' && sticky.note.tint === 'blue' &&

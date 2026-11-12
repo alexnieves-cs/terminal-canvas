@@ -7,7 +7,6 @@ import type { InputMode } from '@renderer/palette/Palette'
 import type { PaletteActions } from '@renderer/palette/commands'
 import { type Panel, makeRelayPanel, isRelayPanel, makeNotePanel, isNotePanel, isImagePanel, makeBrowserPanel, makeMemoryPanel, cascadeCentre, nextZ } from '@renderer/panels/panels'
 import { type PersistedTemplate, allTemplates } from '@shared/templates'
-import type { SheetView } from '@shared/sheet'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { getDraft, selectedOf } from '@renderer/workflow/template-draft-store'
 import { TEMPLATE_GONE } from '@renderer/workflow/WorkflowNode'
@@ -37,7 +36,7 @@ export interface UseObjectVerbsDeps {
   hostRef: RefObject<HTMLDivElement | null>
   nextIdRef: RefObject<number>
   noteRootRef: RefObject<string | null>
-  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true; }) => void
+  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true; }) => void
   palette: PaletteController
   paletteActionsRef: RefObject<PaletteActions | null>
   panelsRef: RefObject<Panel[]>

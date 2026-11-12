@@ -84,7 +84,6 @@ import { pillFocused, orchestratorTarget } from './command-pill'
 import { CommandPill, orchestratorCandidates } from './CommandPill'
 import { noteEditorFocused } from '@renderer/file/rich-note-focus'
 import { deckFocused } from '@renderer/file/deck-controllers'
-import { sheetFocused } from '@renderer/file/sheet-controllers'
 import { focusedDraft} from './draft-focus'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
@@ -113,7 +112,7 @@ import type {
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { findConnector, isShapePanel, makeImagePanel, isImagePanel, isWorkflowPanel, makeSkillPanel, makeWorkPanel, isWorkPanel, isBrowserPanel, makeGithubPanel, isWatcherPanel,
-  cascadeCentre, firstRunPanels, isFilePanel, isReviewPanel, isTerminalPanel, makeJiraPanel,
+  cascadeCentre, firstRunPanels, isFilePanel, isReviewPanel, isTerminalPanel,
   makeChatPanel, isChatPanel,
   makePanel, nextZ, terminalRimAt, rimCoveredIds, pickRects, setPanelRect,
   addLink, setLinkAutomation, linksOf, workCardItemId,
@@ -810,7 +809,6 @@ export function Canvas({
     setOpeningContexts((current) => new Map(current).set(id, `${source} ${item.id}: ${item.title}\n\n${item.description}`))
     onSpawn(viewCentre(hostRef.current, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
   }, [onSpawn])
-  const spawnJiraTicket = useCallback((item: WorkItem) => spawnWorkItem(item, 'Jira ticket'), [spawnWorkItem])
   // M113. `Add to board` on a work panel's row. The key is the provider's own
   // id (`owner/repo#N`, `PROJ-12`) — the identity the dedupe reads, so a
   // second press updates rather than duplicates. Declared after the palette
@@ -820,7 +818,6 @@ export function Canvas({
   const addGithubToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'github'), [])
   // M113. The keys already on the board, so a row reads `On board` (still pressable — a second press updates).
   const boardKeys = useMemo(() => new Set(workItems.flatMap((i) => (i.key === undefined ? [] : [i.key]))), [workItems])
-  const addJiraToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'jira'), [])
   const spawnGithubItem = useCallback((item: WorkItem) => spawnWorkItem(item, item.state === 'review requested' || item.state === 'pull request' ? 'GitHub pull request' : 'GitHub issue'), [spawnWorkItem])
   const openGithubPanel = useCallback(() => {
     const id = `g${nextIdRef.current++}`
@@ -838,11 +835,6 @@ export function Canvas({
     const place = placer()
     setPanels((current) => { const centre = viewCentre(hostRef.current, viewportRef.current); const next = [...current, place(current, makeWorkPanel(id, centre, nextZ(current), item.id, item.title))]; commitHistory(next); return next })
   }, [commitHistory, workItems, placer])
-  const openJiraPanel = useCallback(() => {
-    const id = `j${nextIdRef.current++}`
-    const place = placer()
-    setPanels((current) => { const centre = viewCentre(hostRef.current, viewportRef.current); const next = [...current, place(current, makeJiraPanel(id, centre, nextZ(current)))]; commitHistory(next); return next })
-  }, [commitHistory, placer])
   // The selection is a SET: M18's marquee and M26's additive click build a
   // multi-selection without renaming the older single-selection call sites.
   //
@@ -1148,10 +1140,9 @@ export function Canvas({
       }
     }
     // File acceptance and handoff links are facts, not canvas geometry history.
-    // M245: so is a sheet's loss consent — undoing a MOVE must not re-arm a confirmation.
     setPanels((current) => next.present.map((panel) => {
       const live = current.find((p) => p.rect.id === panel.rect.id)
-      return isFilePanel(panel) && live && isFilePanel(live) && (live.source.checklist !== undefined || live.source.sheet !== undefined || live.source.deck !== undefined)
+      return isFilePanel(panel) && live && isFilePanel(live) && (live.source.checklist !== undefined || live.source.deck !== undefined)
         ? { ...panel, source: live.source } : panel
     }))
     setGroups((current) => pruneGroups(current, ids))
@@ -1491,7 +1482,7 @@ export function Canvas({
   // needs me" and "allow it" — and neither means anything to a terminal, so
   // the lock lets those two through and keeps every other key.
   const shouldIgnoreKeysButLock = useCallback(
-    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused(),
+    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused(),
     [palette.isOpen]
   )
   const shouldIgnoreKeys = useCallback(
@@ -2737,7 +2728,7 @@ export function Canvas({
   })
   // M507. The window doors the Electron suites drive, lifted into useTestDoors.ts at exactly this position.
   useTestDoors({
-    beginNewChatRef, commitHistory, dropPath, historyRef, hostRef, lastHostFocusRef, nextIdRef, onClosePanel, openAsChatRef, openFilePanel, openInTerminalRef, openJiraPanel, openToolboxPanel, paletteActionsRef, panelsRef, placer, selectOnly, setPanels, spawnWorkCard, undoCanvasRef, viewportRef, workItemsRef, worldCentre
+    beginNewChatRef, commitHistory, dropPath, historyRef, hostRef, lastHostFocusRef, nextIdRef, onClosePanel, openAsChatRef, openFilePanel, openInTerminalRef, openToolboxPanel, paletteActionsRef, panelsRef, placer, selectOnly, setPanels, spawnWorkCard, undoCanvasRef, viewportRef, workItemsRef, worldCentre
   })
 
   // M507. The review commit, the restart sequence and the automation rows, lifted into useRestartVerbs.ts at exactly this position.
@@ -3512,7 +3503,7 @@ export function Canvas({
   }, [])
 
   // M502. The creation verbs (the starter, createObject, the first-run work doors), lifted into useCreationVerbs.ts at exactly this position.
-  const { applyStarter, askWithoutFolder, chatInFolder, createObject, creationShareRef, markPreviewRead, markTemplateRead, relayNameFor, setChecklistView, setDeckView, setImportReviewed, setSheetView, startFirstWork } = useCreationVerbs({
+  const { applyStarter, askWithoutFolder, chatInFolder, createObject, creationShareRef, markPreviewRead, markTemplateRead, relayNameFor, setChecklistView, setDeckView, setImportReviewed, startFirstWork } = useCreationVerbs({
     addImageFromPath, annotationSeq, beginNewChat, boardVerbsRef, commitHistory, envReportRef, fitAll, fitSelection, frameReadable, hintsSeenRef, hostRef, mergedRef, nextGroupIdRef, nextIdRef, noteRootRef, onSpawn, openBrowserPanel, openFilePanel, openRelayPanel, openWorkflowPanel, palette, paletteActionsRef, panelsRef, placer, reloadTeammates, rosterNames, setAnnotations, setClusterArrival, setDormantIds, setFirstTask, setGroups, setInputMode, setPanels, setStarter, setTemplateRows, starterRef, teammatesRef, templateRowsRef, transitionRef, viewportRef, workItemsRef, workspaceRows, worldCentre
   })
   // M246. The plan door's run: `runWorkflow`'s second parameter is the SOURCE
@@ -3557,7 +3548,7 @@ export function Canvas({
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, undoCanvas, redoCanvas, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    openFilePanel, openToolboxPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
@@ -3972,7 +3963,7 @@ export function Canvas({
         >
           {/* M507. What the world layer holds, in WorldLayers.tsx: a plain function called here, so the tree is unchanged. */}
           {renderWorldLayers({
-            activeWorkspaceId, addGithubToBoard, addJiraToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, creationShareRef, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openRelayPanel, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, relayNameFor, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSelectedAnnotation, setSheetView, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
+            activeWorkspaceId, addGithubToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, creationShareRef, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openRelayPanel, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, relayNameFor, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSelectedAnnotation, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
           })}
         </div>
         </PanelMarksContext.Provider>

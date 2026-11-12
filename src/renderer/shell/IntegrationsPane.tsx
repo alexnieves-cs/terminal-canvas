@@ -1,11 +1,11 @@
 import { memo, useEffect, useRef, useState, type JSX } from 'react'
 import { shellControl } from './shell-control'
-import { ChevronLeft, Refresh, Check, KindGithub, KindJira } from '@renderer/icons'
+import { ChevronLeft, Refresh, Check, KindGithub } from '@renderer/icons'
 import type { IntegrationRow } from './integration-model'
 import { describeCall } from './integration-model'
 
 /** (this redesign) One glyph per declared service — the same kind glyph a panel of that kind already draws. */
-const SERVICE_GLYPH: Record<string, (p: { size?: number }) => JSX.Element> = { github: KindGithub, jira: KindJira }
+const SERVICE_GLYPH: Record<string, (p: { size?: number }) => JSX.Element> = { github: KindGithub }
 
 /**
  * M89 (redesigned). THE INTEGRATIONS PAGE — the navigator's fifth pane,
@@ -92,7 +92,6 @@ function IntegrationsPaneImpl(props: IntegrationsPaneProps): JSX.Element {
             />
           ))}
           {props.skipped > 0 && <p className="pf__more" data-integrations-skipped>{props.skipped} audit line{props.skipped === 1 ? '' : 's'} could not be read</p>}
-          <p className="integration__note">Jira's own panel reads Jira directly; only agents' calls to Jira, and every GitHub read, appear here.</p>
         </div>
       )}
     </div>

@@ -179,9 +179,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
           initial: '',
           ...(refused ? { feedback: true as const } : {}),
           submit: (value) => {
-            const jiraLines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-            const token = service === 'jira' && jiraLines.length === 3 ? JSON.stringify({ site: jiraLines[0], email: jiraLines[1], token: jiraLines[2] }) : value
-            if (service === 'jira' && jiraLines.length !== 3) { openEntry('enter site URL, email, and API token on three lines'); return }
+            const token = value
             void window.canvas.credential.set({ service, token }).then((res) => {
               if (!res.ok) {
                 openEntry(res.reason)

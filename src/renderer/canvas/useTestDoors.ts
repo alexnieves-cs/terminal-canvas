@@ -15,7 +15,6 @@ import { viewCentre } from './safe-area'
 import type { ChecklistView } from '@shared/checklist'
 import type { DeckView } from '@shared/deck'
 import type { ImportedNote } from '@shared/imported-note'
-import type { SheetView } from '@shared/sheet'
 import type { History } from '@renderer/panels/history'
 /**
  * M507 (E4, the Canvas.tsx split). The window doors the Electron suites drive
@@ -34,9 +33,8 @@ export interface UseTestDoorsDeps {
   nextIdRef: RefObject<number>
   onClosePanel: (id: string) => void
   openAsChatRef: RefObject<(id: string) => Promise<{ kind: string; reason?: string | undefined; }>>
-  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true; }) => void
+  openFilePanel: (path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; deck?: DeckView; exact?: true; }) => void
   openInTerminalRef: RefObject<(id: string) => { kind: string; reason?: string | undefined; }>
-  openJiraPanel: () => void
   openToolboxPanel: (cwd: string, label: string, centre: Point) => void
   paletteActionsRef: RefObject<PaletteActions | null>
   panelsRef: RefObject<Panel[]>
@@ -52,7 +50,7 @@ export interface UseTestDoorsDeps {
 
 export function useTestDoors(deps: UseTestDoorsDeps): void {
   const {
-    beginNewChatRef, commitHistory, dropPath, historyRef, hostRef, lastHostFocusRef, nextIdRef, onClosePanel, openAsChatRef, openFilePanel, openInTerminalRef, openJiraPanel, openToolboxPanel, paletteActionsRef, panelsRef, placer, selectOnly, setPanels, spawnWorkCard, undoCanvasRef, viewportRef, workItemsRef, worldCentre
+    beginNewChatRef, commitHistory, dropPath, historyRef, hostRef, lastHostFocusRef, nextIdRef, onClosePanel, openAsChatRef, openFilePanel, openInTerminalRef, openToolboxPanel, paletteActionsRef, panelsRef, placer, selectOnly, setPanels, spawnWorkCard, undoCanvasRef, viewportRef, workItemsRef, worldCentre
   } = deps
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
@@ -133,10 +131,6 @@ export function useTestDoors(deps: UseTestDoorsDeps): void {
     w.__m276Type = (node: Element | null, text: string): boolean => typeIntoEditor(node, text)
     w.__m276Text = (node: Element | null): string | null => editorText(node)
     w.__m276Focus = (node: Element | null): boolean => focusEditor(node)
-    // M24's mint, through the SAME openJiraPanel the palette row calls — so
-    // the hook proves the real gesture rather than a parallel mint, the rule
-    // __m13Open and __m20Toolbox already obey.
-    w.__m24Jira = (): void => openJiraPanel()
     // M73's mint, through the SAME beginNewChat the palette row, the launcher
     // line and the sheet call — read through a ref because beginNewChat is
     // declared below this block (it needs selectOnly), the create-above /
@@ -170,5 +164,5 @@ export function useTestDoors(deps: UseTestDoorsDeps): void {
     // action bar and the chrome buttons call.
     w.__m74OpenAsChat = (id: string): Promise<{ kind: string; reason?: string }> => openAsChatRef.current(id)
     w.__m74OpenInTerminal = (id: string): { kind: string; reason?: string } => openInTerminalRef.current(id)
-  }, [openFilePanel, worldCentre, openJiraPanel, dropPath])
+  }, [openFilePanel, worldCentre, dropPath])
 }

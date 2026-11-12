@@ -143,7 +143,7 @@ import type { TeamListResult, TeamObserved, TeamObserveRequest } from './team'
 import type { TeamAskRow } from './team-asks'
 /** M377. One person's answer to one team ask: allow once, or deny. */
 export interface TeamAskAnswerRequest { workspaceId: string; askId: string; answer: 'allow' | 'deny' }
-import type { WorkItem, WorkItemTransition } from './work-item'
+import type { WorkItem } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { ReadStamp, SkillWriteResult } from './skill-edit'
@@ -584,31 +584,10 @@ export const IPC = {
   RELAY_LIST: 'relay:list',
   /** A panel's view now, and a full replay pushed after it — for a renderer that just (re)loaded. */
   RELAY_VIEW: 'relay:view',
-  /** Main reads the authenticated user's assigned Jira work. */
-  JIRA_LIST: 'jira:list',
   /** M88. The issues assigned to you and the pull requests waiting on you, through the injected GitHub client. */
   GITHUB_LIST: 'github:list',
   /** M89. The broker's audit rows, newest first — the FIRST channel that reads the audit; metadata only. */
   BROKER_AUDIT: 'broker:audit',
-  /**
-   * The legal next states for ONE issue. Its own channel rather than a field
-   * on jira:list, because transitions are workflow-defined per issue: folding
-   * the read in would fire one request per ticket on every panel load, for
-   * tickets nobody transitions. review:diff's pull-only shape, same arithmetic.
-   */
-  JIRA_TRANSITIONS: 'jira:transitions',
-  /**
-   * One named mutation, performed by main, behind an explicit human gesture.
-   *
-   * There are exactly two Jira writes and this is one of them. No agent-
-   * reachable path may reach either: an agent lives in a PTY and has no
-   * bridge, and nothing that builds a process environment imports the Jira
-   * client. That rule has NO RUNTIME SYMPTOM when broken, so verify:meta 22
-   * and 23 pin it as source text. See CLAUDE.md.
-   */
-  JIRA_COMMENT: 'jira:comment',
-  /** The second, and last, Jira write. See JIRA_COMMENT. */
-  JIRA_TRANSITION: 'jira:transition',
   /**
    * Ask main to show a native open dialog. Resolves to the chosen absolute
    * path, or null if the user cancelled.
@@ -1829,23 +1808,10 @@ export interface BrokerAuditRowWire {
   reason?: string
 }
 
-/** M88. GitHub's list, to Jira's shape; `note` says which half is missing when the PR search alone failed. */
+/** M88. GitHub's list; `note` says which half is missing when the PR search alone failed. */
 export type GithubListResult =
   | { kind: 'items'; items: WorkItem[]; note?: string }
   | { kind: 'no-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
-
-export type JiraListResult =
-  | { kind: 'items'; items: WorkItem[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
-
-export type JiraTransitionsResult =
-  | { kind: 'transitions'; transitions: WorkItemTransition[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'refused' | 'unavailable' | 'malformed'; reason: string }
-
-/** `refused` is the board saying no; `unavailable` is Jira being unreachable. Two fixes, two arms. */
-export type JiraWriteResult =
-  | { kind: 'done' }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'refused' | 'unavailable' | 'malformed'; reason: string }
 
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
@@ -2580,12 +2546,6 @@ export interface CanvasBridge {
     list(panelId?: string): Promise<GithubListResult>
     /** M255. Publish a draft file. Main asks the person with the text in front of them, every time. */
     publish(req: GithubPublishRequest): Promise<GithubPublishResult>
-  }
-  jira: {
-    list(): Promise<JiraListResult>
-    transitions(itemId: string): Promise<JiraTransitionsResult>
-    comment(req: { itemId: string; body: string }): Promise<JiraWriteResult>
-    transition(req: { itemId: string; transitionId: string }): Promise<JiraWriteResult>
   }
   file: {
     /** A native open dialog. `null` when the user cancelled. */

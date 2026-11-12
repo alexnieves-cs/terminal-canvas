@@ -37,7 +37,6 @@ import type { ReviewHandoff } from '@shared/review-readiness'
 import type { ReviewTaskContext } from '@renderer/review/ReviewNode'
 import type { SharedCanvas } from '@renderer/shared-canvas/useSharedCanvas'
 import type { SharedPanel } from '@shared/canvas-ops'
-import type { SheetView } from '@shared/sheet'
 import type { Shelf } from '@shared/skills'
 import type { TaskRegion } from '@shared/redesign-contracts'
 import type { VaultIndex } from '@shared/vault'
@@ -74,7 +73,6 @@ import type { MergedLayout } from './merged-layout'
 export interface RenderWorldLayersContext {
   activeWorkspaceId: string | undefined
   addGithubToBoard: (item: WorkItem) => void
-  addJiraToBoard: (item: WorkItem) => void
   agentLinksOn: boolean
   annotating: boolean
   annotations: Annotation[]
@@ -192,7 +190,6 @@ export interface RenderWorldLayersContext {
   setRelaySession: (panelId: string, sessionId: string | undefined) => void
   setRetainedOutcomes: Dispatch<SetStateAction<RetainedOutcome[]>>
   setSelectedAnnotation: Dispatch<SetStateAction<string | null>>
-  setSheetView: (id: string, view: SheetView) => void
   setWatcherArmed: (id: string, armed: boolean) => void
   shapeLive: Map<string, LiveBinding>
   shapePanels: ShapePanel[]
@@ -201,7 +198,6 @@ export interface RenderWorldLayersContext {
   skillSources: { panelId: string; cwd: string; label: string; }[]
   snapGuides: { guides: readonly SnapGuide[]; spacing: readonly SpacingGuide[]; }
   spawnGithubItem: (item: WorkItem) => void
-  spawnJiraTicket: (item: WorkItem) => void
   startDevServer: (script?: string) => Promise<{ kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }>
   stopWorkflowRun: (templateId: string, runId?: string) => { kind: "ran"; note?: string; } | { kind: "refused"; reason: string; }
   taskContextFor: (itemId: string | undefined) => ReviewTaskContext | undefined
@@ -224,7 +220,7 @@ export interface RenderWorldLayersContext {
 
 export function renderWorldLayers(ctx: RenderWorldLayersContext): JSX.Element {
   const {
-    activeWorkspaceId, addGithubToBoard, addJiraToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, creationShareRef, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openRelayPanel, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, relayNameFor, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSelectedAnnotation, setSheetView, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
+    activeWorkspaceId, addGithubToBoard, agentLinksOn, annotating, annotations, annotationsRef, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, clusterHulls, collapsedPanelIds, commitAnnotation, connectors, creationShareRef, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, displayPanels, docFocusId, edgeLabels, editingAnnotation, enteringPanelIds, firstTaskStrip, flipped, flowchart, focusedId, glowEnabled, goToPanelOrRequest, groups, hostRef, imageReloads, inkDraft, landingLit, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, mergedView, nameChat, noteVault, onBeginDrag, onBeginGroupDrag, onBeginLink, onBeginPlaceholderDrag, onBrowserNavigated, onClosePanel, onConnectorSelect, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onPeerShapePress, onPeerShapeRemove, onRemoveGroup, onRemovePlaceholder, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openDraftReview, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openRelayPanel, openSkillPanel, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, peerFlow, peerRemovable, pendingApprovals, presetRows, previewSubjectReason, railRows, registry, relayNameFor, releaseFocusStable, reloadWorkflowDraft, removeLinkStable, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runFrames, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectLink, selectOnly, selectedAnnotation, selectedIds, selectedLink, setChecklistView, setDeckView, setEditingAnnotation, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSelectedAnnotation, setWatcherArmed, shapeLive, shapePanels, shared, shelf, skillSources, snapGuides, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, taskRegions, teammates, templateRows, terminalNameOf, terminalPanels, toggleGroupCollapsed, vaultReady, version, viewport, wakingPanelIds, workItems, workItemsRef
   } = ctx
   return (
     <>
@@ -355,7 +351,7 @@ export function renderWorldLayers(ctx: RenderWorldLayersContext): JSX.Element {
     ))}
     {/* M507. Each panel by kind, in PanelNode.tsx: a plain function called here, so the tree is unchanged. */}
     {displayPanels.map((panel) => renderPanelNode(panel, {
-        activeWorkspaceId, addGithubToBoard, addJiraToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setSheetView, setWatcherArmed, shared, skillSources, spawnGithubItem, spawnJiraTicket, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
+        activeWorkspaceId, addGithubToBoard, beginNewChatRef, beginWorkflowTrigger, bindPreview, boardKeys, buildWorkflowWithAi, capturePreviewNow, cardDetail, credentialRows, deleteWorkflowTemplate, demotingPanelIds, discoverProject, docFocusId, enteringPanelIds, firstTaskStrip, flipped, focusedId, glowEnabled, imageReloads, linkDraw, liveRunFacts, markPreviewRead, markTemplateRead, merged, nameChat, noteVault, onBeginDrag, onBeginLink, onBrowserNavigated, onClosePanel, onContextPasted, onDocFocus, onFocusPanel, onPanelEntryEnd, onReviewCommitted, onSelectPanel, onSlotMount, onSlotUnmount, openAsChatVoid, openCredentials, openFileAtCentre, openFocusTask, openInTerminal, openPreview, openingContexts, palette, paletteActions, paletteActionsRef, panels, panelsRef, patchWorkItem, presetRows, previewSubjectReason, railRows, registry, relayNameFor, reloadWorkflowDraft, renameSkillEverywhere, replaceImage, restoreFocus, retainedOutcomes, reviewTaskLane, rimCovered, runWorkflow, runs, saveWorkflowCopy, saveWorkflowDraft, selectAndRaise, selectOnly, selectedIds, setChecklistView, setDeckView, setImportReviewed, setNoteText, setNoteTint, setPreviewWidth, setRelaySession, setRetainedOutcomes, setWatcherArmed, shared, skillSources, spawnGithubItem, startDevServer, stopWorkflowRun, radar, taskContextFor, taskHandoffOf, teammates, templateRows, terminalNameOf, vaultReady, version, wakingPanelIds, workItems, workItemsRef
       }))}
     {/* M388. Every flowchart shape, in one memoised layer (ShapeLayer's
         header: why not PanelFrame). A fragment of boxes carrying

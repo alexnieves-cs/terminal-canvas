@@ -1936,8 +1936,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     //     with no credential the node says so and offers Connect GitHub…;
     //     with one it lists the recorded items by id and title; a Start
     //     session on an item spawns a terminal whose title is the item's and
-    //     whose opening context carries the item's body — Jira's own flow
-    //     reached by a second kind through ONE verb. Closing the node sends
+    //     whose opening context carries the item's body through ONE verb. Closing the node sends
     //     no pty.kill (the sessionless non-vacuity shape).
     // -------------------------------------------------------------------
     {
@@ -1999,7 +1998,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       mkdirSync(harnessCredentialDir, { recursive: true })
       // Earlier blocks leave credentials in the shared store; the bare arm
       // needs NONE, or the reload flips the verb to Verify under the click.
-      credentialStore.delete('github'); credentialStore.delete('jira')
+      credentialStore.delete('github')
       const IDS = ['integrations.1 the Integrations pane lists every declared service — not connected with Connect… opening the Credentials scope when nothing is stored, connected as its label with Verify when one is — and shows the broker audit rows under a service newest first, an empty audit as a sentence']
       const iLog = []
       const onI = (_e, _l, m) => { iLog.push(String(m).slice(0, 200)) }
@@ -2011,7 +2010,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="integrations"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await settle()
-        const bare = await waitUntil(() => wc.executeJavaScript(`(() => { const secs = [...document.querySelectorAll('[data-integration]')].map((s) => ({ id: s.getAttribute('data-integration'), state: s.getAttribute('data-integration-state'), sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', empty: s.querySelector('[data-integration-audit-arm="empty"]')?.textContent ?? null })); return secs.length >= 2 ? secs : false })()`), 8000)
+        const bare = await waitUntil(() => wc.executeJavaScript(`(() => { const secs = [...document.querySelectorAll('[data-integration]')].map((s) => ({ id: s.getAttribute('data-integration'), state: s.getAttribute('data-integration-state'), sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', empty: s.querySelector('[data-integration-audit-arm="empty"]')?.textContent ?? null })); return secs.length >= 1 ? secs : false })()`), 8000)
         // Connect… opens the palette in its Credentials scope.
         const clickedConnect = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-integration="github"] [data-integration-verb]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
         // A timeline rather than one read: whether the chip ever appears, and when it leaves.
@@ -2027,7 +2026,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const connected = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-integration="github"]'); if (!s || s.getAttribute('data-integration-state') !== 'connected' || s.querySelectorAll('[data-integration-row]').length < 2) return false; return { sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', rows: [...s.querySelectorAll('[data-integration-row]')].map((r) => r.getAttribute('data-integration-row')) } })()`), 8000)
         credentialStore.delete('github')
         ok(IDS[0],
-          Array.isArray(bare) && bare.some((s) => s.id === 'github' && s.state === 'not-connected' && /not connected/.test(s.sentence) && /Connect/.test(s.verb) && typeof s.empty === 'string' && /no calls/.test(s.empty)) && bare.some((s) => s.id === 'jira') &&
+          Array.isArray(bare) && bare.some((s) => s.id === 'github' && s.state === 'not-connected' && /not connected/.test(s.sentence) && /Connect/.test(s.verb) && typeof s.empty === 'string' && /no calls/.test(s.empty)) &&
             clickedConnect === true && scope && scope.open === true && scope.chip === 'Credentials' &&
             connected && /connected as octocat/.test(connected.sentence) && /Verify/.test(connected.verb) && connected.rows.length === 2 && /POST/.test(connected.rows[0]) && /GET/.test(connected.rows[1]),
           JSON.stringify({ bare, scope, connected, auditSeen, log: iLog.slice(-3) }))
@@ -5607,97 +5606,6 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         try { rmSync(ED_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (edErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(edErr && edErr.message || edErr))
-      }
-    }
-
-    /* ========== M245: the sheet owns its own Cmd+V / Cmd+Z ================ */
-    //
-    // The hazard is NOT "click the sheet, then paste": a sheet mousedown runs
-    // onFocusPanel, which moves focusedId to the sheet, so the canvas would
-    // route that paste nowhere with or without the guard — a vacuous check.
-    // The hazard is DOM focus in the sheet while focusedId still names a LIVE
-    // terminal (keyboard or programmatic focus): unguarded, the menu's
-    // edit:paste goes into the agent, and edit:undo ALSO runs the canvas undo,
-    // whose top entry here is the terminal's own spawn. So this arranges
-    // exactly that, and the positive control (sheet blurred, same paste)
-    // proves focusedId names the terminal and its echo is observable.
-    {
-      const IDS = [
-        'sheet-clip.1 a menu paste with a sheet focused lands in the sheet FILE and not in the focused terminal — and the same paste with the sheet blurred does reach the terminal',
-        'sheet-clip.2 a menu undo with a sheet focused restores the sheet file through its own write and does NOT run the canvas undo (the terminal it spawned survives)'
-      ]
-      try {
-        const SH_DIR = mkdtempSync(join(tmpdir(), 'tc sheet clip '))
-        const SH_FILE = join(SH_DIR, 'data.csv')
-        const ORIGINAL = 'a,b\n1,2\n'
-        writeFileSync(SH_FILE, ORIGINAL)
-        layoutStore.save({
-          panels: [{ id: 'shF', kind: 'file', x: 520, y: 80, w: 420, h: 280, z: 1, source: { path: SH_FILE, sheet: {} } }],
-          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
-        })
-        flushLayoutStore()
-        await reloadWithin(wc)
-        await settle()
-        const shSel = '.panel[data-panel-id="shF"]'
-        await waitUntil(() => wc.executeJavaScript(
-          `(() => { const c = document.querySelector('${shSel} [data-cell="A1"]'); return c !== null && c.textContent === 'a' })()`), 10000)
-
-        // A LIVE terminal, through Cmd+N — a restored one is dormant (editor.1d's measured lesson).
-        const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, altKey: true, bubbles: true }))`)
-        const liveId = await waitUntil(async () => {
-          const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-          return now.find((id) => !before.includes(id)) ?? false
-        }, 8000)
-        if (typeof liveId !== 'string') throw new Error('sheet-clip: Cmd+N spawned no panel')
-        const liveSel = `.panel[data-panel-id=${JSON.stringify(liveId)}]`
-        await waitUntil(() => wc.executeJavaScript(`document.querySelector('${liveSel} .xterm') !== null`), 8000)
-        const liveBox = await wc.executeJavaScript(`(() => { const n = document.querySelector('${liveSel} .panel__slot') || document.querySelector('${liveSel}'); if (!n) return null; const r = n.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
-        if (liveBox !== null) await clickPanelAt(liveBox.x, liveBox.y)
-        const focusedBefore = await waitUntil(async () => { const id = await wc.executeJavaScript(`window.__m4aFocusedId()`); return id === liveId ? id : false }, 8000)
-        await settle()
-
-        // DOM focus into the sheet body WITHOUT a mousedown, so focusedId stays on the terminal.
-        wc.focus(); await sleep(100)
-        const armed = await wc.executeJavaScript(`(() => { const b = document.querySelector('${shSel} [data-sheet-body]'); if (!b) return null; b.focus(); return { inSheet: document.activeElement === b, focused: window.__m4aFocusedId() } })()`)
-        const MARK = 'M245SHEETMARK'
-        const CONTROL = 'M245CONTROLMARK'
-        wc.send(IPC_EVENTS.EDIT_PASTE, MARK)
-        const landed = await waitUntil(() => { try { return readFileSync(SH_FILE, 'utf8').includes(MARK) } catch { return false } }, 5000)
-        await sleep(600)
-        const pasted = await wc.executeJavaScript(`(() => ({ inTerminal: window.__m4aCellToScreen(${JSON.stringify(MARK)}) !== null, focused: window.__m4aFocusedId() }))()`)
-        const fileAfterPaste = readFileSync(SH_FILE, 'utf8')
-
-        // sheet-clip.2 — undo, still in the same arrangement.
-        wc.send('edit:undo')
-        await waitUntil(() => readFileSync(SH_FILE, 'utf8') === ORIGINAL, 5000)
-        await sleep(400)
-        const undone = await wc.executeJavaScript(`(() => ({
-          terminalStillThere: document.querySelector('${liveSel}') !== null,
-          panels: document.querySelectorAll('.panel').length
-        }))()`)
-        const fileAfterUndo = readFileSync(SH_FILE, 'utf8')
-
-        // The positive control: blur the sheet, the same menu paste reaches the terminal.
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('${shSel} [data-sheet-body]'); if (b) b.blur(); return true })()`)
-        await settle()
-        wc.send(IPC_EVENTS.EDIT_PASTE, CONTROL)
-        await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen(${JSON.stringify(CONTROL)}) !== null`), 4000)
-        const control = await wc.executeJavaScript(`window.__m4aCellToScreen(${JSON.stringify(CONTROL)}) !== null`)
-
-        ok(IDS[0],
-          typeof focusedBefore === 'string' && armed !== null && armed.inSheet === true && armed.focused === liveId &&
-            landed === true && fileAfterPaste === `${MARK},b\n1,2\n` && pasted.inTerminal === false && control === true,
-          JSON.stringify({ liveId, armed, landed, fileAfterPaste, pasted, control }))
-        ok(IDS[1], fileAfterUndo === ORIGINAL && undone.terminalStillThere === true,
-          JSON.stringify({ fileAfterUndo, undone }))
-
-        await clickPanelClose(wc, liveId)
-        await clickPanelClose(wc, 'shF')
-        await settle()
-        try { rmSync(SH_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
-      } catch (shErr) {
-        for (const id of IDS) ok(id, false, 'threw: ' + String(shErr && shErr.message || shErr))
       }
     }
 

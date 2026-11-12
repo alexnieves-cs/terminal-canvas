@@ -18,7 +18,7 @@ import type { RateLimitState } from '@shared/rate-limit'
 import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { workflowWatchWord } from '@renderer/workflow/workflow-diagram'
-import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import { capabilityLines, toolCapabilities } from '@shared/tool-spec'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
@@ -574,7 +574,6 @@ export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
   review: 'A review node',
   file: 'A file panel',
   toolbox: 'A toolbox node',
-  jira: 'A Jira panel',
   chat: 'A chat panel',
   relay: 'A relay terminal'
 }
@@ -915,7 +914,6 @@ export function buildInspectorModelBare(
     }
   }
   if (isGithubPanel(panel)) return { kind: 'github', reviewable: false, state: { kind: 'github', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'github', label: 'source', value: 'issues assigned to you and pull requests waiting on you' }] }
-  if (isJiraPanel(panel)) return { kind: 'jira', reviewable: false, state: { kind: 'jira', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
   // M83. The memory node: a document kind whose subject is a repository.
   if (isMemoryPanel(panel)) {
     return { kind: 'memory', reviewable: false, state: { kind: 'memory', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'root', label: 'repository', value: panel.source.root }] }

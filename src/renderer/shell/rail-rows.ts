@@ -1,5 +1,5 @@
 import { workflowWatchLabel } from '@renderer/workflow/workflow-diagram'
-import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
@@ -106,7 +106,6 @@ export function railLabel(
   // basename, not the whole path, because a 260px row cannot hold one and the
   // directory is the inspector's job.
   if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
-  if (isJiraPanel(panel)) return 'Jira tickets'
   if (isGithubPanel(panel)) return 'GitHub work'
   // A toolbox node names its DIRECTORY by basename, the same split the file
   // branch above makes and for the same reason: a 260px row cannot hold a
@@ -361,7 +360,7 @@ const GROUP_ORDER: { id: RailGroupId; label: string; kinds: readonly string[] }[
   { id: 'agents', label: 'Agents', kinds: ['terminal', 'chat', 'relay'] },
   { id: 'files', label: 'Files', kinds: ['file', 'note', 'image', 'browser', 'memory'] },
   { id: 'reviews', label: 'Reviews', kinds: ['review'] },
-  { id: 'work', label: 'Work', kinds: ['work', 'jira', 'github'] },
+  { id: 'work', label: 'Work', kinds: ['work', 'github'] },
   { id: 'workflows', label: 'Runs & watchers', kinds: ['workflow', 'watcher'] },
   { id: 'capabilities', label: 'Capabilities', kinds: ['toolbox', 'skill'] }
 ]
