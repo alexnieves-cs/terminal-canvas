@@ -217,7 +217,7 @@ const M = require(OUT)
   const readyVerb = M.blankTaskVerb('Explain the deploy')
   ok('rd-empty.title.1 the title names the workspace when there is one, the purpose is one sentence, and an empty task cannot start',
     named === 'A blank canvas for steward' && unnamed === 'A blank canvas' &&
-      M.BLANK_CANVAS_PURPOSE === 'Describe a task and an agent will take it from here — or start something smaller.' &&
+      M.BLANK_CANVAS_PURPOSE === 'Describe a task and an agent works on it on its own branch, or start with something smaller.' &&
       M.repoChipLabel('') === 'no repository chosen' && M.repoChipLabel('steward') === 'steward' &&
       emptyVerb.enabled === false && emptyVerb.label === 'Start task' && emptyVerb.reason === 'Describe the task first' &&
       readyVerb.enabled === true && readyVerb.reason === undefined,

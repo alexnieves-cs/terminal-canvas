@@ -967,7 +967,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           const t = await wc.executeJavaScript(`(() => { const rows = document.querySelectorAll('.rail-list--panels .rail-row').length; const e = document.querySelector('.rail-list--panels .rail-empty'); return rows === 0 && e ? e.textContent : null })()`)
           return t === null ? false : t
         }, 5000)
-        ok(IDS[6], typeof emptyText === 'string' && /no panels/.test(emptyText) && /⌘N/.test(emptyText), JSON.stringify(emptyText))
+        ok(IDS[6], typeof emptyText === 'string' && /no panels/i.test(emptyText) && /⌘N/.test(emptyText), JSON.stringify(emptyText))
       } catch (sErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(sErr && sErr.message || sErr) + ' | renderer: ' + (sLog.slice(-4).join(' || ') || '(none)'))
       } finally {

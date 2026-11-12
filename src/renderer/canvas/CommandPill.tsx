@@ -71,7 +71,7 @@ const PILL_ICON: Record<SelectionVerbKey, JSX.Element> = {
   fit: <Maximize />, plan: <Lanes />, layout: <Lanes />, tidy: <Grid />, align: <Grid />, space: <Grid />,
   arrange: <Lanes />, related: <Link />, group: <Layers />, close: <Close />
 }
-const NO_ORCHESTRATOR = 'no orchestrator yet — first send creates a supervisor chat'
+const NO_ORCHESTRATOR = 'no orchestrator yet; your first send creates a supervisor chat'
 const HISTORY_CAP = 50
 const NOTE_MS = 8000
 /** Never more than five contextual actions on screen at once; the rest live behind More. */

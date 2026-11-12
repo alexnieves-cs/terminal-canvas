@@ -2902,7 +2902,7 @@ const session = (id, over = {}) => ({
     .map((f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', String(f)), 'utf8')).join('\n')
   const unrendered = list ? list.map((e) => e.id).filter((id) => !src.includes(`<EmptyState id="${id}"`) && !src.includes(`emptyState('${id}')`)) : null
   ok('empty.2 the empty states are data: sentences, never a bare zero or ellipsis, a verb where there is a door, the Panels sentence kept, an unknown id refused, and every id rendered by name in the renderer',
-    list !== null && list.length >= 9 && bad !== null && bad.length === 0 && get('panels').sentence === 'no panels — ⌘N to start one' && threw && list.some((e) => e.verb !== undefined) && unrendered !== null && unrendered.length === 0,
+    list !== null && list.length >= 9 && bad !== null && bad.length === 0 && get('panels').sentence === 'No panels yet. ⌘N starts one.' && threw && list.some((e) => e.verb !== undefined) && unrendered !== null && unrendered.length === 0,
     JSON.stringify({ n: list && list.length, bad: bad && bad.map((e) => e.id), unrendered }))
 }
 
