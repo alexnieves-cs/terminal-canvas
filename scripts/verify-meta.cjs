@@ -717,14 +717,15 @@ console.log('\n' + '='.repeat(60))
 // 4.0.0 at M160, the v7 run's reconcile; 5.0.0 at M192, the v9 run's;
 // 6.0.0 at M456, the redesign; 6.0.1 at M474, the streams run's first tagged release;
 // 6.1.0 after lanes G–V, the bold directions and the two audits; 6.1.1 for the Intel DMG,
-// the Homebrew cask and the first-ten-minutes lane.
+// the Homebrew cask and the first-ten-minutes lane; 6.2.0 for the wrap-up (bug review,
+// Relay cut, the flaky canvas check fixed, the Pages site live).
 // agrees — the one number that must not drift between the two files that
 // name it.
 {
   const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
   const statusLine = (readme.match(/^> \*\*Status:[^\n]*/m) || [''])[0]
-  ok('version.1 package.json is 6.1.1 and the README status line names the same version',
-    pkg.version === '6.1.1' && statusLine.includes('v6.1.1') && !/beta/i.test(statusLine),
+  ok('version.1 package.json is 6.2.0 and the README status line names the same version',
+    pkg.version === '6.2.0' && statusLine.includes('v6.2.0') && !/beta/i.test(statusLine),
     JSON.stringify({ version: pkg.version, statusLine }))
 }
 
