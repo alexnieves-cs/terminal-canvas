@@ -103,6 +103,9 @@ function RailPanelRowImpl({
         {/* The dot a person reads — `.rail-row__dot` stays as its alias (shell 83 and the harness read it; restyle, never rename); the tail keeps the WORD for state-word.1 / 84, clipped. */}
         {stateful && <span className="rail-row__state-dot rail-row__dot status-dot" {...(row.state.kind === 'terminal' ? { 'data-agent-state': state ?? 'none' } : {})} data-tone={shown.tone} aria-hidden="true" />}
         {/* data-agent-state is the TERMINAL store's word (check 54's split); a chat row's state is its tone (the Act III critic). */}
+        {/* M645. A space for the accessible name ("vitest watch idle", not
+            "vitest watchidle"); the row is a flex row, so it paints nothing. */}
+        {' '}
         <span className="rail-row__tail" data-tone={shown.tone}>{shown.tone === 'kind' ? '' : shown.word}</span>
       </button>
       {/* M105. The agent's last line said — a second line on a chat's row, from

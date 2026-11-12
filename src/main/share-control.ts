@@ -64,7 +64,7 @@ export function createShareControl(deps: ShareControlDeps): ShareControl {
       if (deps.account.sessions()[0]?.githubId === target.githubId) return { ok: true, active: target.githubLogin, changed: false }
       const yes = await deps.confirm({
         message: `Switch to ${target.githubLogin}?`,
-        detail: 'A terminal asked to change which account this app acts as. Presence, sharing and the relay will act as this account.',
+        detail: 'A terminal asked to change which account this app acts as. Presence and sharing will act as this account.',
         verb: `Use ${target.githubLogin}`
       })
       if (!yes) return declined('switching accounts')

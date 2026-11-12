@@ -429,6 +429,7 @@ The roadmap contract: one row per milestone, pinned against `docs/build-log/` by
 | M671 | A task's Run tab: Creance's RunTimeline and ToolCallCard over a pure reducer (`shared/agent-run.ts`). Each prompt is a step, each tool call sits under its step with its state and span, a step with an open request waits on you, and the picked call reads whole (input, result or error). The run is folded from the same chat store `agent:event` fills, so it cannot disagree with the conversation beside it. `verify:agent-run` `run.*`. [Log](build-log/m670-m671-supervision.md). |
 | M683 | The Jira panel is gone for good, by Alex's choice: its client, channels, credential service, palette row, lab and suite. A saved Jira panel is dropped on load and saved Jira board items still read | ✅ done |
 | M684 | Sheets are gone for good, by Alex's choice, and with them the `xlsx` dependency from a CDN outside the npm registry: a `.csv` opens as a plain file and a saved sheet view is dropped quietly | ✅ done |
+| M685 | Relay terminals are gone for good, by Alex's choice: the relay server, its client, panel, protocol, nine channels, lab and suite. The shared canvas drops its `relay-bind` op and fields, so a peer still writing them is refused; a saved relay panel is dropped on load; the collab VM keeps one Caddyfile | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

@@ -195,7 +195,6 @@ export function auditEntryOf(room: string, userId: string, op: CanvasOp): AuditE
     case 'group-set': return row('group-set', op.group.id)
     case 'group-delete': return row('group-delete', op.groupId)
     case 'file-create': return row('file-create', op.fileKey)
-    case 'relay-bind': return row('relay-bind', op.panelId, op.relay === null ? 'unbound' : 'bound')
     case 'ask-open': return row('ask-open', op.ask.id, `need ${op.ask.need}`)
     case 'ask-answer': return row('ask-answer', op.askId, op.answer)
     case 'ask-close': return row('ask-close', op.askId, op.outcome)

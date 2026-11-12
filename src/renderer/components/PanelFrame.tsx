@@ -180,7 +180,7 @@ export function FarTitle({ title }: { title: ReactNode }): JSX.Element {
 }
 
 /** M69. The word a sessionless kind shows in its summary's state slot. */
-const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow', image: 'image', note: 'note', relay: 'relay', shape: 'shape' }
+const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow', image: 'image', note: 'note', shape: 'shape' }
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, headerPath, headerPathTitle, headerBranch, agentGlyph, agentState, owner,
@@ -394,7 +394,12 @@ export function PanelFrame({
   }
   const inner = (
     <>
-      <header ref={headerRef} className="pf__chrome panel__chrome" onMouseDown={beginMove}>
+      {/* M645. role="none": a <header> outside <article>/<section> is a
+          BANNER landmark, so every panel on the canvas announced itself as
+          a second page header (axe landmark-banner-is-top-level, one per
+          panel). The strip is a row of the panel, not a landmark; the tag
+          stays because suites and styles address `header.pf__chrome`. */}
+      <header ref={headerRef} className="pf__chrome panel__chrome" role="none" onMouseDown={beginMove}>
         {/* The state dot (terminal) or the kind's accent mark — ONE rule set,
             keyed on data-agent-state, shared with the rail and the context
             pane (`.status-dot`). */}

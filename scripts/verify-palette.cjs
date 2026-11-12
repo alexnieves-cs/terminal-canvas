@@ -3376,7 +3376,7 @@ const FRESH = () => ctx({
   ok('labs.3 no lab hides a verb on an existing object, a credential row, a team ask or a near-namesake',
     kept.every((id) => P.labOfRow(id) === undefined) &&
       P.labOfRow('object.create.deck') === 'decks' &&
-      P.labOfRow('world.view') === 'world' && P.labOfRow('share.open') === 'accounts' && P.labOfRow('object.create.relay') === 'relay' && P.labOfRow('panel.memory') === 'toolbox',
+      P.labOfRow('world.view') === 'world' && P.labOfRow('share.open') === 'accounts' && P.labOfRow('panel.memory') === 'toolbox',
     JSON.stringify(kept.map((id) => [id, P.labOfRow(id)])))
 
   const rows = [...built].map((id) => ({ id }))

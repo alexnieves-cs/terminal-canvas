@@ -118,6 +118,8 @@ export function createPgDocStore(query: Query, opts: { keep?: number } = {}): Do
  * took, written after the server's per-operation check accepted it, with the
  * user id the connection authenticated as. Who, what kind, which object —
  * never a title, text or command. Append-only: nothing here deletes.
+ * 'relay-bind' stays in the list after M685 removed the relay: the table's
+ * check constraint names it, and rows written before then keep reading.
  */
 export const AUDIT_ACTIONS = ['create', 'retitle', 'delete', 'group-set', 'group-delete', 'file-create', 'relay-bind', 'ask-open', 'ask-answer', 'ask-close', 'edited'] as const
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

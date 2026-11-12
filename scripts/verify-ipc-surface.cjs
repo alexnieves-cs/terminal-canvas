@@ -321,10 +321,7 @@ app.whenReady().then(() => {
   // a gesture's write-through op, the active view, and the share doors.
   // text:open / text:close / text:update (190) — shared text: the renderer's
   // y-monaco replica of a shared doc, every update gated in main.
-  // relay:spawn / relay:attach / relay:detach / relay:input / relay:resize /
-  // relay:control / relay:kill / relay:list / relay:view (199) — the pty
-  // relay: a terminal whose process runs on the team's relay VM, the socket
-  // and token held in main (main/relay/relay-client.ts).
+  // (199) once held the nine relay:* channels; M685 removed the pty relay.
   // auth:use / auth:status / workspace:share-members (202) — M336–M337: the
   // account picker's active choice, whether accounts are configured, and the
   // share's people with their roles for the owner's picker.
@@ -364,7 +361,9 @@ app.whenReady().then(() => {
   // on load (their push, vm:lanes-changed, is an event and not counted here).
   // -4: jira:list / jira:transitions / jira:comment / jira:transition (M683) —
   // the Jira panel and its client were removed (docs/streams/cut-list.md).
-  const EXPECTED_CHANNELS = 231
+  // -9: relay:spawn / attach / detach / input / resize / control / kill / list /
+  // view (M685) — the pty relay was removed (docs/streams/cut-list.md).
+  const EXPECTED_CHANNELS = 222
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

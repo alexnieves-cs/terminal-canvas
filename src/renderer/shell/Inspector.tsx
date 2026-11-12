@@ -238,7 +238,7 @@ function CapsSection({ id, caps, onCap }: { id: string; caps: CapsField; onCap?:
   }
   return (
     <section className="inspector__section" data-work-section="caps">
-      <h3 className="inspector__section-heading">Caps</h3>
+      <h2 className="inspector__section-heading">Caps</h2>
       <dl className="inspector__caps">
         <dt>Spend</dt><dd data-caps-line="spend">{caps.spend}</dd>
         <dt>Context</dt><dd data-caps-line="context">{caps.context}</dd>
@@ -360,7 +360,7 @@ function RunsSection({ panelId, active }: { panelId: string; active: boolean }):
   if (rows.length === 0) return null
   return (
     <section className="inspector__section" data-runs-section>
-      <h3 className="inspector__section-heading">Commands</h3>
+      <h2 className="inspector__section-heading">Commands</h2>
       <ul className="inspector__review-files">
         {rows.map((r, i) => (
           <li key={`${r.endedAt}-${i}`} className="inspector__review-file" data-run-row data-run-exit={r.exitCode ?? ''}>
@@ -887,7 +887,8 @@ function InspectorPanel({
         const changed = review !== null && !review.hidden ? review.files.length + review.more : 0
         return (
           <section className="inspector__session" data-inspector-session>
-            <h3 className="inspector__section-heading">Session</h3>
+            {/* M645. Section headings are h2, the level under the page's one h1 (axe heading-order: they were h3 under nothing). */}
+            <h2 className="inspector__section-heading">Session</h2>
             <dl className="inspector__fields">
               {facts.map((fact) => (
                 <div className="inspector__field" key={fact.label} data-inspector-session-fact={fact.label}>
@@ -898,7 +899,7 @@ function InspectorPanel({
             </dl>
             {taskCriteria !== undefined && taskCriteria !== null && taskCriteria.rows.length > 0 && (
               <div data-inspector-criteria>
-                <h3 className="inspector__section-heading">Task criteria</h3>
+                <h2 className="inspector__section-heading">Task criteria</h2>
                 <p>{taskCriteria.label}</p>
                 <ul>
                   {taskCriteria.rows.map((row) => (
@@ -944,7 +945,7 @@ function InspectorPanel({
           <details className="inspector__deep" data-inspector-deep>
             <summary className="inspector__deep-summary">Process metrics</summary>
           <section className="inspector__section inspector__machine" data-inspector-machine={arm}>
-            <h3 className="inspector__section-heading">Machine</h3>
+            <h2 className="inspector__section-heading">Machine</h2>
             <div className="inspector__value" data-machine-cost>{arm === 'reading' && machine !== undefined
               // M191 (the golden audit, first half, 4). A sampled panel really
               // sitting at 0.0% says `under 1%`: the metrics rule's "never a
@@ -1060,7 +1061,7 @@ function InspectorPanel({
           the line saying what would change the answer. */}
       {(review === null || review.hidden) && (
         <section className="inspector__section" data-work-section="changes">
-          <h3 className="inspector__section-heading">Changes</h3>
+          <h2 className="inspector__section-heading">Changes</h2>
           <p className="inspector__arm" data-work-arm="changes">
             {model.kind === 'review' ? 'a review node reports its own changes in its body'
               : model.kind !== 'terminal' ? `${KIND_NOUN[model.kind]} changes nothing`
@@ -1080,7 +1081,7 @@ function InspectorPanel({
           stop reading this part of the pane.
         */
         <section className="inspector__section">
-          <h3 className="inspector__section-heading">Changes</h3>
+          <h2 className="inspector__section-heading">Changes</h2>
           {/* M86. The branch and where it stands, from the local tracking
               ref — never a fetch, and the phrase says so. Absent until asked,
               a phrase when git answered, nothing when it could not (the note
@@ -1133,7 +1134,7 @@ function InspectorPanel({
           its verb, or the one sentence when it is not in one. Its own section,
           so the ledger's empty state never sits under a real answer. */}
       <section className="inspector__section" data-work-section="run">
-        <h3 className="inspector__section-heading">Run</h3>
+        <h2 className="inspector__section-heading">Run</h2>
         {panelRun ? (
           <div className="inspector__run" data-work-run>
             <span className="inspector__run-name">{panelRun.name}</span>
@@ -1162,13 +1163,13 @@ function InspectorPanel({
           pinned" is not a number.
         */
         <section className="inspector__section" data-work-section="cost">
-          <h3 className="inspector__section-heading">Cost</h3>
+          <h2 className="inspector__section-heading">Cost</h2>
           <p className="inspector__arm" data-work-arm="cost">{model.kind === 'terminal' ? 'no agent on this panel — nothing to cost' : `${KIND_NOUN[model.kind]} costs nothing`}</p>
         </section>
       )}
       {!model.usage.hidden && (
         <section className="inspector__section" data-usage-section>
-          <h3 className="inspector__section-heading">Cost</h3>
+          <h2 className="inspector__section-heading">Cost</h2>
           {model.usage.note !== undefined && (
             <p className="inspector__usage-note" data-usage-note>{model.usage.note}</p>
           )}
@@ -1225,7 +1226,7 @@ function InspectorPanel({
       <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
       {toolbox !== null && !toolbox.hidden && (
         <section className="inspector__section">
-          <h3 className="inspector__section-heading">Toolbox</h3>
+          <h2 className="inspector__section-heading">Toolbox</h2>
           <p className="inspector__review-summary" data-toolbox-summary>{toolbox.summary}</p>
           {/* M68. Commands AND permissions: the rules by bucket, one line. */}
           {toolbox.permissions !== undefined && (
@@ -1560,7 +1561,7 @@ function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string
     if (edge === undefined) return null
     return (
       <section className="inspector__section inspector__section--node" data-inspector-node="edge" data-inspector-node-edge={selected}>
-        <h3 className="inspector__section-heading inspector__section-heading--node">Handoff · {nameOf(from)} to {nameOf(to)}</h3>
+        <h2 className="inspector__section-heading inspector__section-heading--node">Handoff · {nameOf(from)} to {nameOf(to)}</h2>
         <div className="inspector__field inspector__node-field" data-inspector-node-field-row="trigger">
           <label className="inspector__label" htmlFor={`edge-trigger-${templateId}`}>{`${nameOf(to)} starts`}</label>
           <span className="inspector__node-hint">{`When ${nameOf(from)} reaches this point, ${nameOf(to)} begins.`}</span>
@@ -1616,7 +1617,7 @@ function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string
   const kindName = LIBRARY.find((e) => e.kind === node.kind)?.name ?? node.kind
   return (
     <section className="inspector__section inspector__section--node" data-inspector-node="block" data-inspector-node-key={node.key}>
-      <h3 className="inspector__section-heading inspector__section-heading--node">{kindName} · {nameOf(node.key)}</h3>
+      <h2 className="inspector__section-heading inspector__section-heading--node">{kindName} · {nameOf(node.key)}</h2>
       {/* M259. GROUPED by the question each set answers, in the UI face,
           every field with a label a person would say and a one-line hint. */}
       {grouped.filter((g) => g.fields.length > 0).map((g) => (
