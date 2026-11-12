@@ -5,7 +5,7 @@ import type { DeckView } from '@shared/deck'
 import type { ImportedNote } from '@shared/imported-note'
 import type { InputMode } from '@renderer/palette/Palette'
 import type { PaletteActions } from '@renderer/palette/commands'
-import { type Panel, makeRelayPanel, isRelayPanel, makeNotePanel, isNotePanel, isImagePanel, makeBrowserPanel, makeMemoryPanel, cascadeCentre, nextZ } from '@renderer/panels/panels'
+import { type Panel, makeNotePanel, isNotePanel, isImagePanel, makeBrowserPanel, makeMemoryPanel, cascadeCentre, nextZ } from '@renderer/panels/panels'
 import { type PersistedTemplate, allTemplates } from '@shared/templates'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { getDraft, selectedOf } from '@renderer/workflow/template-draft-store'
@@ -24,7 +24,7 @@ import type { PackPreviewState } from '../pack/PackPreview'
 
 /**
  * M503 (E4, the Canvas.tsx split). The object verbs: a new note, the memory,
- * browser and relay panels, feedback, canvas and pack import/export, a
+ * browser panels, feedback, canvas and pack import/export, a
  * node's run and test, and a note's text and tint. Lifted out of Canvas
  * VERBATIM as one contiguous run and called at exactly the position it
  * occupied, just below useWorkflowVerbs, with one destructured Deps object so
@@ -172,32 +172,6 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
     })
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
-  /** M338. A relay terminal at `at`: a fresh session of `program`, or an attach to a session the relay already has. */
-  const openRelayPanel = useCallback((relay: { program: string; sessionId?: string; shareId?: string }, at?: Point): void => {
-    const centre = viewCentre(hostRef.current, viewportRef.current)
-    const relayId = `r${nextIdRef.current++}`
-    const place = placer({ exact: at !== undefined })
-    setPanels((current) => {
-      const made = place(current, makeRelayPanel(relayId, at ?? centre, nextZ(current), relay))
-      const next = [...current, relay.sessionId === undefined ? made : { ...made, relay: { ...made.relay, sessionId: relay.sessionId } }]
-      commitHistory(next)
-      return next
-    })
-    selectOnly(relayId)
-  }, [commitHistory, selectOnly])
-  /**
-   * M338. The relay minted this panel's session (or it was forgotten, for a
-   * new one): written to the record so a relaunch attaches instead of starting
-   * a second process. Not an undo step — the person did nothing; the relay
-   * answered — so the history is left alone, the rule a browser's navigation follows.
-   */
-  const setRelaySession = useCallback((panelId: string, sessionId: string | undefined): void => {
-    setPanels((current) => current.map((p) => {
-      if (p.rect.id !== panelId || !isRelayPanel(p) || p.relay.sessionId === sessionId) return p
-      const { sessionId: _old, ...rest } = p.relay
-      return { ...p, relay: sessionId === undefined ? rest : { ...rest, sessionId } }
-    }))
-  }, [])
   /**
    * M190. FEEDBACK — a DRAFT in the person's own browser, never a submission.
    * The facts are chosen by type (a version, a platform, engine words, panel
@@ -463,5 +437,5 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
     return { kind: 'ran', note: `${tint} note` }
   }, [commitHistory])
 
-  return { addNote, addPack, beginNewNote, exportCanvas, exportPack, importCanvas, importPack, importSamplePack, markPresetRead, openBrowserPanel, openMemoryPanel, openRelayPanel, packPreview, prepareFeedback, runNodeNow, runNodeRef, setNoteText, setNoteTint, setPackPreview, setRelaySession, testNode }
+  return { addNote, addPack, beginNewNote, exportCanvas, exportPack, importCanvas, importPack, importSamplePack, markPresetRead, openBrowserPanel, openMemoryPanel, packPreview, prepareFeedback, runNodeNow, runNodeRef, setNoteText, setNoteTint, setPackPreview, testNode }
 }

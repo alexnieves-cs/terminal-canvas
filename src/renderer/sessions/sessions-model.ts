@@ -405,7 +405,10 @@ export function factsFromSources(
     const title = panel.title?.trim() ?? ''
     facts.push({
       id: panel.id,
-      name: title !== '' ? title : (folder !== '' ? folder : 'Session'),
+      // `home` for `~`: the canvas names an untitled shell started at home that
+      // way (palette/panel-name.ts `terminalBaseName`), and the same session
+      // read `~` here.
+      name: title !== '' ? title : folder === '~' ? 'home' : (folder !== '' ? folder : 'Session'),
       agent: engineLabel(panel.engine, panel.shell),
       folder,
       branch: read.branch(panel.id),

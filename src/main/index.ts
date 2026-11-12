@@ -24,7 +24,6 @@ import { installCloudLanes } from './bootstrap/cloud-wiring'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors, createTeamFlowDoors } from './bootstrap/presence-wiring'
-import { createRelayWiring } from './bootstrap/relay-wiring'
 import { startWorldSimWiring } from './bootstrap/world-sim-wiring'
 import { createWorldFeedWiring } from './bootstrap/world-feed-wiring'
 import type { WorldSim } from './world-sim'
@@ -184,9 +183,6 @@ state.teamAsks = createTeamAskWiring(state, stores, account, app.getPath('userDa
 const shareDoors = createShareDoors(state, stores, account)
 // The Team view's server rows, written from the hub's summary on its own slow beat.
 const teamReporter = createTeamReporterWiring(state.presence, account)
-// The pty relay: terminals whose process runs on the team's relay VM. Built
-// here; opens no socket until a relay panel asks, so nothing to start.
-const relay = createRelayWiring(state, account)
 // SIMULATE_AGENTS=true only: the scripted world-event feed, started once the
 // window exists and stopped at quit. A no-op in every other launch.
 let worldSim: WorldSim | null = null
@@ -432,8 +428,8 @@ app.whenReady().then(async () => {
       writeTeamFlow: teamFlowDoors.writeTeamFlow,
       ...shareDoors
     },
-    // The pty relay: one socket per relay panel, held in main with the token.
-    relay,
+    // M685. The pty relay's retired slot (registerIpcHandlers keeps it so the two below keep their places).
+    undefined,
     // The flowchart's file doors: a diagram out through the outward gate, a Mermaid file in.
     createFlowchartHandlers(state),
     // The world feed's connection and its retry.
@@ -593,9 +589,6 @@ app.on('before-quit', () => {
   // Presence: our awareness state removed on the way out, so peers see us
   // leave now rather than after y-protocols' 30s timeout.
   state.presence?.stop()
-  // Relay sockets closed as detaches would be: a quit is not a network drop,
-  // so a guest's control is handed back now rather than after the 60s grace.
-  relay.dispose()
   worldSim?.stop()
   // M573 (lane O). A lesson replay's agent is killed, never left running on
   // after the app, billing, in a scratch tree nobody will read.

@@ -34,7 +34,7 @@ import { getChat } from '@renderer/chat/chat-store'
 import { templateRefusal } from '@renderer/palette/template-model'
 import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 import { normaliseShapeText } from '@shared/flowchart'
-import { isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel, isImagePanel, isNotePanel, isShapePanel, isRelayPanel, isChatPanel, isFilePanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel, type Panel } from '@renderer/panels/panels'
+import { isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel, isImagePanel, isNotePanel, isShapePanel, isChatPanel, isFilePanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel, type Panel } from '@renderer/panels/panels'
 import type { CapturedPanel } from '@shared/ipc-contract'
 import { railLabel } from '../../shell/rail-rows'
 import { commandPanelCwd } from '@renderer/palette/command-panel'
@@ -578,11 +578,6 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
           // M181. The image panel's one field, by name — the fifteenth arm.
           if (isImagePanel(p)) {
             return { kind: p.kind, rect: p.rect, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }), ...(p.image.artifact === undefined ? {} : { artifact: p.image.artifact }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
-          }
-          // M338. The relay panel's record, field by field — a rename that
-          // lost `sessionId` would start a second session on relaunch.
-          if (isRelayPanel(p)) {
-            return { kind: p.kind, rect: p.rect, relay: { program: p.relay.program, ...(p.relay.sessionId === undefined ? {} : { sessionId: p.relay.sessionId }), ...(p.relay.shareId === undefined ? {} : { shareId: p.relay.shareId }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }), ...(p.connectors === undefined ? {} : { connectors: p.connectors }) }
           }
           // M49. `fontSize` and `links` ride along field by field, absent
           // staying absent: a rename that rebuilt the panel without them

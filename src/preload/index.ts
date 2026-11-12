@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { homedir } from 'os'
 import { hookupIpc } from '@sentry/electron/preload-namespaced'
-import type { WatcherStateEvent, RelayData, RelayView, CloudLaneView } from '@shared/ipc-contract'
+import type { WatcherStateEvent, CloudLaneView } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PresenceRoster } from '../shared/presence'
 import type { WorldConnection } from '../shared/world-events'
@@ -482,19 +482,6 @@ const bridge: CanvasBridge = {
     close: (workspaceId) => ipcRenderer.invoke(IPC.TEXT_CLOSE, workspaceId),
     update: (workspaceId, update) => ipcRenderer.invoke(IPC.TEXT_UPDATE, workspaceId, update),
     onRemote: (listener) => subscribe<SharedTextPush>(IPC_EVENTS.TEXT_REMOTE, listener)
-  },
-  relay: {
-    spawn: (req) => ipcRenderer.invoke(IPC.RELAY_SPAWN, req),
-    attach: (req) => ipcRenderer.invoke(IPC.RELAY_ATTACH, req),
-    detach: (panelId) => ipcRenderer.invoke(IPC.RELAY_DETACH, panelId),
-    input: (panelId, data) => ipcRenderer.invoke(IPC.RELAY_INPUT, panelId, data),
-    resize: (req) => ipcRenderer.invoke(IPC.RELAY_RESIZE, req),
-    control: (req) => ipcRenderer.invoke(IPC.RELAY_CONTROL, req),
-    kill: (panelId) => ipcRenderer.invoke(IPC.RELAY_KILL, panelId),
-    list: () => ipcRenderer.invoke(IPC.RELAY_LIST),
-    view: (panelId) => ipcRenderer.invoke(IPC.RELAY_VIEW, panelId),
-    onData: (listener) => subscribe<RelayData>(IPC_EVENTS.RELAY_DATA, listener),
-    onState: (listener) => subscribe<RelayView>(IPC_EVENTS.RELAY_STATE, listener)
   },
   world: {
     onEvents: (listener) => subscribe<unknown[]>(IPC_EVENTS.WORLD_EVENTS, listener),

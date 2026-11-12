@@ -45,7 +45,7 @@ export function AccountMenu({ accounts }: { accounts: Accounts }): JSX.Element |
               : <>
                   <div className="shell__view-heading">{sessions.length > 1 ? 'Active account' : 'Signed in'}</div>
                   {/* One of a set, so a real radio group: the ACTIVE account is
-                      the one every door acts as (presence, sharing, the relay). */}
+                      the one every door acts as (presence and sharing). */}
                   <MenuRadioGroup value={active.githubId} onValueChange={use}>
                     {sessions.map((s) => (
                       <MenuRadioItem key={s.githubId} value={s.githubId} className="shell__account-row" data-github-id={s.githubId} title={`Act as ${s.githubLogin}`}>

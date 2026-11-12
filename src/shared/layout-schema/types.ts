@@ -340,23 +340,6 @@ export interface PersistedImagePanel extends PersistedPanelBase {
 }
 
 /**
- * M338. A terminal whose process runs on the team's relay VM (docs/relay.md).
- * Sessionless HERE — no cwd, no args, no spec: the pty lives on the relay, and
- * main holds the socket. The record is what re-attaches after a relaunch:
- * `sessionId` once the relay has minted one, else the `program` NAME (never a
- * path — the relay's programs.json allowlist decides what a name runs) and
- * the share it was started in, so a teammate may attach by their role.
- *
- * A malformed `program` drops the PANEL (it could never start); a malformed
- * `sessionId` or `shareId` costs the FIELD, like the browser's `device`: a
- * panel that can still start a fresh session beats one that vanished.
- */
-export interface PersistedRelayPanel extends PersistedPanelBase {
-  kind: 'relay'
-  relay: { program: string; sessionId?: string; shareId?: string }
-}
-
-/**
  * M187. The note kind on disk: one record, three forms. `form` is REQUIRED and
  * a value outside the three drops the panel by name — a note whose form the
  * app invented would paint as something the person did not draw. `text` absent
@@ -393,7 +376,6 @@ export type PersistedPanel =
   | PersistedChatPanel
   | PersistedWatcherPanel
   | PersistedBrowserPanel
-  | PersistedRelayPanel
   | PersistedWorkPanel
   | PersistedSkillPanel
   | PersistedWorkflowPanel

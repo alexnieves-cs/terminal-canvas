@@ -446,7 +446,7 @@ try {
   ok('guide.4 it starts once, as the first-run card closes, stays ended, and never interrupts someone who set up before it existed; it steps aside for the card and the merged view',
     /startGuide\(\)/.test(tail) && /getItem\(KEY\) !== null\) return/.test(store) && /ended \|\| next === null \? 'done'/.test(store) &&
       /if \(step === null\) return\n  write\(null, true\)/.test(store) &&
-      /<FirstCanvasGuide panelCount=\{panels\.length\} reviewOpen=\{chrome\.centerView === 'review'\} hidden=\{showOnboarding \|\| merged\} \/>/.test(overlays),
+      /<FirstCanvasGuide panelCount=\{panels\.filter\(\(p\) => isTerminalPanel\(p\) \|\| isChatPanel\(p\)\)\.length\} reviewOpen=\{chrome\.centerView === 'review'\} hidden=\{showOnboarding \|\| merged\} \/>/.test(overlays),
     '')
 } catch (error) {
   for (const id of ['guide.1', 'guide.2', 'guide.3', 'guide.4']) ok(`${id} the guided first canvas`, false, error.message)

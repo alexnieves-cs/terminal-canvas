@@ -71,6 +71,52 @@ const readTransform = (wc) =>
     `getComputedStyle(document.querySelector('.world')).transform`
   ).then(parseMatrix)
 
+// The runner is slower than a laptop (verify.yml sets TC_WATCHDOG_SCALE=2), so
+// every wait below is a DEADLINE scaled by it, never a fixed sleep the result
+// has to land inside.
+const SCALE = Number(process.env.TC_WATCHDOG_SCALE) > 0 ? Number(process.env.TC_WATCHDOG_SCALE) : 1
+const DEADLINE_MS = 5000 * SCALE
+
+/* Two animation frames in the page: a camera write that rides rAF has been
+   committed and painted once this resolves. */
+const nextFrames = (wc) =>
+  wc.executeJavaScript(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`)
+
+/* M690-flake. Checks 2 and 4 went red on the hosted runner (2486813, 527b202)
+   and green on the next push with no code change. The log showed the shape:
+   "y 120 -> 120" after the bare wheel, then a zoom-anchor drift of exactly
+   the 120px that wheel pans by, i.e. the pan was not lost, it LANDED LATE,
+   after the fixed 400ms sleep had already read the transform, and then
+   polluted the zoom's baseline. The fix is to wait on the observable rather
+   than the clock: poll until the transform satisfies the predicate (or the
+   scaled deadline passes, so a real regression still goes red), and read
+   each check's baseline only once the camera has stopped moving. */
+const waitForTransform = async (wc, predicate) => {
+  const until = Date.now() + DEADLINE_MS
+  let last = await readTransform(wc)
+  while (!(last && predicate(last)) && Date.now() < until) {
+    await nextFrames(wc)
+    last = await readTransform(wc)
+  }
+  return last
+}
+
+/* The camera at rest: the same transform across a run of consecutive frame
+   pairs. Boot can still be flying the camera in, or a just-sent wheel can
+   still be in flight, when a fixed sleep ends. */
+const settledTransform = async (wc, quietReads = 5) => {
+  const until = Date.now() + DEADLINE_MS
+  let last = await readTransform(wc)
+  let same = 0
+  while (same < quietReads && Date.now() < until) {
+    await nextFrames(wc)
+    const now = await readTransform(wc)
+    same = now && last && now.scale === last.scale && now.x === last.x && now.y === last.y ? same + 1 : 0
+    last = now
+  }
+  return last
+}
+
 // The .canvas host is not flush with the window: .app carries a top padding
 // to clear the hiddenInset traffic lights, so sendInputEvent's window-space
 // x/y is not the same point as the local canvas coordinates zoomAt actually
@@ -167,7 +213,7 @@ app.whenReady().then(async () => {
   await sleep(800)
 
   const wc = win.webContents
-  const before = await readTransform(wc)
+  const before = await settledTransform(wc)
   ok('1 the world layer renders with a transform', before !== null, JSON.stringify(before))
 
   // A two-finger scroll: no modifiers. Must translate, must not scale.
@@ -179,8 +225,10 @@ app.whenReady().then(async () => {
     for (let y = c.top + 16; y < c.bottom - 16; y += 24) for (let x = c.left + 16; x < c.right - 16; x += 24) { const e = document.elementFromPoint(x, y); if (e && (e.classList.contains('canvas') || e.classList.contains('world'))) return { x: Math.round(x), y: Math.round(y) } }
     return { x: 600, y: 400 } })()`)
   await sendWheel(wc, { x: bare.x, y: bare.y, deltaY: -120 })
-  await sleep(400)
-  const panned = await readTransform(wc)
+  await waitForTransform(wc, (t) => t.y !== before?.y || t.x !== before?.x || t.scale !== before?.scale)
+  // At rest before it is the zoom's baseline: a pan still settling would
+  // otherwise read as anchor drift in check 4.
+  const panned = await settledTransform(wc)
   ok('2 a bare wheel pans without scaling',
     panned && panned.scale === before?.scale && panned.y !== before?.y,
     `scale ${before?.scale} -> ${panned?.scale}, y ${before?.y} -> ${panned?.y}`)
@@ -192,8 +240,8 @@ app.whenReady().then(async () => {
   // exponential zoom turns into a zoom IN. Verified empirically against this
   // Electron build — sending -120 zooms out and would fail the assertion below.
   await sendWheel(wc, { x: 600, y: 400, deltaY: 120, ctrl: true })
-  await sleep(400)
-  const zoomed = await readTransform(wc)
+  await waitForTransform(wc, (t) => t.scale !== panned?.scale)
+  const zoomed = await settledTransform(wc)
   ok('3 a ctrl wheel zooms the canvas',
     zoomed && zoomed.scale > panned.scale,
     `scale ${panned?.scale} -> ${zoomed?.scale}`)

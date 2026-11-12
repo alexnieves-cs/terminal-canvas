@@ -1,0 +1,16 @@
+# /etc/caddy/Caddyfile — TLS for the team's VM. Caddy gets a Let's Encrypt
+# certificate for the name on its own and renews it on its own; the collab
+# server listens on loopback only. Replace collab.example.com with the DNS name
+# pointing at the VM (setup.sh does it). It lived beside the pty relay until
+# M685 removed the relay; only the collab route is left.
+collab.example.com {
+	# M347. The collab server (Hocuspocus): wss://<name>/collab, and
+	# /collab/healthz for an uptime check from outside. The prefix is
+	# stripped, so the server sees / and /healthz.
+	handle_path /collab* {
+		reverse_proxy 127.0.0.1:1234
+	}
+	handle {
+		respond 404
+	}
+}

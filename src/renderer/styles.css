@@ -7101,8 +7101,6 @@ body {
      image             the source, and Replace
      note (sticky)     the tint controls
      deck              slide N of M, and the proposed-change count (M248)
-     relay             that it runs on the relay, not this Mac, and New
-                       session once the old one ended (M338)
 
    A rule with an exception list is fine; a rule that is silently per-kind is
    how the frame drifted before M47 unified it, which is why this list is
@@ -10517,44 +10515,6 @@ button.orch__group-head:focus-visible { outline: 2px solid var(--iris); outline-
   white-space: nowrap;
 }
 .shared-text__selection { background: color-mix(in srgb, var(--iris) 22%, transparent); }
-
-/* The relay terminal (renderer/relay/RelayTerminal.tsx): the xterm to the
-   edge, and one strip above it saying who is in control. A viewer's screen is
-   dimmed a step — the one visual cue that keys will not reach this pty — and
-   never hidden: watching is the point of attaching. */
-/* M338. The relay terminal as a panel: the body is the M335 attachment, edge
-   to edge under the header, so the strip and the xterm fill what the frame gives. */
-.relay-node__body { display: flex; flex-direction: column; min-height: 0; padding: 0; }
-.relay-node__body > .relay-term { flex: 1; }
-/* The well, as a local terminal's slot has it: the rows xterm does not fill
-   read as the terminal, not as a band of frame. Flush, never padded — the
-   slot rule above says why an inset breaks clicks at a zoomed-out scale. */
-.relay-node .relay-term__screen { background: var(--well); border-radius: 0 0 var(--r-lg) var(--r-lg); }
-.relay-term { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
-.relay-term__strip {
-  display: flex; align-items: center; gap: var(--sp-4); flex: none;
-  padding: var(--sp-2) var(--sp-4); font: var(--t-xs)/var(--lh-tight) var(--font-ui); color: var(--fg-3);
-  border-bottom: 1px solid var(--line); background: var(--s-2);
-}
-.relay-term__line { color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.relay-term__program { font-family: var(--font-mono); color: var(--fg-4); }
-.relay-term__actions { margin-left: auto; display: flex; gap: var(--sp-3); }
-.relay-term__btn {
-  font: inherit; color: var(--fg-2); background: var(--s-3); border: 1px solid var(--line);
-  border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-4); cursor: pointer;
-}
-.relay-term__btn:hover { background: var(--s-4); }
-.relay-term__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.relay-term__btn:disabled { cursor: default; color: var(--fg-4); background: transparent; }
-.relay-term__btn--grant { color: var(--iris); border-color: var(--iris-dim); }
-.relay-term__btn--kill { color: var(--red); }
-.relay-term__screen { flex: 1; min-height: 0; overflow: hidden; position: relative; }
-/* Watching (no input): a veil in a declared colour over the screen, the M204
-   lens-veil way — never a fractional opacity (verify:styles 3). */
-.relay-term__screen--watching::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: color-mix(in srgb, var(--well) 12%, transparent);
-}
 
 /* ------------------------------------------------------------------ M388 --
    FLOWCHART SHAPES (renderer/flowchart/ShapeLayer.tsx). CHROMELESS by M236's

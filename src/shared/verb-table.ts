@@ -61,12 +61,6 @@ export interface CreationHost {
   browser(url?: string): Promise<CreationResult>
   /** M252. Describe a tool: with no description, ask for one; with one, generate — and what arrives is inert. */
   tool(description?: string): Promise<CreationResult>
-  /**
-   * M338. A terminal on the team's relay VM: a program NAME from the relay's
-   * allowlist (default `shell`), or `attach <session id>` to join a session
-   * this person may attach to. Refused by name when the relay is not set up.
-   */
-  relay(value?: string): Promise<CreationResult>
 }
 export interface CreationAvailability { merged?: boolean; noteRoot: string | null; agentReason?: string }
 const creation = (id: string, label: string, icon: string, create: (host: CreationHost, value?: string) => Promise<CreationResult>, requires: 'none' | 'folder' | 'agent' = 'none') => ({
@@ -88,14 +82,7 @@ export const CREATABLE_OBJECTS = [
   creation('deck', 'Deck', 'deck', (h, value) => h.document('deck', value), 'folder'),
   // M252. 'folder' because a tool is MADE somewhere: a mini app's files go
   // under <folder>/tools/, and a workflow's blocks work in that folder.
-  creation('tool', 'Describe a tool', 'tool', (h, value) => h.tool(value), 'folder'),
-  // M338. 'none': the pty is on the relay, so no folder here is its home.
-  // All four doors on purpose, with no dialog: a local terminal is creatable
-  // from an agent line and a workflow node too, and that is a STRONGER power
-  // (a shell on this Mac). What limits a relay session is the relay itself —
-  // TC_RELAY_SPAWNERS decides who may spawn at all, programs.json what a name
-  // runs — and an attach reaches only a session the relay's roles allow.
-  creation('relay', 'Relay terminal', 'relay', (h, value) => h.relay(value))
+  creation('tool', 'Describe a tool', 'tool', (h, value) => h.tool(value), 'folder')
 ] as const
 
 export function creationReason(entry: typeof CREATABLE_OBJECTS[number], context: CreationAvailability): string | undefined {

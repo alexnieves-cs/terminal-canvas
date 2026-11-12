@@ -387,8 +387,10 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
       />
     )}
     {/* M644. The guided first canvas. Out of the way while the first-run card
-        or the merged view owns the screen; it keeps its step and returns. */}
-    <FirstCanvasGuide panelCount={panels.length} reviewOpen={chrome.centerView === 'review'} hidden={showOnboarding || merged} />
+        or the merged view owns the screen; it keeps its step and returns. Its
+        first step is "Start an agent", so only a terminal or a chat ticks it —
+        a sticky note or a region on the canvas is not an agent. */}
+    <FirstCanvasGuide panelCount={panels.filter((p) => isTerminalPanel(p) || isChatPanel(p)).length} reviewOpen={chrome.centerView === 'review'} hidden={showOnboarding || merged} />
     {showOnboarding && !merged && (
       <Onboarding
         workspaceName={workspaceRows.find((w) => w.active)?.name ?? ''}

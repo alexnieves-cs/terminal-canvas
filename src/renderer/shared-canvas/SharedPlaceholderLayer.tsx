@@ -36,12 +36,6 @@ export interface SharedPlaceholderLayerProps {
   onRemove(p: SharedPanel): void
   /** view.files: placeholders whose file text is shared. */
   files: readonly string[]
-  /**
-   * M343. Open a relay panel HERE attached to a teammate's relay session. The
-   * person's click is the look: nothing attaches until then, and the relay
-   * itself decides — by the share's role, on its side — whether they may.
-   */
-  onAttachRelay?(p: SharedPanel): void
 }
 
 /** A teammate's shared file, open here. Local state only: the text itself is the doc's (shared-text/binding.ts). */
@@ -64,7 +58,7 @@ function SharedDraft({ p, workspaceId, who, onClose }: { p: SharedPanel; workspa
   )
 }
 
-const KIND_WORD: Record<string, string> = { terminal: 'Terminal', chat: 'Agent', file: 'File', note: 'Note', browser: 'Preview', workflow: 'Workflow', image: 'Picture', relay: 'Relay terminal', shape: 'Shape' }
+const KIND_WORD: Record<string, string> = { terminal: 'Terminal', chat: 'Agent', file: 'File', note: 'Note', browser: 'Preview', workflow: 'Workflow', image: 'Picture', shape: 'Shape' }
 
 export function SharedPlaceholderLayer(props: SharedPlaceholderLayerProps): JSX.Element | null {
   const names = useRosterNames(props.workspaceId)
@@ -97,15 +91,7 @@ export function SharedPlaceholderLayer(props: SharedPlaceholderLayerProps): JSX.
               <SharedDraft p={p} workspaceId={workspaceId} who={who} onClose={() => setOpenId(null)} />
             ) : (
               <div className="shared-placeholder__body">
-                {p.kind === 'relay'
-                  // A relay terminal runs on the team relay, not on anyone's Mac.
-                  ? (p.relay === undefined ? `${who}’s relay terminal — no session yet.` : `${who}’s terminal on the team relay · ${p.relay.program}.`)
-                  : `${KIND_WORD[p.kind] ?? p.kind} on ${who}’s machine — nothing runs here.`}
-                {p.kind === 'relay' && p.relay !== undefined && props.onAttachRelay !== undefined && (
-                  <button type="button" className="shared-placeholder__open" data-shared-relay-attach={p.id}
-                    title="Open this session here — the relay decides by your role whether you may watch or type"
-                    onMouseDown={(e) => e.stopPropagation()} onClick={() => props.onAttachRelay?.(p)}>Attach</button>
-                )}
+                {`${KIND_WORD[p.kind] ?? p.kind} on ${who}’s machine — nothing runs here.`}
                 {props.files.includes(p.id) && (
                   <button type="button" className="shared-placeholder__open" data-shared-draft-open={p.id}
                     onMouseDown={(e) => e.stopPropagation()} onClick={() => setOpenId(p.id)}>Edit shared draft</button>

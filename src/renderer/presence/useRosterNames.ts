@@ -6,8 +6,8 @@ import { latestRoster, onRoster } from './presence-store'
  * names a person rather than a uuid. Re-renders only when the set of names
  * actually changes, not on every 15 Hz cursor report.
  *
- * Moved here from SharedPlaceholderLayer (M333) in M344, when the relay
- * strip needed the same names.
+ * Moved here from SharedPlaceholderLayer (M333) in M344, when a second surface
+ * needed the same names.
  */
 export function useRosterNames(workspaceId: string | undefined): ReadonlyMap<string, string> {
   const read = (): Map<string, string> => new Map((latestRoster(workspaceId)?.peers ?? []).map((p) => [p.presence.userId, p.presence.displayName]))

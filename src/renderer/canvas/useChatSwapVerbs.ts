@@ -10,7 +10,6 @@ import { getChat } from '@renderer/chat/chat-store'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { BACKENDS, backendOf } from '@shared/agent-backends'
-import { disposeRelayTerminal } from '@renderer/relay/RelayTerminal'
 import { clearBrowser } from '@renderer/browser/browser-store'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import type { PlaceFn } from './place-new'
@@ -112,7 +111,7 @@ export function useChatSwapVerbs(deps: UseChatSwapVerbsDeps) {
     // move restores the chat panel, and it must render its turns. The
     // ordinary close path would drop the file, so this is the one removal
     // that does not go through it.
-    disposeChat(id, false); disposeWatcher(id); clearBrowser(id); disposeRelayTerminal(id)
+    disposeChat(id, false); disposeWatcher(id); clearBrowser(id)
     setPanels((current) => { const next = removePanel(current, id); commitHistory(next); return next })
     setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
     setFocusedId((current) => (current === id ? null : current))

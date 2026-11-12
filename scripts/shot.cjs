@@ -563,6 +563,7 @@ const SCENES = [
       await sleep(300)
       await kit.js(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
       await sleep(500)
+      await kit.chatStill('chat', { card: true })
       await kit.shot('approval')
     } },
   { name: 'verbs', intent: 'M96. The verb line: the palette in text mode on `Run a verb…` after a typed step was refused — the refusal and its fix on the palette\'s own feedback line (`step 1: no panel is called zz9 — name a panel by its id…`), the typed line kept for correction. A plan is shown and refused by name before anything runs.',
@@ -572,6 +573,7 @@ const SCENES = [
       await k.enter(); await sleep(500)
       await k.type('close zz9'); await sleep(200)
       await k.enter(); await sleep(600)
+      await k.chatStill('chat')
       await k.shot('verbs')
       await k.press('Escape'); await sleep(300); await k.press('Escape'); await sleep(300)
     } },
@@ -1218,12 +1220,11 @@ const SCENES = [
   { name: 'account-menu', intent: 'M336. The account menu open from the top bar\'s last control — the active account\'s initials (`AL`) in a circle. Under `Active account`, the two GitHub accounts signed in on this Mac as a radio set, `ada-lovelace` checked; `Add another account…`; under `Sharing`, `Share this workspace…` and `Open a shared workspace…`; below a rule, `Sign out ada-lovelace`. The menu is the View menu\'s own surface.',
     run: async (k) => {
       await k.emptyCanvas()
-      // M496 hid accounts, sharing and relay behind labs (Q-003). These scenes
+      // M496 hid accounts and sharing behind labs (Q-003). These scenes
       // ARE those surfaces, so they switch the doors on first, and
       // shared-offline, the last of them, switches them off again: a scene
       // after it that frames the palette must see the default rows.
       await k.js(`window.canvas.settings.set('labs.accounts', true)`)
-      await k.js(`window.canvas.settings.set('labs.relay', true)`)
       k.accountOn()
       for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.shell__account-avatar')`)); i++) await sleep(100)
       const point = await k.js(`(() => { const b = document.querySelector('.shell__account-trigger'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
@@ -1243,39 +1244,38 @@ const SCENES = [
       await k.press('Escape'); await sleep(300)
       await k.js(`(() => { const b = [...document.querySelectorAll('.share-dialog__btn')].find((x) => x.textContent === 'Done'); if (b) b.click(); return true })()`); await sleep(300)
     } },
-  { name: 'relay', intent: 'M338. A relay terminal on an otherwise empty canvas: a panel that KEEPS its header — the relay glyph, `relay · shell` as its title and the kind word `relay` — over the M335 attachment. The strip reads `You are in control` with the program `shell` in mono and one verb, `End session`; below it the remote shell\'s screen (`ada@relay:~$ uptime`, a load line, an `ls` of the deploy folder) in the terminal well, cursor live because this person is the one typing.',
-    run: async (k) => {
-      await k.press('k', { metaKey: true }); await sleep(400); await k.type('New Relay terminal'); await sleep(400); await k.enter()
-      for (let i = 0; i < 40 && !(await k.js(`(() => { const s = document.querySelector('[data-relay-node] .xterm-rows'); return !!s && s.textContent.includes('ada@relay') })()`)); i++) await sleep(100)
-      if (!(await k.js(`!!document.querySelector('[data-relay-node]')`))) throw new Error('relay scene: no relay panel on the canvas')
-      await k.closePalette()
-      await sleep(600)
-      await k.shot('relay')
-    } },
-  { name: 'shared-canvas', intent: 'M343–M345. A SHARED workspace from its owner\'s seat, with a teammate (sam) working in it from another Mac. The roster strip shows sam in sam\'s colour, and (M349) sam\'s one agent beside sam as a smaller CIRCLE of its own (people are rounded squares): a dashed ring in sam\'s colour, never filled (a filled tile is a person), its initial in the working tone, named in full on hover (`claude — tests — sam\'s agent, working`). sam\'s cursor sits on the canvas with a name tag. Beneath the owner\'s own relay terminal, two of sam\'s panels stand as inert placeholders, each header wearing sam\'s colour and name: sam\'s RELAY terminal reads `sam\'s terminal on the team relay · shell` and offers Attach (the session id crossed the doc; the relay still decides by role), and sam\'s terminal reads `Terminal on sam\'s machine — nothing runs here`. Nothing of sam\'s runs here, and nothing is started by showing it. DISCLOSED: the view and the roster are the pushes main\'s canvas-sync and presence hub would send, sent as those pushes — no doc and no network in the harness.',
+  { name: 'shared-canvas', intent: 'M343–M345. A SHARED workspace from its owner\'s seat, with a teammate (sam) working in it from another Mac. The roster strip shows sam in sam\'s colour, and (M349) sam\'s one agent beside sam as a smaller CIRCLE of its own (people are rounded squares): a dashed ring in sam\'s colour, never filled (a filled tile is a person), its initial in the working tone, named in full on hover (`claude — tests — sam\'s agent, working`). sam\'s cursor sits on the canvas with a name tag. In the middle of the canvas, two of sam\'s terminals stand as inert placeholders, each header wearing sam\'s colour and name and reading `Terminal on sam\'s machine — nothing runs here`. Nothing of sam\'s runs here, and nothing is started by showing it. DISCLOSED: the view and the roster are the pushes main\'s canvas-sync and presence hub would send, sent as those pushes — no doc and no network in the harness.',
     run: async (k) => {
       const sh = k.shared
       const wsId = sh.store.current().activeWorkspaceId
       sh.store.setWorkspaceShare(wsId, { id: sh.share, orgId: sh.org.id, role: 'owner' })
-      // The relay scene left the owner's relay panel (720x460, world rect read
-      // off its own style) at the viewport's centre. sam's two panels go in a
-      // row BENEATH it, the same total width, and the camera then moves up with
-      // a real wheel so the three fit the window.
-      const at = await k.js(`(() => { const p = document.querySelector('.panel[data-panel-kind="relay"]'); if (!p) return null; return { x: parseFloat(p.style.left), y: parseFloat(p.style.top), w: parseFloat(p.style.width), h: parseFloat(p.style.height) } })()`)
-      if (at === null) throw new Error('shared-canvas scene: the relay scene left no relay panel to stand beneath')
+      // M685. The relay scene that stood here is gone, and with it the owner's
+      // relay panel sam's placeholders used to sit beneath. account-menu's
+      // emptyCanvas left the camera at the origin, scale 1, so canvas-local
+      // coordinates ARE world coordinates here.
+      //
+      // That canvas is EMPTY now, so it shows the first-run launcher card in
+      // its centre, and a row centred there sat behind the card: the scene's
+      // DOM check passed while the picture showed no placeholder at all. sam's
+      // two terminals stack in the clear ground to the card's right instead,
+      // measured from the card rather than assumed (no card: the same column
+      // at the canvas's right edge).
+      const box = await k.js(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); const l = document.querySelector('[data-launcher]'); const r = l ? l.getBoundingClientRect() : null; return { w: c.width, h: c.height, cardRight: r ? r.right - c.left : null } })()`)
+      const colW = 300
+      const colX = Math.round(box.cardRight !== null ? Math.min(box.w - colW - 16, box.cardRight + Math.max(16, (box.w - box.cardRight - colW) / 2)) : box.w - colW - 32)
+      const at = { x: colX, y: Math.round(box.h / 2 - 190), w: colW, h: 0 }
       const place = (id, kind, title, x, y, w, h, extra = {}) => ({ id, kind, title, owner: sh.sam, host: 'hostsam1', x, y, w, h, z: 50, ...extra })
-      const half = (at.w - 30) / 2
       sh.state.view = {
         shareId: sh.share, role: 'owner', seq: 1, rects: [], files: [],
         placeholders: [
-          place('hostsam1_r1', 'relay', 'relay · shell', at.x, at.y + at.h + 30, half, 160, { relay: { session: 'samRelaySession000001', program: 'shell' } }),
-          place('hostsam1_n1', 'terminal', 'tests — api', at.x + half + 30, at.y + at.h + 30, half, 160)
+          place('hostsam1_n2', 'terminal', 'lint — web', at.x, at.y, at.w, 160),
+          place('hostsam1_n1', 'terminal', 'tests — api', at.x, at.y + 190, at.w, 160)
         ]
       }
       const samPresence = {
         // The colour a real peer carries: derived from the user id (presence.ts colorOf), the same the placeholders read.
         userId: sh.sam, displayName: 'sam', initials: 'S', color: colorOf(sh.sam), currentPanelId: null,
-        cursor: { x: at.x + half + 150, y: at.y + at.h + 130 }, viewport: null, selection: [], textCursor: null,
+        cursor: { x: at.x + 150, y: at.y + 190 + 100 }, viewport: null, selection: [], textCursor: null,
         mode: 'canvas', agentStatus: 'working', statusLine: '', currentTask: 'Watchdog fires under load', observing: null, lastActivity: Date.now(),
         // M349. sam's agent, as sam's machine publishes it: the panel's id, its scrubbed title, its state.
         agents: [{ id: 'n7', name: 'claude — tests', status: 'working' }]
@@ -1287,15 +1287,8 @@ const SCENES = [
       // The workspace rows reload on a palette open (Canvas.tsx), which is how
       // the share becomes a row fact the share dialog below can read.
       await k.press('k', { metaKey: true }); await sleep(300); await k.closePalette(); await sleep(300)
-      // Up by 80 screen px, so the relay's header clears the roster strip AND
-      // the sync chip under it (a chip sitting on a panel's edge read as that
-      // panel's status — the shared-offline critic) — over the empty ground at
-      // the canvas's left edge
-      // (a wheel over a panel would be the panel's).
-      const ground = await k.js(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); return { x: Math.round(c.left + 40), y: Math.round(c.top + c.height / 2) } })()`)
-      k.wc.sendInputEvent({ type: 'mouseWheel', x: ground.x, y: ground.y, deltaX: 0, deltaY: -80 }); await sleep(500)
-      for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-shared-relay-attach]')`)); i++) await sleep(100)
-      if (!(await k.js(`!!document.querySelector('[data-shared-relay-attach]')`))) throw new Error('shared-canvas scene: sam\'s relay placeholder did not offer Attach')
+      for (let i = 0; i < 30 && !(await k.js(`document.querySelectorAll('[data-shared-placeholder]').length >= 2`)); i++) await sleep(100)
+      if (!(await k.js(`document.querySelectorAll('[data-shared-placeholder]').length >= 2`))) throw new Error('shared-canvas scene: sam\'s placeholders did not draw')
       await sleep(500)
       await k.shot('shared-canvas')
     } },
@@ -1325,7 +1318,6 @@ const SCENES = [
       await sleep(300)
       await k.shot('shared-offline')
       await k.js(`window.canvas.settings.set('labs.accounts', false)`)
-      await k.js(`window.canvas.settings.set('labs.relay', false)`)
     } },
   { name: 'inspector-caps', intent: 'M350–M352. The context pane, Work tab, on an AGENT CONVERSATION held at its own cap: under Cost, a Caps section reads `Spend $2.10 of $2.00 — this agent\'s cap` and `Context 118k tokens of 150k — Settings cap`; one amber sentence says the agent reached its own $2.00 spend cap ($2.10 reported) and names its fix (raise its own cap here, or cap-agent in the palette); two fields, each named on screen (`Spend cap $` holding the record\'s 2, `Context cap` blank and reading Settings, `k tokens`), beside Set; and the verb\'s own answer from the Set that wrote the cap (`spend cap $2.00`). On the chat itself the state pill reads idle with nothing waiting, and its close reads `end?` because the agent\'s process is still alive (a hold keeps the agent; closing would end it); the auto run\'s resolved chip stays in the header beside the pill and reads `auto stuck` with its dismiss (M356: what the run came to never clips; its reason, `— cap reached`, gives first, and the whole sentence with its mode is the chip\'s title), the Auto… door is hidden while the chip shows, and every control in the header is painted inside the chat\'s frame (the scene hit-tests each). DISCLOSED: the cap was written through the fields and Set (the verb\'s canvas door); the hold is the pushes main\'s agent runtime sends when a result crosses the cap (the status, the stuck run, its dropped continuation and the meter), sent as those pushes. M380: under Context, a `Window` line says what is left of the window the CLI reported (`82k of 200k left — 59% used`), and under the cost a muted sentence says what caching returned at list price (`caching saved $0.06 — …`).',
     run: async (k) => {
@@ -1439,13 +1431,13 @@ const SCENES = [
       k.wc.send('agent:state', { panelId: 'chat', state: 'idle' })
       await k.click('[data-dock="attention"][aria-pressed="true"]'); await sleep(300)
     } },
-  { name: 'team-ask', intent: 'M375–M378. A TEAMMATE\'S AGENT ASKING, in this person\'s Needs you: below whatever waits on this machine, a section `Your team is asking · 2`. Each row names WHOSE agent (`sam\'s agent · tests — api`, `sam\'s agent · relay · shell`) with a jump, the WHOLE line it would run in mono, wrapped and never cut (`Bash — npm test -- --watch=false`; the second a curl whose bearer token reads `[redacted bearer token]`), how far the answers have got (`one person\'s allow decides it`; `1 of 2 allowed — spend past the team\'s line needs two people`), `1 secret hidden before it left their machine` on the second, how long it has waited, and two answers — `Allow once` and `Deny`, never a standing grant. The dock\'s badge counts them. DISCLOSED: the two rows are main\'s `team:asks-changed` push as a shared workspace\'s doc would produce it; nobody answers, and the list is emptied after the shot.',
+  { name: 'team-ask', intent: 'M375–M378. A TEAMMATE\'S AGENT ASKING, in this person\'s Needs you: below whatever waits on this machine, a section `Your team is asking · 2`. Each row names WHOSE agent (`sam\'s agent · tests — api`, `sam\'s agent · lint — web`) with a jump, the WHOLE line it would run in mono, wrapped and never cut (`Bash — npm test -- --watch=false`; the second a curl whose bearer token reads `[redacted bearer token]`), how far the answers have got (`one person\'s allow decides it`; `1 of 2 allowed — spend past the team\'s line needs two people`), `1 secret hidden before it left their machine` on the second, how long it has waited, and two answers — `Allow once` and `Deny`, never a standing grant. The dock\'s badge counts them. DISCLOSED: the two rows are main\'s `team:asks-changed` push as a shared workspace\'s doc would produce it; nobody answers, and the list is emptied after the shot.',
     run: async (k) => {
       const now = Date.now()
       const row = (askId, panelId, panelTitle, summary, over = {}) => ({ workspaceId: 'w1', askId, panelId, panelTitle, ownerName: 'sam', tool: 'Bash', summary, scrubbed: 0, need: 1, allows: 0, at: now - 150000, ...over })
       k.wc.send('team:asks-changed', [
         row('hostsam1_q1', 'hostsam1_n1', 'tests — api', 'npm test -- --watch=false'),
-        row('hostsam1_q2', 'hostsam1_r1', 'relay · shell', 'curl -H "Authorization: Bearer [redacted bearer token]" https://api.github.com/repos/acme/canvas/releases', { need: 2, allows: 1, scrubbed: 1, at: now - 90000 })
+        row('hostsam1_q2', 'hostsam1_n2', 'lint — web', 'curl -H "Authorization: Bearer [redacted bearer token]" https://api.github.com/repos/acme/canvas/releases', { need: 2, allows: 1, scrubbed: 1, at: now - 90000 })
       ])
       await sleep(300)
       await k.dock('attention'); await sleep(500)
@@ -1993,10 +1985,10 @@ app.whenReady().then(async () => {
   // M300. The shot run's own run ledger, in a temp dir — never the real
   // userData — so a scene can write the rows its tab is meant to show.
   const shotLedger = createRunLedger({ file: join(mkdtempSync(join(tmpdir(), 'tc shot ledger ')), 'ledger.jsonl') })
-  // M336–M338. The account, the org the share dialog reads, and the relay —
+  // M336–M338. The account and the org the share dialog reads —
   // OFF for every scene until the last three turn them on, so no earlier
   // golden grows an avatar in its top bar. Nothing here reaches a network:
-  // sign-in, use and every relay write are refused or recorded by name.
+  // sign-in and use are refused by name.
   const SHOT_ORG = { id: '11111111-1111-1111-1111-111111111111', name: 'Acme' }
   const SHOT_ME = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   const shotAccount = {
@@ -2016,8 +2008,7 @@ app.whenReady().then(async () => {
   }
   // M345. A SHARED workspace, from the owner's seat — off until the last two
   // scenes turn it on, like the account above. sam is a teammate on another
-  // Mac: two placeholders on the canvas (a relay terminal with a session, so
-  // it offers Attach, and a terminal), a peer in the presence roster (named,
+  // Mac: two terminal placeholders on the canvas, a peer in the presence roster (named,
   // coloured, with a live cursor), and a member in the share's Members list.
   // Nothing here opens a doc or reaches a network: the view and the roster
   // are what main's canvas-sync and presence hub WOULD push, sent as those
@@ -2042,31 +2033,6 @@ app.whenReady().then(async () => {
       ? { kind: 'ok', orgId: SHOT_ORG.id, members: shotSharedMembers }
       : { kind: 'refused', reason: 'this share is not in the harness' }),
     setShareMember: async () => ({ kind: 'refused', reason: 'the screenshot harness does not change roles' })
-  }
-  const SHOT_RELAY_SESSION = 'shotRelaySession0001'
-  const SHOT_RELAY_SCREEN = 'ada@relay:~$ uptime\r\n 14:02:11 up 12 days,  3:41,  2 users,  load average: 0.08, 0.12, 0.09\r\nada@relay:~$ ls deploy\r\nCaddyfile  relay.env.example  setup.sh  tc-relay.service\r\nada@relay:~$ '
-  const shotRelayPanels = new Set()
-  const shotRelayView = (panelId) => ({
-    panelId, sessionId: SHOT_RELAY_SESSION, connection: 'open', userId: SHOT_ME, role: 'owner',
-    control: { sessionId: SHOT_RELAY_SESSION, ownerId: SHOT_ME, controllerId: SHOT_ME, requests: [], peers: [{ userId: SHOT_ME, sockets: 1 }], cols: 96, rows: 24 },
-    canType: true, canRequest: true, program: 'shell', exited: false, reason: null
-  })
-  const shotRelayArrive = (panelId) => {
-    shotRelayPanels.add(panelId)
-    setTimeout(() => {
-      wc.send(SHOT_EVENTS.RELAY_STATE, shotRelayView(panelId))
-      wc.send(SHOT_EVENTS.RELAY_DATA, { panelId, data: new Uint8Array(Buffer.from(SHOT_RELAY_SCREEN)), reset: true })
-    }, 50)
-    return { kind: 'ok', sessionId: SHOT_RELAY_SESSION }
-  }
-  const shotRelay = {
-    spawn: async (panelId) => shotRelayArrive(panelId),
-    attach: async (panelId) => shotRelayArrive(panelId),
-    detach: (panelId) => { shotRelayPanels.delete(panelId) },
-    input: () => false, resize: () => {}, control: () => {}, kill: () => {},
-    list: async () => (shotAccount.on ? { kind: 'ok', sessions: [] } : { kind: 'refused', reason: 'the relay is not wired in this build' }),
-    view: (panelId) => (shotRelayPanels.has(panelId) ? shotRelayView(panelId) : null),
-    replay: (panelId) => { if (shotRelayPanels.has(panelId)) wc.send(SHOT_EVENTS.RELAY_DATA, { panelId, data: new Uint8Array(Buffer.from(SHOT_RELAY_SCREEN)), reset: true }) }
   }
   registerIpcHandlers(
     ptyManager, layoutStore,
@@ -2212,7 +2178,8 @@ app.whenReady().then(async () => {
     // M336–M338. See shotAccount above.
     shotAccountDoors,
     shotPresence,
-    shotRelay
+    // M685. The relay's slot, kept empty: the list is positional.
+    undefined
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   // M463. Both 3D views pick their quality tier from MEASURED frame time and
@@ -2462,6 +2429,27 @@ app.whenReady().then(async () => {
     // 120ms apart). A pane closed a moment ago re-lays the canvas out after
     // the setting lands; a goTo centred on the OLD width bakes that width into
     // the camera, which is the other half of the edge scenes' two pictures.
+    // M693. A chat's transcript at rest: its row count, scroll height and
+    // scroll top the same across four reads 150ms apart (and, when asked, the
+    // approval card up). The `approval` scene sends a message and the fake
+    // agent's reply and question arrive on their own timer; a fixed sleep
+    // caught the transcript one row early on some runs and one row late on
+    // others (main 328e2b8: approval and verbs ~1% off, every changed pixel
+    // inside the chat's transcript). Bounded: a chat that never settles is
+    // shot as it is after ~6s, and the log says so.
+    chatStill: async (panelId, { card = false } = {}) => {
+      const probe = `(() => { const p = document.querySelector('.panel[data-panel-id="${panelId}"]'); const t = p && p.querySelector('[data-chat-transcript]'); if (!t) return 'none'; return [t.children.length, t.scrollHeight, Math.round(t.scrollTop), ${card ? "!!p.querySelector('.inline-approval__wait')" : 'true'}].join(',') })()`
+      let prev = ''
+      let agreed = 0
+      let i = 0
+      for (; i < 40 && agreed < 3; i++) {
+        const now = await js(probe)
+        agreed = now === prev && !now.endsWith(',false') ? agreed + 1 : 0
+        prev = now
+        await sleep(150)
+      }
+      console.log(`[shot] chat ${panelId} ${agreed >= 3 ? 'still' : 'NOT still'} after ${i} reads: ${prev}`)
+    },
     layoutStill: async () => {
       let prev = ''
       let agreed = 0

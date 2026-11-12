@@ -1,5 +1,5 @@
 import { triggerWord } from '@shared/watch-trigger'
-import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
+import { isShapePanel, isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
   isFilePanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
@@ -124,8 +124,6 @@ export function panelLabel(panel: Panel): string {
   if (isNotePanel(panel)) return `${panel.note.form}: ${panel.title ?? noteSummary(panel.note.text, panel.note.form)} (${panel.rect.id})`
   // M388. The seventeenth kind, named by its form and its label's first line.
   if (isShapePanel(panel)) return `${panel.shape.form}: ${shapeSummary(panel.shape.text, panel.shape.form)} (${panel.rect.id})`
-  // M338. A relay terminal, named by the program it runs on the relay.
-  if (isRelayPanel(panel)) return `relay: ${panel.title ?? panel.relay.program} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it

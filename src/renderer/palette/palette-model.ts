@@ -369,7 +369,17 @@ export function leadsQuery(query: string, command: Command): boolean {
 
 export function matchCommand(query: string, command: Command): number | null {
   const fuzzy = fuzzyMatch(query, haystack(command))
-  if (fuzzy !== null) return fuzzy.score + (query.trim() !== '' && fuzzyMatch(query, command.title) !== null ? VISIBLE_BONUS : 0) + tierBonus(query, command) + (leadsQuery(query, command) ? LEAD_BONUS : 0)
+  if (fuzzy !== null) {
+    // The matcher is greedy and leftmost, and the haystack LEADS with
+    // searchText, so a title the query spells exactly could score as a
+    // scatter through the hidden words in front of it: "Login shell" ranked
+    // the preset of that name below the environment's info row "Login shell
+    // read: /bin/bash", and Enter ran the info row — which does nothing. The
+    // title's own match is scored too, and the better of the two counts.
+    const inTitle = query.trim() === '' ? null : fuzzyMatch(query, command.title)
+    const base = Math.max(fuzzy.score, inTitle?.score ?? -Infinity)
+    return base + (inTitle !== null ? VISIBLE_BONUS : 0) + tierBonus(query, command) + (leadsQuery(query, command) ? LEAD_BONUS : 0)
+  }
   const q = query.trim().toLowerCase()
   if (command.pathText !== undefined && q !== '' && command.pathText.toLowerCase().includes(q)) return PATH_SCORE
   return null
