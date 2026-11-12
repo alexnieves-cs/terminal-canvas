@@ -38,3 +38,19 @@ checks that decks still ride and drops the sheet adapter's.
 No scene showed a sheet. The integrations scene showed a rejected Jira credential and the
 main fixture held a Jira panel, so `integrations` and the scenes over that fixture change.
 They are re-taken only after the gallery has been looked at.
+
+## Goldens (run 43121675080)
+
+Taken on the macOS runner after the scenes were looked at, old beside new. 26 scenes changed,
+all because the shot fixture no longer has a Jira panel:
+
+- `integrations`: the Jira card and its "token rejected" warning are gone from Connections;
+  GitHub is the only service, as intended.
+- `kinds`, `navigator-panels`, `overview`, `group`, `group-collapsed`, `merged`, `zoomed-out`,
+  `zoomed-out-dark`, `wide`: one panel fewer on the canvas and in the navigator
+  ("Elsewhere 18" becomes 17). Nothing else moves.
+- `chat`, `composer`, `vault`, `watcher`, `teammate`, `routine`, `github`, `file-missing`,
+  `ink`, `reduced-motion`, `inspector-caps`, `workflow-edit`, `kinds-dark`: the strip of canvas
+  where the Jira panel stood now shows grid instead.
+- `queue-hold`, `plan-approval`, `team-ask`: the same gap in a 32px tile behind the cards; the
+  cards themselves are unchanged.
