@@ -86,8 +86,8 @@ says `X-Forwarded-Proto: https`.
 - **Fly.io.** `fly launch --dockerfile deploy/host/Dockerfile --no-deploy`, then
   `fly volumes create tc_home --size 10`, mount it at `/home/tc` in `fly.toml`,
   `fly secrets set TC_HOST_TOKEN=…`, and `fly deploy`.
-- **A VM you own.** `docker run` as above behind Caddy (the relay's
-  `server/relay/deploy/Caddyfile` shows the shape).
+- **A VM you own.** `docker run` as above behind Caddy (the collab server's
+  `server/collab/deploy/Caddyfile` shows the shape).
 
 First visit: sign in with the token, then open a terminal from the palette
 (⌘K → New Terminal) and run `claude` to sign Claude Code in on the host.

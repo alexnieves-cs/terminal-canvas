@@ -138,7 +138,6 @@ import type { CredentialMeta } from './credential-schema'
 import type { AccountLoginResult, AccountLogoutResult, AccountSessionMeta, AccountStatus, AccountUseResult, ShareListResult, ShareMemberResult, ShareMembersResult, ShareResult } from './account'
 import type { CanvasOp, CanvasSharedView, SharedSaveMeta, SharedTextOpen, SharedTextPush, Verdict, WorkspaceRole } from './canvas-ops'
 import type { LocalPresence, PresenceRoster } from './presence'
-import type { RelayControlState, RelayRole, RelaySessionMeta } from './relay-protocol'
 import type { TeamListResult, TeamObserved, TeamObserveRequest } from './team'
 import type { TeamAskRow } from './team-asks'
 /** M377. One person's answer to one team ask: allow once, or deny. */
@@ -562,28 +561,6 @@ export const IPC = {
    * text-edit pass. A refusal means the replica diverged and re-opens.
    */
   TEXT_UPDATE: 'text:update',
-  /**
-   * The pty relay (main/relay/relay-client.ts → server/relay on the team's VM):
-   * a terminal whose process runs on the relay, not on this Mac. Main holds the
-   * socket and the token; the renderer sends keystrokes and gets RELAY_DATA and
-   * RELAY_STATE. Spawn names an ALLOWLISTED program — the relay's programs.json
-   * decides what that runs, and no path or argv ever crosses this bridge.
-   */
-  RELAY_SPAWN: 'relay:spawn',
-  /** Attach a panel to an existing relay session (a teammate's, shared through a workspace). */
-  RELAY_ATTACH: 'relay:attach',
-  RELAY_DETACH: 'relay:detach',
-  /** Keystrokes. Gated in main on the control state, and again per frame by the relay. */
-  RELAY_INPUT: 'relay:input',
-  /** Only the controller's resize is sent; everyone else renders at the controller's size. */
-  RELAY_RESIZE: 'relay:resize',
-  /** request / release / revoke, or grant / deny a named person. */
-  RELAY_CONTROL: 'relay:control',
-  RELAY_KILL: 'relay:kill',
-  /** The relay sessions this person owns. */
-  RELAY_LIST: 'relay:list',
-  /** A panel's view now, and a full replay pushed after it — for a renderer that just (re)loaded. */
-  RELAY_VIEW: 'relay:view',
   /** M88. The issues assigned to you and the pull requests waiting on you, through the injected GitHub client. */
   GITHUB_LIST: 'github:list',
   /** M89. The broker's audit rows, newest first — the FIRST channel that reads the audit; metadata only. */
@@ -1311,10 +1288,6 @@ export const IPC_EVENTS = {
   AUTH_CHANGED: 'auth:changed',
   /** Shared text: a doc update for an open replica, or `reset` when its room closed or reopened. */
   TEXT_REMOTE: 'text:remote',
-  /** Relay terminal bytes for one panel; `reset` clears the terminal first (a replay follows). */
-  RELAY_DATA: 'relay:data',
-  /** A relay panel's view — connection, role, the control picture — on every change. */
-  RELAY_STATE: 'relay:state',
   /**
    * World view. A batch of AgentEvents (shared/world-events.ts), oldest first —
    * an array so a feed can batch without changing the channel. Two senders,
@@ -2493,23 +2466,6 @@ export interface CanvasBridge {
     onRemote(listener: (push: SharedTextPush) => void): () => void
   }
   /**
-   * See RELAY_SPAWN. No member returns or takes a token; `userId` in a view is
-   * the signed-in person's own id, which the renderer already shows.
-   */
-  relay: {
-    spawn(req: RelaySpawnRequest): Promise<RelayOpenResult>
-    attach(req: { panelId: string; sessionId: string }): Promise<RelayOpenResult>
-    detach(panelId: string): Promise<void>
-    input(panelId: string, data: string): Promise<boolean>
-    resize(req: { panelId: string; cols: number; rows: number }): Promise<void>
-    control(req: RelayControlRequest): Promise<void>
-    kill(panelId: string): Promise<void>
-    list(): Promise<RelayListResult>
-    view(panelId: string): Promise<RelayView | null>
-    onData(listener: (data: RelayData) => void): () => void
-    onState(listener: (view: RelayView) => void): () => void
-  }
-  /**
    * See WORLD_EVENTS. The renderer's agent-world store is the one subscriber to
    * both pushes, and every view reads the store, never this.
    */
@@ -2714,33 +2670,3 @@ export interface CanvasBridge {
   }
 }
 
-// ---- the pty relay (main/relay/relay-client.ts) --------------------------------
-
-export type RelayConnection = 'connecting' | 'open' | 'reconnecting' | 'closed'
-
-/** What the renderer draws a relay panel from. Carries no token. */
-export interface RelayView {
-  panelId: string
-  sessionId: string | null
-  connection: RelayConnection
-  userId: string | null
-  role: RelayRole | null
-  control: RelayControlState | null
-  /** Whether this person may type now: the renderer's input gate. */
-  canType: boolean
-  canRequest: boolean
-  program: string | null
-  exited: boolean
-  /** The last refusal or failure, by name; cleared by the next good attach. */
-  reason: string | null
-}
-
-/** Terminal bytes for one panel. `reset`: clear the terminal before writing — a full replay follows. */
-export interface RelayData { panelId: string; data: Uint8Array; reset: boolean }
-
-export interface RelaySpawnRequest { panelId: string; program: string; cols: number; rows: number; shareId?: string }
-export type RelayOpenResult = { kind: 'ok'; sessionId: string } | { kind: 'refused'; reason: string }
-export type RelayControlRequest =
-  | { panelId: string; action: 'request' | 'release' | 'revoke' }
-  | { panelId: string; action: 'grant' | 'deny'; userId: string }
-export type RelayListResult = { kind: 'ok'; sessions: RelaySessionMeta[] } | { kind: 'refused'; reason: string }

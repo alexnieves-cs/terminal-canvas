@@ -180,7 +180,7 @@ export function FarTitle({ title }: { title: ReactNode }): JSX.Element {
 }
 
 /** M69. The word a sessionless kind shows in its summary's state slot. */
-const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow', image: 'image', note: 'note', relay: 'relay', shape: 'shape' }
+const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow', image: 'image', note: 'note', shape: 'shape' }
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, headerPath, headerPathTitle, headerBranch, agentGlyph, agentState, owner,

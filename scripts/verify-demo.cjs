@@ -237,7 +237,7 @@ check('demo.layout.2 the canvas layout.load answers keeps every cast panel and t
   //        shape is red. The critic's two blank-page doors are named here.
   {
     const want = {
-      'scrollback.tail': 'list', 'scrollback.search': 'record', 'relay.list': 'refusal', 'preset.spawnById': 'nullable',
+      'scrollback.tail': 'list', 'scrollback.search': 'record', 'sharedCanvas.shares': 'refusal', 'preset.spawnById': 'nullable',
       'pty.onData': 'subscribe', 'file.pathForFile': 'sync', 'layout.save': 'void', 'git.status': 'refusal', 'agentSession.grants': 'list'
     }
     const known = new Set(['subscribe', 'sync', 'list', 'nullable', 'void', 'boolean', 'number', 'string', 'refusal', 'record'])
@@ -267,13 +267,13 @@ check('demo.layout.2 the canvas layout.load answers keeps every cast panel and t
   if (bridgeMod.mod !== undefined) {
     const { bridge, notices } = demo()
     const tail = await bridge.scrollback.tail({ panelId: 'x', lines: 10 })
-    const relay = await bridge.relay.list()
+    const shares = await bridge.sharedCanvas.shares()
     const github = await bridge.github.list()
     const search = await bridge.scrollback.search('x')
     const saved = await bridge.teammate.save({}).then(() => 'resolved', () => 'rejected')
-    const pass = Array.isArray(tail) && tail.length === 0 && relay.kind !== 'ok' && typeof relay.reason === 'string' && github.kind !== 'items' &&
+    const pass = Array.isArray(tail) && tail.length === 0 && shares.kind !== 'ok' && typeof shares.reason === 'string' && github.kind !== 'items' &&
       Array.isArray(search.hits) && saved === 'rejected' && notices.includes('teammate.save')
-    ok('demo.shapes.3 stubs answer in the declared shape: [] for a list, a reasoned refusal for a union, a rejection for a record write', pass, JSON.stringify({ tail, relay: relay.kind, github: github.kind, hits: search.hits, saved, notices }))
+    ok('demo.shapes.3 stubs answer in the declared shape: [] for a list, a reasoned refusal for a union, a rejection for a record write', pass, JSON.stringify({ tail, shares: shares.kind, github: github.kind, hits: search.hits, saved, notices }))
   } else ok('demo.shapes.3 stubs answer in the declared shape: [] for a list, a reasoned refusal for a union, a rejection for a record write', false, bridgeMod.error)
 
   // demo.entry.1. ORDER IS THE CONTRACT (src/web/main.ts): the bridge is

@@ -1,5 +1,5 @@
 import { workflowWatchLabel } from '@renderer/workflow/workflow-diagram'
-import { isShapePanel, isNotePanel, isRelayPanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isShapePanel, isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
@@ -137,8 +137,6 @@ export function railLabel(
   if (isBrowserPanel(panel)) return `browser · ${browserHost(panel.url)}`
   // M187. A note reads by its own first line — its name is what it says.
   if (isNotePanel(panel)) return `${panel.note.form} · ${noteSummary(panel.note.text, panel.note.form, 32)}`
-  // M338. A relay terminal reads by what it runs, marked as the relay's.
-  if (isRelayPanel(panel)) return `relay · ${panel.relay.program}`
   // M388. A shape reads by its label (it is not listed in the rail — ledger
   // D8 — but the inspector's heading and a search hit read through here).
   if (isShapePanel(panel)) return `${shapeFormWord(panel.shape.form)} · ${shapeSummary(panel.shape.text, panel.shape.form, 32)}`
@@ -357,7 +355,7 @@ export type RailRoleId = 'doing' | 'review' | 'files' | 'watching' | 'related' |
 export interface RailGroup<R extends { state: { kind: string } }> { id: RailGroupId | RailRoleId; label: string; rows: R[] }
 
 const GROUP_ORDER: { id: RailGroupId; label: string; kinds: readonly string[] }[] = [
-  { id: 'agents', label: 'Agents', kinds: ['terminal', 'chat', 'relay'] },
+  { id: 'agents', label: 'Agents', kinds: ['terminal', 'chat'] },
   { id: 'files', label: 'Files', kinds: ['file', 'note', 'image', 'browser', 'memory'] },
   { id: 'reviews', label: 'Reviews', kinds: ['review'] },
   { id: 'work', label: 'Work', kinds: ['work', 'github'] },

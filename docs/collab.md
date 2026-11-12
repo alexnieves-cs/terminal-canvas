@@ -2,7 +2,7 @@
 
 `server/collab` is the Hocuspocus server behind presence, the shared canvas and shared
 text (M331–M334). This page is for the person who runs it. [accounts.md](accounts.md) says
-what the rooms carry and who may write them; [relay.md](relay.md) is the relay's own page.
+what the rooms carry and who may write them.
 Both servers run on the same VM, behind the same Caddy.
 
 ## What runs where
@@ -20,14 +20,15 @@ The app connects with `TC_PRESENCE_URL=wss://<name>/collab`.
 ## Deploy
 
 ```sh
-TC_RELAY_SSH=ubuntu@<vm ip> TC_RELAY_DOMAIN=<name> npm run collab:deploy
+TC_COLLAB_SSH=ubuntu@<vm ip> TC_COLLAB_DOMAIN=<name> npm run collab:deploy
 ```
 
 `deploy.sh` builds the three bundles (`scripts/collab-server.cjs --build-only`) and copies
-them, the units and the VM's one Caddyfile (the relay's, which routes `/collab` too). Then
+them, the units and the VM's Caddyfile (it routes `/collab`). Then
 it runs `setup.sh` on the VM. `setup.sh` is idempotent: re-running it upgrades the
-bundles and keeps `/etc/tc-collab/collab.env`. `TC_COLLAB_SSH` and `TC_COLLAB_DOMAIN`
-point it at a VM of its own.
+bundles and keeps `/etc/tc-collab/collab.env`. A VM set up before M685 removed the pty
+relay still answers to `TC_RELAY_SSH` and `TC_RELAY_DOMAIN`, and its Caddyfile loses the
+relay route on the next deploy.
 
 Then edit `/etc/tc-collab/collab.env` (0640, root:tc-collab) and run
 `sudo systemctl restart tc-collab`. Every variable is in `collab.env.example` with its

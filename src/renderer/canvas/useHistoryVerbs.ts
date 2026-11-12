@@ -24,7 +24,6 @@ import { panelState } from '@renderer/panels/panel-state'
 import { BACKENDS, backendOf } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
-import { disposeRelayTerminal } from '@renderer/relay/RelayTerminal'
 import { clearBrowser } from '@renderer/browser/browser-store'
 import { buildRunRows } from '@renderer/shell/rail-sections'
 import { clearLastLine } from '@renderer/session/last-line-store'
@@ -271,7 +270,7 @@ export function useHistoryVerbs(deps: UseHistoryVerbsDeps) {
         clearFileResult(panel.rect.id)
         clearToolbox(panel.rect.id)
         // M73. See onClosePanel: main's session, main's file, no registry.
-        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id); disposeRelayTerminal(panel.rect.id)
+        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id)
         markLaneClosed(panel.rect.id)
         continue
       }

@@ -11,7 +11,6 @@
  * is the object under construction rather than a getter.
  */
 
-import { disposeRelayTerminal } from '@renderer/relay/RelayTerminal'
 import { forgetAgentLinksFor } from '../agent-links-store'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
@@ -313,7 +312,7 @@ export function workspacesActions(ctx: ActionCtx): WorkspacesActions {
                     // doomed id, since a hidden workspace's chat is not in
                     // panelsRef to be told apart: for any other kind this is
                     // a no-op in main (no session) and on disk (no file).
-                    disposeChat(panelId, true); disposeWatcher(panelId); disposeRelayTerminal(panelId)
+                    disposeChat(panelId, true); disposeWatcher(panelId)
                     // M247. BEFORE the sessionless `continue` below: a file object is
                     // exactly what agent links point AT, so its links must go too.
                     forgetAgentLinksFor(panelId)

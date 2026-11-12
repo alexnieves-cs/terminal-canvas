@@ -22,7 +22,7 @@
  * and the plain-node suites all read the same list.
  */
 
-export type LabId = 'world' | 'accounts' | 'relay' | 'decks' | 'toolbox' | 'tournament' | 'flowcharts' | 'film' | 'fork'
+export type LabId = 'world' | 'accounts' | 'decks' | 'toolbox' | 'tournament' | 'flowcharts' | 'film' | 'fork'
 
 /**
  * M642 (lane W). SIMPLE AND FULL. One boolean, off by default, that the
@@ -70,7 +70,6 @@ export const LABS: readonly LabDef[] = [
   // The account menu and the People page go with these rows. A DMG without
   // TC_SUPABASE_URL already answers "accounts are not configured" behind each.
   { id: 'accounts', setting: 'labs.accounts', shown: false, rows: ['account.sign-in', 'canvas.people', 'share.workspace', 'share.open', 'share.role'] },
-  { id: 'relay', setting: 'labs.relay', shown: false, rows: ['object.create.relay'] },
   { id: 'decks', setting: 'labs.decks', shown: false, rows: ['object.create.deck'] },
   { id: 'toolbox', setting: 'labs.toolbox', shown: false, rows: ['panel.toolbox', 'panel.memory'] },
   // M642. The other three surfaces Simple hides. Only what STARTS one: a

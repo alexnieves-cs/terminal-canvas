@@ -57,9 +57,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # 22, not 20: verify:relay and verify:canvas-sync use the global
-          # `WebSocket`, which Node only has from 22. On 20 they threw
-          # `WebSocket is not defined`, and relay then hung to its watchdog.
+          # 22, not 20: verify:canvas-sync uses the global `WebSocket`, which
+          # Node only has from 22. On 20 it threw `WebSocket is not defined`
+          # (verify:relay, removed in M685, hung to its watchdog the same way).
           node-version: 22
           cache: npm
 

@@ -864,15 +864,6 @@ export const SETTINGS: readonly SettingDef[] = [
     category: LABS_CATEGORY
   },
   {
-    id: 'labs.relay',
-    label: 'Show relay terminals',
-    description: 'offer New Relay terminal — it needs a relay server you run',
-    keywords: ['relay', 'remote', 'vm', 'server', 'terminal', 'labs'],
-    type: 'boolean',
-    default: false,
-    category: LABS_CATEGORY
-  },
-  {
     id: 'labs.decks',
     label: 'Show decks',
     description: 'offer New Deck; a deck already on a canvas still opens and exports',

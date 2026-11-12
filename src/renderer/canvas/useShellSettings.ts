@@ -3,7 +3,6 @@ import { type Panel, occupiedRect, terminalRimAt } from '@renderer/panels/panels
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { SettingRow, WorkspaceRow, MergedWorkspace } from '@shared/ipc-contract'
 import { terminalTheme } from '@renderer/terminal/themes'
-import { applyRelayTheme } from '@renderer/relay/RelayTerminal'
 import type { Viewport, WorldRect } from './viewport'
 import { useTheme } from './useTheme'
 
@@ -241,8 +240,6 @@ export function useShellSettings(deps: UseShellSettingsDeps) {
   const resolvedTheme = useTheme(settingRows)
   useEffect(() => {
     registry.applyTerminalOptions({ theme: terminalTheme(resolvedTheme) })
-    // M338. Relay xterms are not in the registry (their pty is remote); same switch.
-    applyRelayTheme(terminalTheme(resolvedTheme))
   }, [resolvedTheme])
 
   // M49: the global terminal font size, read the way glow is, and fanned

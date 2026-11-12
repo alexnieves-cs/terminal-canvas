@@ -42,11 +42,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:open-share / workspace:share-member
                        workspace:share-members
                        text:open / text:close / text:update
-                       relay:spawn / relay:attach / relay:detach / relay:input
-                       relay:resize / relay:control / relay:kill / relay:list / relay:view
                        github:list / broker:audit
-                       jira:list / jira:transitions
-                       jira:comment / jira:transition
                        file:open / file:read / file:close / file:write
                        file:create
                        fs:list
@@ -113,7 +109,6 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        team:asks-changed / team:flow-changed
                        auth:changed
                        text:remote
-                       relay:data / relay:state
                        world:events / world:connection (the real agent feed, and SIMULATE_AGENTS)
                        routine:fire
                        canvas:tidy / canvas:flip

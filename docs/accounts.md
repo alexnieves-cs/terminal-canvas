@@ -63,7 +63,7 @@ The top bar's last control is the account menu: the active account's initials, o
 **Sign in** when accounts are configured and nobody is. With accounts unconfigured and
 nobody signed in it is absent, and the palette's *Account: sign in with GitHub…* row
 names the missing variables. The menu lists every account signed in on this Mac as a
-radio set — the checked one is **active**: presence, sharing and the relay act as it.
+radio set — the checked one is **active**: presence and sharing act as it.
 The choice is kept in `userData/account-active` (a GitHub id, not a secret); signing in
 makes the new account active, and signing out the active one hands it to the newest.
 Main tells the renderer on every change (`auth:changed`, metadata only) and restarts
@@ -145,13 +145,9 @@ canvas:groups  Y.Map< <host>_<group id>, Y.Map<field, value> >   label colour pa
   so two Macs mint the same ids. The prefix is a random install id kept in
   `userData/canvas-host-id`.
 - **Other people's panels are inert placeholders.** Only geometry, kind, a scrubbed
-  title and the owner cross over, plus, for a relay panel (M343), its relay session's
-  id and program NAME. No command, cwd or transcript does. A placeholder starts
-  nothing, and it is a card, not a panel. A relay placeholder offers **Attach**, the
-  person's click, which opens a relay panel on their own canvas joined to that session.
-  The id grants nothing by itself: the relay admits an attach by the share's role,
-  checked on its side against the person's token. Only the panel's owner may bind or
-  re-point the id (`relay-bind` in the role table).
+  title and the owner cross over. No command, cwd or transcript does. A placeholder
+  starts nothing, and it is a card, not a panel. (M343's relay session fields went with
+  the relay in M685; a peer still writing them is refused as an unrecognised change.)
 - **Flowcharts cross as content (M392).** A shape panel's record (`shape`) and any
   panel's arrows (`connectors`) are JSON strings in the panel's field map, capped at
   2 KB and 16 KB. Past the cap a field is not written, and main's log says so. The
@@ -247,7 +243,7 @@ Each dialog names what it acts on (the organization, the shared workspace), beca
 id a terminal passes need not be the one on screen. An unknown id is refused before any
 dialog.
 
-`verify:canvas-sync` covers the binding with two machines over a relay, the schema, the
+`verify:canvas-sync` covers the binding with two machines over an in-process doc relay, the schema, the
 store, the auth lookup, and a **real Hocuspocus server with real providers** on
 loopback. Only Supabase is stubbed. The migration is applied on the live project, and
 its tables and RPCs refuse the anon key there (`npm run supabase:probe`, M342). Its
