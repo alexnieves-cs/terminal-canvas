@@ -89,5 +89,58 @@ check('a11y.name.1 the rail row, the live status and the centre switch keep a sp
   return { pass: detail.rail && detail.live === 2 && detail.top === 3, detail }
 })
 
+// ── M646 (unslop). The polish pass that took out the tells that make an
+// interface read as generated: neon glows on chrome, a 3D flip-in, a bouncy
+// overshoot, and copy that hangs every second clause off an em dash. Each
+// was one declaration or one string, so each is pinned here as source.
+const css = read('src/renderer/styles.css').replace(/\/\*[\s\S]*?\*\//g, '')
+const rule = (sel) => {
+  const out = []
+  const re = /([^{}]+)\{([^{}]*)\}/g
+  let m
+  while ((m = re.exec(css)) !== null) if (m[1].split(',').some((x) => x.trim() === sel)) out.push(m[2])
+  return out
+}
+// unslop.glow.1 Chrome does not spill light. The current dock place, the
+// search field's hover and an agent's glyph each carried a blurred box-shadow
+// of the accent; needs-you is the one tone that glows (rd-tone.glow.1), and a
+// halo on navigation competed with it.
+check('unslop.glow.1 the dock\'s current place, the search hover and the agent glyph carry no blurred glow', () => {
+  // A shadow's THIRD length is its blur; `0 0 0 1px` is a hairline ring, `0 0 12px` a glow.
+  const blurred = (body) => (/box-shadow:([^;]*)/.exec(body)?.[1] ?? '').split(/,(?![^(]*\))/)
+    .some((sh) => { const n = sh.replace(/color-mix\([^)]*\)|var\([^)]*\)|inset/g, '').match(/-?[\d.]+(px)?/g) ?? []; return n.length >= 3 && parseFloat(n[2]) > 0 })
+  const detail = {
+    dock: rule('.dock__button--on').filter(blurred).length,
+    search: rule('.shell__top .shell__search:hover').filter(blurred).length,
+    glyph: rule('.pf--kind-terminal .pf__state--kind[data-agent-glyph]').filter(blurred).length
+  }
+  return { pass: detail.dock === 0 && detail.search === 0 && detail.glyph === 0 && rule('.dock__button--on').length > 0, detail }
+})
+// unslop.dock.1 The labelled dock's buttons are rows. `.icon-button` is an
+// inline-grid that centres its items, so expanded, the icon sat ABOVE its
+// name and the two rows overflowed the 32px button into the next one.
+check('unslop.dock.1 an expanded dock button is a flex row with a gap, so the icon sits beside its name', () => {
+  const body = rule('.shell[data-dock="expanded"] .dock__button').join(';')
+  return { pass: /display:\s*flex/.test(body) && /align-items:\s*center/.test(body) && /gap:\s*var\(--sp-/.test(body), detail: { body } }
+})
+// unslop.motion.1 Arrivals decelerate into place and stop. The success pop
+// overshot to 1.06 and sprang back; the Watch callout flipped in on rotateX.
+check('unslop.motion.1 the verified pop never overshoots and the callout rises without a 3D flip', () => {
+  const pop = /@keyframes integration-verified-pop\s*\{([\s\S]*?)\}\s*\}/.exec(css)?.[1] ?? ''
+  const scales = [...pop.matchAll(/scale\(([\d.]+)\)/g)].map((m) => Number(m[1]))
+  const rise = /@keyframes orch-callout-rise[^\n]*/.exec(css)?.[0] ?? ''
+  return { pass: scales.length > 0 && Math.max(...scales) <= 1 && rise !== '' && !/rotate/.test(rise), detail: { scales, rise } }
+})
+// unslop.copy.1 The empty states and the blank canvas's purpose are written
+// as sentences. An em dash joining two clauses is the most recognisable tell
+// of generated copy; a full stop or a semicolon says the same thing.
+check('unslop.copy.1 no empty-state sentence and no blank-canvas line joins its clauses with an em dash', () => {
+  const s = read('src/shared/empty-states.ts')
+  const code = s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const strings = [...code.matchAll(/'([^'\\]*(?:\\.[^'\\]*)*)'/g)].map((m) => m[1]).filter((x) => /[—]/.test(x))
+  // orch-activity is a template that composes NO_RECENT_EVENTS with \u2014; it is the Orchestrate feed's, read by verify:orchestration.
+  return { pass: strings.length === 0, detail: { strings } }
+})
+
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
 if (results.some((r) => !r.pass)) process.exitCode = 1

@@ -48,7 +48,7 @@ export function ResumeBanner({
   if (shape === 'strip') {
     const detail = [
       summary.purpose,
-      summary.lastOutcome === undefined ? undefined : `last outcome — ${summary.lastOutcome}`,
+      summary.lastOutcome === undefined ? undefined : `Last outcome: ${summary.lastOutcome}`,
       summary.blocker === undefined ? undefined : `open blocker — ${summary.blocker}`,
       summary.nextAction
     ].filter((line): line is string => line !== undefined).join('\n')
@@ -72,7 +72,7 @@ export function ResumeBanner({
           <p className="resume-banner__line" data-resume-purpose>{summary.purpose}</p>
         )}
         {summary.lastOutcome !== undefined && (
-          <p className="resume-banner__line" data-resume-outcome>last outcome — {summary.lastOutcome}</p>
+          <p className="resume-banner__line" data-resume-outcome>Last outcome: {summary.lastOutcome}</p>
         )}
         {summary.blocker !== undefined && (
           <p className="resume-banner__line" data-resume-blocker>open blocker — {summary.blocker}</p>

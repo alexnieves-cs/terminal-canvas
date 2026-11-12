@@ -1805,7 +1805,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const noneArm = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]; const p = ps[ps.length - 1]; const a = p ? p.querySelector('[data-file-backlinks-arm="none"]') : null; return a ? a.textContent : false })()`), 8000)
         const markedRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-vault-note="meetings/2026-09-04.md"]'); return r && r.classList.contains('rail-row--selected') ? true : false })()`), 6000)
         ok(IDS[0],
-          unset && /no notes folder yet/.test(unset.text) && unset.verb === true &&
+          unset && /no notes folder yet/i.test(unset.text) && unset.verb === true &&
             typeof noneArm === 'string' && /no note points here/.test(noneArm) && markedRow === true &&
             Array.isArray(listed) && listed.some((r) => r.path === 'design.md' && r.title === 'The design') && clickedNote.ok === true && clickedLink === true &&
             listed.some((r) => r.path === 'meetings/2026-09-04.md' && r.title === 'Standup') &&

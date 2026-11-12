@@ -107,11 +107,11 @@ const DISCOVERY_SLOW_MS = 8000
 type StartupState = 'finding' | 'slow' | 'rechecking' | 'ready' | 'not-found' | 'no-answer'
 const STARTUP_LINE: Record<StartupState, string> = {
   finding: 'Finding installed agents…',
-  slow: 'Still finding installed agents — this is taking longer than usual',
+  slow: 'Still finding installed agents. This is taking longer than usual.',
   rechecking: 'Checking again…',
   ready: 'Ready',
   'not-found': 'We couldn’t find your installed agents',
-  'no-answer': 'We couldn’t find your installed agents — your shell didn’t answer'
+  'no-answer': 'We couldn’t find your installed agents because your shell didn’t answer'
 }
 
 const INSTALL: Record<string, string> = {
@@ -130,7 +130,7 @@ export function startVerbHint(refusedField: string | undefined, opensChat: boole
 }
 
 /** M395. What the launcher's Create… says it adds — exactly what its sheet offers (verify:first-run revamp.launcher.2). */
-export const CREATE_SHEET_OFFERS = 'Add an object — an agent, a terminal, a conversation or a workflow.'
+export const CREATE_SHEET_OFFERS = 'Add an agent, a terminal, a conversation or a workflow.'
 
 export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, starterHint, onDismissStarterHint, recents, recentUsed, now, onCreateObject, onBlankCanvas, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
   const readiness = onboardingReadiness(report)
@@ -167,7 +167,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
   const opensChat = plan.kind === 'chat' || (plan.kind === 'refused' && readiness.preferred !== undefined && readiness.preferred !== LANE_ENGINE)
   const startReason = onStartWork === undefined ? 'Start work is unavailable in this view' : plan.kind === 'refused' ? plan.reason : null
   const askReason = onAsk === undefined ? 'a conversation is unavailable in this view'
-    : readiness.preferred === undefined ? (unanswered ? 'discovery has not answered yet — Check again' : 'install Claude Code or Codex, then Check again') : null
+    : readiness.preferred === undefined ? (unanswered ? 'discovery has not answered yet. Check again' : 'install Claude Code or Codex, then Check again') : null
   // Readiness ONLY AS NEEDED (guide step 2): with no engine, every row and
   // Check again; with one, its own line — and Claude's row whenever Claude is
   // not the one found, because Start work needs it. The three discovery
@@ -286,7 +286,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
       </div>)}
       {onCheckAgain !== undefined && needsCheck && (
         <div className="launcher__engine launcher__engine--check">
-          <span>{unanswered ? 'Your shell took too long to answer — see Troubleshooting below.' : 'Installed something? Ask the login shell again.'}</span>
+          <span>{unanswered ? 'Your shell took too long to answer. See Troubleshooting below.' : 'Installed something? Ask the login shell again.'}</span>
           <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again disabled={rechecking} title="Ask the login shell again and report what it finds" {...shellControl(checkAgain)}>{rechecking ? 'Checking…' : 'Check again'}</button>
         </div>
       )}
@@ -310,7 +310,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <label className="launcher__field">
             <span className="launcher__label">What are you working on?</span>
             <textarea ref={intentRef} data-edit-owner className="launcher__input launcher__input--sentence" data-onboarding-intent rows={2} value={intention} spellCheck
-              placeholder="In plain language — for example, make the login test stop failing on CI"
+              placeholder="In plain words, for example: make the login test stop failing on CI"
               onChange={(e) => edited(setIntention)(e.target.value)} />
           </label>
           {/* M262. Real sentences about the CHOSEN repository — shown once there
@@ -488,13 +488,13 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
         {onCreateObject !== undefined && (
           <button type="button" className="launcher__verb launcher__verb--door" data-launcher-terminal title="A login shell, where the camera is" {...shellControl(() => onCreateObject('terminal'))}>
             <span className="launcher__verb-name">Terminal</span>
-            <span className="launcher__verb-hint">a plain shell — nothing runs until you type</span>
+            <span className="launcher__verb-hint">a plain shell; nothing runs until you type</span>
           </button>
         )}
         {onCreateObject !== undefined && (
           <button type="button" className="launcher__verb launcher__verb--door" data-launcher-workflow title="An empty workflow to build" {...shellControl(() => onCreateObject('workflow'))}>
             <span className="launcher__verb-name">Workflow</span>
-            <span className="launcher__verb-hint">nodes and triggers — agents and shells that hand work on</span>
+            <span className="launcher__verb-hint">agents and shells that hand work to each other</span>
           </button>
         )}
         <button type="button" className="launcher__verb launcher__verb--door launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>
@@ -508,7 +508,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
         {onBlankCanvas !== undefined && (
           <button type="button" className="launcher__verb launcher__verb--door" data-launcher-blank title="Put this card away and start from the empty canvas — ⌘K has every verb" {...shellControl(onBlankCanvas)}>
             <span className="launcher__verb-name">Blank canvas</span>
-            <span className="launcher__verb-hint">put this card away — ⌘K has every verb</span>
+            <span className="launcher__verb-hint">put this card away; ⌘K has every verb</span>
           </button>
         )}
       </div>
@@ -518,7 +518,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <button type="button" className="launcher__verb" data-launcher-starter disabled={(starterReason ?? null) !== null}
             title={starterReason ?? 'Your agent and one captioned example of each kind of object'} {...shellControl(() => { if ((starterReason ?? null) === null) onOpenStarter() })}>
             <span className="launcher__verb-name">Starter canvas…</span>
-            <span className="launcher__verb-hint">{starterReason ?? 'optional — an agent and a captioned example of each kind of object'}</span>
+            <span className="launcher__verb-hint">{starterReason ?? 'optional: an agent and a captioned example of each kind of object'}</span>
           </button>
         )}
         {/* M190. Import is here because an EMPTY canvas is exactly where a
@@ -528,13 +528,13 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
             title="Read a canvas file into a new workspace; nothing in it is started"
             {...shellControl(() => { void onImportCanvas() })}>
             <span className="launcher__verb-name">Import a canvas…</span>
-            <span className="launcher__verb-hint">a file someone exported — into a new workspace, with nothing started</span>
+            <span className="launcher__verb-hint">a file someone exported, opened in a new workspace with nothing started</span>
           </button>
         )}
         <button type="button" className="launcher__verb" data-launcher-new-chat disabled={chatReason !== null}
           title={chatReason === null ? 'A chat with claude, in your home directory' : chatReason} {...shellControl(() => { if (chatReason === null) onNewChat() })}>
           <span className="launcher__verb-name">Chat with Claude…</span>
-          <span className="launcher__verb-hint">{chatReason === null ? 'a conversation in your home folder — no task, no branch' : chatReason}</span>
+          <span className="launcher__verb-hint">{chatReason === null ? 'a conversation in your home folder, with no task or branch' : chatReason}</span>
         </button>
         {/* M90/M91. The second backend's door, beside the first, disabled by name. */}
         <button type="button" className="launcher__verb" data-launcher-new-codex disabled={codexReason !== null}
@@ -567,9 +567,9 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
         {/* On an empty canvas "select a panel first" names an impossible fix;
             the launcher's own reason says what to do here. */}
         <button type="button" className="launcher__verb" data-launcher-new-note disabled={noteReason !== null}
-          title={noteReason === null ? 'A note, saved beside the selected panel' : 'start a panel first — a note is saved in its directory'} {...shellControl(() => { if (noteReason === null) onNewNote() })}>
+          title={noteReason === null ? 'A note, saved beside the selected panel' : 'start a panel first; a note is saved in its directory'} {...shellControl(() => { if (noteReason === null) onNewNote() })}>
           <span className="launcher__verb-name">New note…</span>
-          <span className="launcher__verb-hint">{noteReason === null ? 'a note panel' : 'start a panel first — a note is saved in its directory'}</span>
+          <span className="launcher__verb-hint">{noteReason === null ? 'a note panel' : 'start a panel first; a note is saved in its directory'}</span>
         </button>
       </div>
       </details>
@@ -587,7 +587,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <div className="launcher__env" data-launcher-env data-launcher-env-kind={outcome?.kind ?? 'pending'} data-launcher-startup={state} role="status" aria-live="polite">
             <p className="launcher__env-line">
               <span data-tone={state === 'ready' ? 'idle' : trouble ? 'needs-you' : 'running'} title={outcome?.sentence}>{STARTUP_LINE[state]}</span>
-              {state === 'ready' && <>{' — '}<span className="launcher__env-hint">the full report is Environment… in ⌘K</span></>}
+              {state === 'ready' && <>{' · '}<span className="launcher__env-hint">the full report is Environment… in ⌘K</span></>}
               {trouble && onCheckAgain !== undefined && (
                 <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-try-again title="Ask the login shell again and report what it finds" {...shellControl(checkAgain)}>Try again</button>
               )}
@@ -611,7 +611,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
         return (
           <p className="launcher__env" data-launcher-update data-launcher-update-version={update.result.version}>
             <span data-tone="needs-you">{update.result.version} is out</span>
-            {' — '}<span className="launcher__env-hint">the app does not install it — download from the release page</span>
+            {' · '}<span className="launcher__env-hint">download it from the release page; the app does not install updates itself</span>
             {onOpenRelease !== undefined && (
               <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-open-release title={url} {...shellControl(() => onOpenRelease(url))}>Open release</button>
             )}

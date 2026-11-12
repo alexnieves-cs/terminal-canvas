@@ -847,12 +847,12 @@ body {
   position: relative;
 }
 .dock__button--on {
-  /* M109. FILLED: the accent as the tile, --on-iris as the glyph, a soft
-     glow of its tint. M66's ring was there because the dim fill was
+  /* M109. FILLED: the accent as the tile, --on-iris as the glyph. M646
+     dropped the soft glow of its tint: chrome does not spill light, only
+     the needs-you tone does (unslop.glow.1). M66's ring was there because the dim fill was
      invisible; a full fill is not. */
   color: var(--on-iris);
   background: var(--iris);
-  box-shadow: 0 0 12px var(--iris-dim);
 }
 /* M66. A 2px iris bar on the dock's left edge for the active pane — the
    same "bar in the left slot means selected" the rail uses. The fill alone
@@ -1574,9 +1574,8 @@ body {
    (the wants-you rule above), never a loop; the reduced-motion block already
    collapses this to its static end state with nothing further to declare. */
 @keyframes integration-verified-pop {
-  0% { transform: scale(0.92); }
-  40% { transform: scale(1.06); }
-  100% { transform: scale(1); }
+  from { transform: scale(0.96); }
+  to   { transform: scale(1); }
 }
 .integration[data-integration-fresh] .integration__pill {
   animation: integration-verified-pop var(--dur-2) var(--ease);
@@ -3304,7 +3303,7 @@ body {
   border-radius: var(--r-sm);
   background: var(--iris-dim);
   color: var(--iris);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--iris) 30%, transparent), 0 0 10px var(--iris-dim);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--iris) 30%, transparent);
 }
 .pf__body { flex: 1; min-height: 0; isolation: isolate; }
 /* M149 (audit F.12). `isolation: isolate` keeps every z-index INSIDE the body
@@ -6967,12 +6966,12 @@ body {
 .dock__button { position: relative; }
 .dock__label { position: absolute; left: calc(100% + var(--sp-2)); top: 50%; transform: translateY(-50%); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease); z-index: 1; }
 .dock__button:hover .dock__label, .dock__button:focus-visible .dock__label { opacity: 1; }
-.dock__button--on { background: var(--iris-dim); color: var(--iris); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--iris-dim), 0 0 10px var(--iris-dim); }
+.dock__button--on { background: var(--iris-dim); color: var(--iris); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--iris-dim); }
 /* `.shell__top .shell__search`: the bar's generic button rule is (0,1,1) and won over a bare class — the first golden showed no field (the Act III critic). */
 .shell__top .shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
 /* M279. A field lights its rim on hover rather than filling: the fill is a
    button's answer, the ring is a field's. */
-.shell__top .shell__search:hover { color: var(--fg); background: var(--s-1); border-color: var(--iris); box-shadow: 0 0 0 1px var(--iris-dim), 0 0 12px var(--iris-dim); }
+.shell__top .shell__search:hover { color: var(--fg); background: var(--s-1); border-color: var(--line-strong); }
 .shell__top .shell__search svg { color: var(--fg-3); }
 .shell__top .shell__search:hover svg { color: var(--iris); }
 @media (prefers-reduced-motion: reduce) { .dock__label { transition: none; } }
@@ -9139,7 +9138,7 @@ th[aria-sort="descending"] .orch__list-sort::after { content: ' \25BC'; font-siz
 .orch__callout-actions { display: flex; gap: var(--sp-4); margin-top: var(--sp-3); }
 .orch__callout-card { transform-origin: center bottom; }
 .orch__callout-slot[data-below] .orch__callout-card { transform-origin: center top; }
-@keyframes orch-callout-rise { from { opacity: 0; transform: translateY(8px) rotateX(-12deg) scale(0.94); } to { opacity: 1; transform: translateY(0) rotateX(0) scale(1); } }
+@keyframes orch-callout-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .orch__callout-card { animation: none; } .orch__callout-detail { transition: none; } }
 /* The card is the cube's other face: click selects, double-click jumps. */
 .orch__callout-card { cursor: pointer; }
@@ -13754,6 +13753,13 @@ tr[data-session-row]:focus-within .sessions-world,
    and no fill, so the primary stays the one filled thing in the bar. */
 .sessions-host__orch { border: 1px solid var(--line-strong); border-radius: var(--r-md); background: transparent; color: var(--fg); font-size: var(--t-sm); font-weight: 500; padding: calc(var(--sp-2) - 1px) var(--sp-4); cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
 .sessions-host__orch:hover { background: var(--s-3); }
+/* M646 (unslop). The labelled dock put each icon ABOVE its name: the
+   button is `.icon-button`, an inline-grid that centres its items, so the
+   svg and the label stacked in two grid rows, and a 32px button with two
+   rows overflowed into the next one. Expanded, a dock button is a row: a
+   fixed icon slot, then the name, on one baseline (unslop.dock.1). */
+.shell[data-dock="expanded"] .dock__button { display: flex; align-items: center; gap: var(--sp-3); }
+.shell[data-dock="expanded"] .dock__button > svg { flex: 0 0 auto; }
 /* ── /st:W ── */
 
 
