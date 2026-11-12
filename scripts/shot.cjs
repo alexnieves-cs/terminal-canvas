@@ -563,6 +563,7 @@ const SCENES = [
       await sleep(300)
       await kit.js(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
       await sleep(500)
+      await kit.chatStill('chat', { card: true })
       await kit.shot('approval')
     } },
   { name: 'verbs', intent: 'M96. The verb line: the palette in text mode on `Run a verb…` after a typed step was refused — the refusal and its fix on the palette\'s own feedback line (`step 1: no panel is called zz9 — name a panel by its id…`), the typed line kept for correction. A plan is shown and refused by name before anything runs.',
@@ -572,6 +573,7 @@ const SCENES = [
       await k.enter(); await sleep(500)
       await k.type('close zz9'); await sleep(200)
       await k.enter(); await sleep(600)
+      await k.chatStill('chat')
       await k.shot('verbs')
       await k.press('Escape'); await sleep(300); await k.press('Escape'); await sleep(300)
     } },
@@ -2462,6 +2464,27 @@ app.whenReady().then(async () => {
     // 120ms apart). A pane closed a moment ago re-lays the canvas out after
     // the setting lands; a goTo centred on the OLD width bakes that width into
     // the camera, which is the other half of the edge scenes' two pictures.
+    // M693. A chat's transcript at rest: its row count, scroll height and
+    // scroll top the same across four reads 150ms apart (and, when asked, the
+    // approval card up). The `approval` scene sends a message and the fake
+    // agent's reply and question arrive on their own timer; a fixed sleep
+    // caught the transcript one row early on some runs and one row late on
+    // others (main 328e2b8: approval and verbs ~1% off, every changed pixel
+    // inside the chat's transcript). Bounded: a chat that never settles is
+    // shot as it is after ~6s, and the log says so.
+    chatStill: async (panelId, { card = false } = {}) => {
+      const probe = `(() => { const p = document.querySelector('.panel[data-panel-id="${panelId}"]'); const t = p && p.querySelector('[data-chat-transcript]'); if (!t) return 'none'; return [t.children.length, t.scrollHeight, Math.round(t.scrollTop), ${card ? "!!p.querySelector('.inline-approval__wait')" : 'true'}].join(',') })()`
+      let prev = ''
+      let agreed = 0
+      let i = 0
+      for (; i < 40 && agreed < 3; i++) {
+        const now = await js(probe)
+        agreed = now === prev && !now.endsWith(',false') ? agreed + 1 : 0
+        prev = now
+        await sleep(150)
+      }
+      console.log(`[shot] chat ${panelId} ${agreed >= 3 ? 'still' : 'NOT still'} after ${i} reads: ${prev}`)
+    },
     layoutStill: async () => {
       let prev = ''
       let agreed = 0
