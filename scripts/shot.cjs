@@ -1248,24 +1248,32 @@ const SCENES = [
       const wsId = sh.store.current().activeWorkspaceId
       sh.store.setWorkspaceShare(wsId, { id: sh.share, orgId: sh.org.id, role: 'owner' })
       // M685. The relay scene that stood here is gone, and with it the owner's
-      // relay panel this row used to sit beneath. The row now takes the same
-      // 720px box centred on the canvas: account-menu's emptyCanvas left the
-      // camera at the origin, scale 1, so the canvas box's centre IS world.
-      const box = await k.js(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); return { w: c.width, h: c.height } })()`)
-      const at = { x: Math.round(box.w / 2 - 360), y: Math.round(box.h / 2 - 80), w: 720, h: 0 }
+      // relay panel sam's placeholders used to sit beneath. account-menu's
+      // emptyCanvas left the camera at the origin, scale 1, so canvas-local
+      // coordinates ARE world coordinates here.
+      //
+      // That canvas is EMPTY now, so it shows the first-run launcher card in
+      // its centre, and a row centred there sat behind the card: the scene's
+      // DOM check passed while the picture showed no placeholder at all. sam's
+      // two terminals stack in the clear ground to the card's right instead,
+      // measured from the card rather than assumed (no card: the same column
+      // at the canvas's right edge).
+      const box = await k.js(`(() => { const c = document.querySelector('.canvas').getBoundingClientRect(); const l = document.querySelector('[data-launcher]'); const r = l ? l.getBoundingClientRect() : null; return { w: c.width, h: c.height, cardRight: r ? r.right - c.left : null } })()`)
+      const colW = 300
+      const colX = Math.round(box.cardRight !== null ? Math.min(box.w - colW - 16, box.cardRight + Math.max(16, (box.w - box.cardRight - colW) / 2)) : box.w - colW - 32)
+      const at = { x: colX, y: Math.round(box.h / 2 - 190), w: colW, h: 0 }
       const place = (id, kind, title, x, y, w, h, extra = {}) => ({ id, kind, title, owner: sh.sam, host: 'hostsam1', x, y, w, h, z: 50, ...extra })
-      const half = (at.w - 30) / 2
       sh.state.view = {
         shareId: sh.share, role: 'owner', seq: 1, rects: [], files: [],
         placeholders: [
-          place('hostsam1_n2', 'terminal', 'lint — web', at.x, at.y + at.h, half, 160),
-          place('hostsam1_n1', 'terminal', 'tests — api', at.x + half + 30, at.y + at.h, half, 160)
+          place('hostsam1_n2', 'terminal', 'lint — web', at.x, at.y, at.w, 160),
+          place('hostsam1_n1', 'terminal', 'tests — api', at.x, at.y + 190, at.w, 160)
         ]
       }
       const samPresence = {
         // The colour a real peer carries: derived from the user id (presence.ts colorOf), the same the placeholders read.
         userId: sh.sam, displayName: 'sam', initials: 'S', color: colorOf(sh.sam), currentPanelId: null,
-        cursor: { x: at.x + half + 150, y: at.y + at.h + 100 }, viewport: null, selection: [], textCursor: null,
+        cursor: { x: at.x + 150, y: at.y + 190 + 100 }, viewport: null, selection: [], textCursor: null,
         mode: 'canvas', agentStatus: 'working', statusLine: '', currentTask: 'Watchdog fires under load', observing: null, lastActivity: Date.now(),
         // M349. sam's agent, as sam's machine publishes it: the panel's id, its scrubbed title, its state.
         agents: [{ id: 'n7', name: 'claude — tests', status: 'working' }]
