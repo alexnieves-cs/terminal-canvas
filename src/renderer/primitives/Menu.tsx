@@ -5,6 +5,7 @@ import { useOpenIntent, triggerProps, contentProps } from './useOpenIntent'
 import type { OpenIntent } from './useOpenIntent'
 import { INERT_PLACEMENT } from './popper'
 import { MotionSurface } from './MotionSurface'
+import { useFocusGuardStops } from './focus-guard-stops'
 
 /**
  * THE MENU PRIMITIVE — Radix's behaviour under this app's existing markup.
@@ -138,6 +139,7 @@ export interface MenuContentProps extends ComponentPropsWithoutRef<'div'> {
 
 export function MenuContent({ children, forceMount, ...rest }: MenuContentProps): JSX.Element {
   const { intent, open, onExitComplete, triggerRef } = useMenu()
+  useFocusGuardStops(open)
   // THE GESTURE THAT OPENS A FORCE-MOUNTED MENU MUST NOT ALSO DISMISS IT.
   //
   // Radix keeps MenuContentImpl — and with it a live DismissableLayer —

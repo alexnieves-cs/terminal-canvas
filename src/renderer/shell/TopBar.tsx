@@ -119,6 +119,12 @@ export function TopBar({
 
   return (
     <header className="shell__top" aria-label="Toolbar">
+      {/* M645. The canvas's level-one heading, for a screen reader's
+          heading list (axe page-has-heading-one). Sessions, Review, Orchestrate
+          and Settings each print their own h1; the canvas was the one view
+          with none. Inside the banner so it sits in a landmark; .sr-only
+          takes it out of the bar's flex row. */}
+      {centerView === 'canvas' && <h1 className="sr-only">Canvas</h1>}
       {/*
         SPIKE. The bar was using roughly a quarter of its width — four small
         controls hard-left, two hard-right, and ~1000px of nothing between.
@@ -145,18 +151,21 @@ export function TopBar({
         // are different jobs, not two views of one thing, and a bare
         // "Orchestrate" never said what a person goes there to do. The name
         // stays first: it is what the dock, the palette and the docs call it.
+        // M645. The {' '} between them is for the accessible name ("Canvas
+        // Arrange and work", not "CanvasArrange"); the button is a flex
+        // column, so it paints nothing.
         options={[
-          { id: 'canvas', label: <><span className="shell__center-name">Canvas</span><span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas — arrange and work: your objects, where you edit and run them', className: 'shell__center-btn' },
+          { id: 'canvas', label: <><span className="shell__center-name">Canvas</span>{' '}<span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas — arrange and work: your objects, where you edit and run them', className: 'shell__center-btn' },
           { id: 'sessions', label: <><span className="shell__center-name">Sessions{badge !== null && <span className="shell__nav-badge" data-sessions-badge>{badge}</span>}</span></>, title: 'Sessions', className: 'shell__center-btn' },
           { id: 'review', label: <><span className="shell__center-name">Review</span></>, title: 'Review', className: 'shell__center-btn' },
           // D2. Orchestrate is not a tab. The segment stays in this control so
           // the panels harness can still press [data-seg="orchestration"];
           // the F3 stylesheet clips it. The doors a person uses are the View
           // menu row, the palette, and the Sessions header link.
-          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span><span className="shell__center-purpose">Monitor and review</span></>, title: 'Show Orchestrate', className: 'shell__center-btn', hidden: true },
+          { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span>{' '}<span className="shell__center-purpose">Monitor and review</span></>, title: 'Show Orchestrate', className: 'shell__center-btn', hidden: true },
           // M404 (C1). "People", not a second name for teammates. The code id
           // stays `team`. Conditional: only when there are people to see.
-          ...(showPeople ? [{ id: 'team' as const, label: <><span className="shell__center-name">People</span><span className="shell__center-purpose">See who is working</span></>, title: 'People — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }] : [])
+          ...(showPeople ? [{ id: 'team' as const, label: <><span className="shell__center-name">People</span>{' '}<span className="shell__center-purpose">See who is working</span></>, title: 'People — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }] : [])
         ]}
       />
 

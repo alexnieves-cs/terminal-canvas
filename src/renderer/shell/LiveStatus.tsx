@@ -35,6 +35,8 @@ function LiveStatusImpl({ running, waiting, onJumpWaiting }: LiveStatusProps): J
         <span className="live-status__item" data-tone={TONE_WORKING} title={`${running} ${working}`}>
           <StatusDot tone={TONE_WORKING} />
           <span className="live-status__count">{running}</span>
+          {/* M645. A space for the accessible name ("3 working", not "3working"); a flex row drops it from paint. */}
+          {' '}
           <span className="live-status__word">{working}</span>
         </span>
       )}
@@ -48,6 +50,7 @@ function LiveStatusImpl({ running, waiting, onJumpWaiting }: LiveStatusProps): J
         >
           <StatusDot tone={TONE_NEEDS_YOU} />
           <span className="live-status__count">{waiting}</span>
+          {' '}
           <span className="live-status__word">{needsYou}</span>
         </button>
       )}

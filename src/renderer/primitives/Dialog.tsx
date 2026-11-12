@@ -2,6 +2,7 @@ import * as Radix from '@radix-ui/react-dialog'
 import type { ReactNode, ComponentPropsWithoutRef, JSX } from 'react'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { MotionSurface } from './MotionSurface'
+import { useFocusGuardStops } from './focus-guard-stops'
 
 /**
  * THE DIALOG PRIMITIVE — the one overlay Radix does NOT position.
@@ -63,6 +64,7 @@ export interface DialogContentProps extends ComponentPropsWithoutRef<'div'> {
 
 export function DialogContent({ children, ...rest }: DialogContentProps): JSX.Element {
   const { open, onExitComplete } = useContext(DialogOpen)
+  useFocusGuardStops(open)
   return (
     // M345. NOT force-mounted. Dialog above already keeps Radix open until
     // Motion's exit completes (`mounted`), so the content cannot vanish before

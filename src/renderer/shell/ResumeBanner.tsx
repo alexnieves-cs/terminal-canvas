@@ -53,18 +53,18 @@ export function ResumeBanner({
       summary.nextAction
     ].filter((line): line is string => line !== undefined).join('\n')
     return (
-      <aside className="resume-strip" data-resume-banner data-resume-shape="strip" role="status" title={`${summary.title}\n${detail}`}>
+      <div className="resume-strip" data-resume-banner data-resume-shape="strip" role="status" title={`${summary.title}\n${detail}`}>
         <span className="resume-banner__kicker">Resume</span>
         <span className="resume-strip__title">{summary.title}</span>
         {summary.blocker !== undefined
           ? <span className="resume-strip__line resume-strip__line--blocker" data-resume-blocker>open blocker — {summary.blocker}</span>
           : <span className="resume-strip__line" data-resume-next>{summary.nextAction}</span>}
         {verbs}
-      </aside>
+      </div>
     )
   }
   return (
-    <aside className="resume-banner" data-resume-banner role="status">
+    <div className="resume-banner" data-resume-banner role="status">
       <div className="resume-banner__copy">
         <div className="resume-banner__kicker">Resume work</div>
         <div className="resume-banner__title">{summary.title}</div>
@@ -80,6 +80,6 @@ export function ResumeBanner({
         <p className="resume-banner__next" data-resume-next>{summary.nextAction}</p>
       </div>
       {verbs}
-    </aside>
+    </div>
   )
 }

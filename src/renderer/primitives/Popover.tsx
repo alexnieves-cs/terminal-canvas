@@ -6,6 +6,7 @@ import { useOpenIntent, triggerProps, contentProps } from './useOpenIntent'
 import type { OpenIntent } from './useOpenIntent'
 import { INERT_PLACEMENT } from './popper'
 import { MotionSurface } from './MotionSurface'
+import { useFocusGuardStops } from './focus-guard-stops'
 
 /**
  * THE POPOVER PRIMITIVE — a transient surface with arbitrary content, as
@@ -90,6 +91,7 @@ export interface PopoverContentProps extends ComponentPropsWithoutRef<'div'> {
  */
 export function PopoverContent({ children, forceMount, ...rest }: PopoverContentProps): JSX.Element {
   const { intent, open, onExitComplete } = usePopover()
+  useFocusGuardStops(open)
   const focus = contentProps(intent)
   // The same trap Menu.tsx documents at length: with `forceMount` the
   // DismissableLayer is already listening when the opening pointerdown lands

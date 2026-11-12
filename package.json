@@ -135,6 +135,7 @@
     "verify:rd-w5": "node scripts/verify-rd-w5.cjs",
     "verify:rd-w6": "node scripts/verify-rd-w6.cjs",
     "verify:ux": "node scripts/verify-ux.cjs",
+    "verify:a11y": "node scripts/verify-a11y.cjs",
     "verify:auto": "node scripts/verify-auto.cjs",
     "verify:agent-run": "node scripts/verify-agent-run.cjs",
     "verify:film": "node scripts/verify-film.cjs",
