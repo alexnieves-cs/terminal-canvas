@@ -207,7 +207,8 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   // `verify:swarm rows.1` fails for a preset with no row here, which is the
   // other half: neither can drift without a red.
   const swarmRow = (preset: typeof SWARM_LIST[number]): Omit<Command, 'id'> => ({
-    title: `New task as a ${preset.label} arrangement…`, subtitle: preset.hint,
+    // The article follows the label: "an Explore", "an Implement", "a Test".
+    title: `New task as ${/^[aeiou]/i.test(preset.label) ? 'an' : 'a'} ${preset.label} arrangement…`, subtitle: preset.hint,
     searchText: `swarm arrangement start work ${preset.id} ${preset.label} supervisor handoff worktree lane multi agent seats`,
     group: 'canvas', run: () => actions.beginStartWork({ swarm: preset.id })
   })
