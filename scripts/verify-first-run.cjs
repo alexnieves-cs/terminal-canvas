@@ -121,7 +121,7 @@ check(LAUNCHER, 'fr.launcher.5 each of the three verbs says its OUTCOME — Star
   const outcome = typeof m.startVerbHint === 'function' ? [m.startVerbHint(undefined, false), m.startVerbHint(undefined, true), m.startVerbHint('folder', false)] : []
   return { pass: /data-launcher-verb-hint="start"[^>]*>Describe the task first</.test(start) &&
     /^An agent works on it/.test(outcome[0] ?? '') && /this folder/.test(outcome[1] ?? '') && /^An agent works on it/.test(outcome[2] ?? '') &&
-    /data-launcher-verb-hint="create"[^>]*>Add an object/.test(create) &&
+    /data-launcher-verb-hint="create"[^>]*>Add an agent/.test(create) &&
     /data-onboarding-summary=/.test(html), detail: { start: start.slice(0, 400), create, outcome } }
 })
 // M395 — revamp.launcher.1/.2. Step 3 is a CHOICE and says so, never step 1's

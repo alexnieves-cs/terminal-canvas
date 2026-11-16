@@ -665,7 +665,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
       <details className="sheet__advanced sheet__options" data-start-options open={optionsOpen}
         onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
         <summary className="sheet__advanced-toggle" data-start-options-summary>
-          Options{optionsHeld.length === 0 ? ' — recipe, done when, checks, arrangement' : ` — ${optionsHeld.join(', ')}`}
+          Options{optionsHeld.length === 0 ? ': recipe, done when, checks, arrangement' : `: ${optionsHeld.join(', ')}`}
         </summary>
         {/* M314. THE RECIPE — first, because it fills everything below it. Its
             one question aims it (which test, which issue); the fields it fills
@@ -675,7 +675,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
             <span className="sheet__label">Recipe</span>
             <select className="sheet__select" data-start-recipe value={recipeId} aria-label="recipe"
               onChange={(e) => pickRecipe(e.target.value, aim)}>
-              <option value="" data-start-recipe-row="none">None — describe the task yourself</option>
+              <option value="" data-start-recipe-row="none">None (describe the task yourself)</option>
               {model.recipes.map((r) => (
                 <option key={r.id} value={r.id} data-start-recipe-row={r.id}>{r.name} — {r.hint}</option>
               ))}
@@ -743,7 +743,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           <span className="sheet__label">Arrangement</span>
           <select className="sheet__select" data-start-swarm value={swarm} aria-label="arrangement"
             onChange={(e) => { setSwarm(e.target.value as '' | SwarmPresetId); setRefusal(null) }}>
-            <option value="" data-start-swarm-row="solo">Solo — one conversation in its own lane</option>
+            <option value="" data-start-swarm-row="solo">Solo: one conversation in its own lane</option>
             {SWARM_LIST.map((preset) => (
               <option key={preset.id} value={preset.id} data-start-swarm-row={preset.id}>{preset.label} — {preset.hint}</option>
             ))}

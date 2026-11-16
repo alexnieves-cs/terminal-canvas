@@ -392,7 +392,7 @@ export const PERMISSION_MODE_WORDS: Readonly<Record<PermissionMode, { asks: bool
 export function permissionModeLine(agent: string, found: EffectiveMode | null): string | null {
   // Managed (enterprise) settings are not read, so "none set" is hedged
   // rather than promised (the boundary critic).
-  if (found === null) return `${agent} asks before it runs a command or edits a file, unless a managed policy says otherwise — your settings set no permission mode`
+  if (found === null) return `${agent} asks before it runs a command or edits a file, unless a managed policy says otherwise. Your settings set no permission mode.`
   // A mode this app has no words for is said as nothing, never as a guess.
   if (found.mode === 'unrecognised') return null
   const file = found.path.split('/').slice(-2).join('/')

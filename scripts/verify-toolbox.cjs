@@ -1200,7 +1200,7 @@ const write = (rel, text) => {
         all.mode === 'bypassPermissions' && lane.mode === 'plan' && userOnly.mode === 'auto' && T.effectivePermissionMode([]) === null && homeTwice.scope === 'user' &&
         /decides for itself when to ask — auto mode, set in ~\/\.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', userOnly)) &&
         /plan mode, set in this repository's \.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', { ...lane, scope: 'project' })) &&
-        /asks before .* your settings set no permission mode/.test(T.permissionModeLine('Claude Code', null)),
+        /asks before .* your settings set no permission mode/i.test(T.permissionModeLine('Claude Code', null)),
       JSON.stringify({ known, dflt, future, all, lane, userOnly, line: T.permissionModeLine('Claude Code', userOnly) }))
     // M403 (the boundary critic) — toolbox.mode.3. An explicit "default" is
     // its own value (asking, said as default mode), and an unrecognised word

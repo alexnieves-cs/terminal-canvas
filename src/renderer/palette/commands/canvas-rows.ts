@@ -186,7 +186,7 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   out.push({
     id: 'start.work',
     title: 'New task…',
-    subtitle: 'what, where, and who — an agent works on it on its own branch',
+    subtitle: 'an agent works on it on its own branch',
     searchText: 'new task start work issue dispatch teammate repository folder lane begin',
     leads: ['new task', 'task', 'start task', 'start work'],
     leadsAtRest: true,

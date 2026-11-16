@@ -559,7 +559,7 @@ function DockImpl({
                   {queue !== undefined && !flatQueue(queue) && queue.groups.map((g) => renderGroup(g))}
                 </>
               ) : decisions.length === 0 && (queue === undefined || flatQueue(queue)) ? (
-                <li className="rail-empty" data-inbox-all-snoozed="">Everything waiting is snoozed — it comes back on its own, or wake it below.</li>
+                <li className="rail-empty" data-inbox-all-snoozed="">Everything waiting is snoozed. It comes back on its own, or wake it below.</li>
               ) : (
                 (queue === undefined || flatQueue(queue) ? decisions.map((item) => renderInboxRow(item, queue === undefined ? undefined : item.key, queue?.groups.flatMap((g) => g.decisions).find((d) => d.key === item.key)?.affects)) : queue.groups.map((g) => renderGroup(g)))
               )}
