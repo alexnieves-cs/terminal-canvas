@@ -1,0 +1,75 @@
+name: Bug report
+description: Something behaved differently than it should have
+title: "Bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The more exact the steps, the faster it gets fixed.
+        A security problem belongs in a [private report](https://github.com/alexnieves-cs/terminal-canvas/security/advisories/new), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a Claude Code panel in a repository
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Terminal Canvas version
+      description: Shown in the About window, or the tag you built from.
+      placeholder: e.g. 6.2.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. macOS 15.1
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Chip
+      options:
+        - Apple silicon
+        - Intel
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Downloaded the .dmg
+        - Homebrew
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: agents
+    attributes:
+      label: Agent CLIs involved, if any
+      placeholder: e.g. claude 2.1, codex 0.9, a plain zsh
+  - type: input
+    id: tmux
+    attributes:
+      label: tmux
+      description: Output of `tmux -V`, or "not installed".
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything in the terminal or Console.app
+      description: Paste error text here. Please remove tokens, paths or anything private first.
+      render: text
