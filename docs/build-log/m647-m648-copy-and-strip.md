@@ -43,7 +43,7 @@ focused or selected) on a 476px terminal at 100% it read `Claude — l…`,
 4ch floor (`( w`). The pill kept M410's flex-shrink of 100, which was for a
 state that is a sentence, so it gave way before anything else.
 
-Now the word shrinks like the name, and the three contextual facts give way
+Now the word does not shrink (its 22ch cap still bounds a sentence), and the three contextual facts give way
 first and leave whole rather than as fragments, by a container query on the
 strip: the agent line below 760px, the path below 620px, the branch below
 460px. The order is how much each repeats the name. The name's tooltip still

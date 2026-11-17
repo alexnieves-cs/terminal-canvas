@@ -13768,8 +13768,11 @@ tr[data-session-row]:focus-within .sessions-world,
    kept M410's shrink of 100, made for a state that is a SENTENCE, so it
    gave way first; and the three contextual facts (path, branch, the agent
    line) had nowhere to go but narrower. Now:
-     * the word shrinks like the name (1, not 100). M410's 22ch cap still
-       bounds a sentence, so the name still leads;
+     * the word does not shrink at all, shown or at rest (M641 already did
+       this at rest). M410's 22ch cap still bounds a state that is a
+       sentence; a short one (`idle`, `working`) reads whole, and the name
+       is what ellipsises. A first cut let the word shrink like the name,
+       and the overview scene's narrower terminal still read `( i…`;
      * the path, the branch and the agent line give way first (100), and
        below the width each needs to read whole they are not laid out at
        all. Half a path is not a fact, and every one of them is still a
@@ -13784,7 +13787,7 @@ tr[data-session-row]:focus-within .sessions-world,
    depends on its content and the containment changes nothing it lays out).
    Nothing here refits xterm: the strip is outside the body (the frame rule). */
 .pf--kind-terminal:has(.panel__slot) .pf__chrome { container: tc-rim / inline-size; }
-.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { flex-shrink: 1; }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { flex-shrink: 0; }
 .pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__path, .pf__branch, .pf__summary) { flex-shrink: 100; }
 @container tc-rim (max-width: 759px) { .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__summary { display: none; } }
 @container tc-rim (max-width: 619px) { .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__path { display: none; } }
