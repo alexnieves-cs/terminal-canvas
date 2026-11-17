@@ -1656,7 +1656,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           armed && armed.status === 'not-started' && /a change in src/.test(armed.when ?? '') && hasSession === false &&
             passed && /ran with 0/.test(passed.tail) && passed.word === 'idle' && /last run passed/.test(passed.last ?? '') &&
             railWord && /watcher/.test(railWord.label ?? '') && railWord.tail === 'idle' &&
-            failed && /last run failed — exit 2/.test(failed.last ?? '') && failed.tone === 'exited' &&
+            failed && /last run failed with exit 2/.test(failed.last ?? '') && failed.tone === 'exited' &&
             rows.length >= ledgerBefore + 2 && rows.every((r) => !('output' in r) && !('tail' in r)) &&
             rows.some((r) => r.exitCode === 0) && rows.some((r) => r.exitCode === 2) &&
             killsAfterNode === killsBefore && killsAfterTerminal > killsAfterNode,

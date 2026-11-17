@@ -2420,7 +2420,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           // the row still runs, it just tells the user the wrong story about
           // where the text they are about to paste came from).
           if (!text.includes('${PROJECT_PROMPT_NAME}') ||
-              !text.includes('project — .claude/commands')) return text
+              !text.includes('project: .claude/commands')) return text
           input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
           return true
         })()`)
