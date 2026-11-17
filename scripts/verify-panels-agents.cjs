@@ -192,7 +192,17 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           // case is asked for by name for this read and handed back after.
           let emulated = false
           try { if (!wc.debugger.isAttached()) wc.debugger.attach('1.3'); await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }); emulated = true } catch { /* the read below says reduce */ }
-          await wc.executeJavaScript(`(() => { const n = Date.now(); window.__m233Flow('fired', 'hA', 'hB'); window.__m233Freeze(n + 450); return true })()`)
+          // A THIRD of the way along, not half. The edge runs straight down
+          // from hA into hB's north port, and its midpoint lands 2px inside
+          // the 16px band hB's name strip stands proud of its frame. Since
+          // M648 a shown strip's state word keeps its width rather than
+          // squeezing to 4ch, so on a run where hB's word was a sentence it
+          // reached the strip's centre and owned the packet's pixel (exactly
+          // what the stack walk below is for: the strip is a real overlay).
+          // Whether it did depended on which state hB was in at that moment.
+          // At t = 1/3 the packet is in the open gap between the panels,
+          // which is the thing this arm asks: is a packet in flight painted.
+          await wc.executeJavaScript(`(() => { const n = Date.now(); window.__m233Flow('fired', 'hA', 'hB'); window.__m233Freeze(n + 300); return true })()`)
           await settle(); await sleep(250)
           const lit = await line()
           const packet = await wc.executeJavaScript(`(() => {
