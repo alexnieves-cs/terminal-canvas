@@ -61,7 +61,7 @@ export function WorldMinimap({ camera }: { camera: RefObject<CameraApi | null> }
     camera.current?.centre(floor.x, floor.z)
   }
   return (
-    <svg className="world-minimap" width={S} height={S} viewBox={`0 0 ${S} ${S}`} role="group" aria-label="Map of the room — press to look there" onClick={onFloor} data-world-minimap>
+    <svg className="world-minimap" width={S} height={S} viewBox={`0 0 ${S} ${S}`} role="group" aria-label="Map of the room. Press to look there" onClick={onFloor} data-world-minimap>
       <rect className="world-minimap__slab" x={slab.x} y={slab.y} width={S - 2 * slab.x} height={S - 2 * slab.y} rx={6} />
       <rect className="world-minimap__table" x={table.a.x} y={table.a.y} width={table.b.x - table.a.x} height={table.b.y - table.a.y} rx={2} />
       {/* The camera: a line from where it stands (clipped by the map's edge when it stands off the slab) to what it looks at. */}

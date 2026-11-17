@@ -156,7 +156,7 @@ function BoardReply({ panelId, onSend, onDone }: { panelId: string; onSend: (pan
   }
   return (
     <div className="tboard__respond" data-board-respond="reply">
-      <textarea className="tboard__reply" data-board-reply data-edit-owner rows={2} value={text} autoFocus placeholder="Your reply — sent to the agent as its next message"
+      <textarea className="tboard__reply" data-board-reply data-edit-owner rows={2} value={text} autoFocus placeholder="Your reply, sent to the agent as its next message"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { e.stopPropagation(); if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send() } if (e.key === 'Escape') { e.preventDefault(); onDone() } }} />
       <span className="tboard__respond-verbs">

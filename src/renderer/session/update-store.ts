@@ -53,9 +53,9 @@ export function updateSentence(s: UpdateState): string {
   if (s.checking) return 'checking…'
   if (s.result === null) return 'not checked'
   switch (s.result.kind) {
-    case 'current': return `up to date — ${s.result.version}`
+    case 'current': return `up to date, ${s.result.version}`
     case 'newer': return `${s.result.version} is out`
-    case 'could-not-check': return `could not check — ${s.result.reason}`
+    case 'could-not-check': return `could not check: ${s.result.reason}`
   }
 }
 

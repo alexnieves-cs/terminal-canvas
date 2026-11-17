@@ -383,7 +383,7 @@ const FACTS = {
     const stuck = A.autoChipWords({ mode: 'review', turn: 4, limit: 4, state: 'stuck', reason: 'limit' })
     const perm = A.autoChipWords({ mode: 'review', turn: 1, limit: 4, state: 'stuck', reason: 'permission' })
     ok('auto.2 the chip reads `auto · <mode> · n/limit` while running, `done` when done, and `stuck — <why>` with a reason a person can act on',
-      running === 'auto · complete · 2/8' && done === 'auto · harden · done' && /^auto · review · stuck — limit/.test(stuck) && /permission/.test(perm),
+      running === 'auto · complete · 2/8' && done === 'auto · harden · done' && /^auto · review · stuck: limit/.test(stuck) && /permission/.test(perm),
       JSON.stringify({ running, done, stuck, perm }))
     // M356 — auto.parts.1. A resolved chip in a narrow header keeps what the
     //     run came to (the head never clips) and gives its tail first; a

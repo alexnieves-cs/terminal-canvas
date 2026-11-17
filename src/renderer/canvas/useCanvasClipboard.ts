@@ -114,7 +114,7 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): { sayRef: RefObje
       if (id === null) {
         void window.canvas.agentSession.clipboardFile().then((file) => {
           if (file.kind === 'empty') return
-          if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
+          if (file.kind !== 'ok') { sayRef.current(`the image could not be written: ${file.why}`); return }
           void getAddImage()?.(file.path)
         })
         return
@@ -127,12 +127,12 @@ export function useCanvasClipboard(deps: CanvasClipboardDeps): { sayRef: RefObje
       if (panel !== undefined && isChatPanel(panel)) return
       if (session === undefined || !session.spawned) {
         // Named, never silent: a paste into a card has nowhere to land.
-        sayRef.current(`${REASON_NOT_STARTED} — an image pasted here has no process to receive it`)
+        sayRef.current(`${REASON_NOT_STARTED}. An image pasted here has no process to receive it`)
         return
       }
       void window.canvas.agentSession.clipboardFile().then((file) => {
         if (file.kind === 'empty') return
-        if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
+        if (file.kind !== 'ok') { sayRef.current(`the image could not be written: ${file.why}`); return }
         registry.get(id)?.handle.paste(shellQuote(file.path))
       })
     }

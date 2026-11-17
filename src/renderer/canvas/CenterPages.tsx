@@ -226,7 +226,7 @@ export function CenterPages({
                 if (p === undefined || !isChatPanel(p)) return []
                 return [{ panelId: id, title: railLabel(p, undefined), cwd: p.chat.cwd, rect: p.rect }]
               })
-              if (members.length === 0) return 'this island has no conversation to save — an arrangement is its agents and the handoffs between them'
+              if (members.length === 0) return 'this island has no conversation to save. An arrangement is its agents and the handoffs between them'
               // Offsets from the FIRST member, so the saved shape is the shape
               // on screen and not a set of absolute coordinates that would put
               // the next instantiation wherever this one happened to sit.
@@ -252,8 +252,8 @@ export function CenterPages({
                 edges
               })
               const saved = await window.canvas.template.save(template)
-              if (saved.kind === 'stale') return 'another editor saved this template first — open it and try again'
-              paletteActionsRef.current?.say(`Saved “${template.name}” as an arrangement — starting it opens its conversations and sends nothing`)
+              if (saved.kind === 'stale') return 'another editor saved this template first; open it and try again'
+              paletteActionsRef.current?.say(`Saved “${template.name}” as an arrangement. Starting it opens its conversations and sends nothing`)
               return null
             }}
           />

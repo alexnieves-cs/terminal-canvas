@@ -123,7 +123,7 @@ export function OrchDeliverables({ subject, item, workItems = [], panels, refres
 
   if (item === undefined) return <p className="orch__caption" data-orch-deliverables="no-task">This task is no longer on the board, so its deliverables cannot be gathered here.</p>
   if (read.kind === 'idle' || read.kind === 'loading') return <p className="orch__caption" role="status">Gathering the task's deliverables…</p>
-  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-deliverables="unwired">The task's record could not be read in this build — this is not a claim that it produced nothing.</p>
+  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-deliverables="unwired">The task's record could not be read in this build, so whether it produced anything is unknown.</p>
 
   const list = collectDeliverables({
     item, events: read.evidence.events, commands: read.evidence.commands, checks: read.evidence.checks,
@@ -145,8 +145,8 @@ export function OrchDeliverables({ subject, item, workItems = [], panels, refres
     setExported('exporting…')
     const markdown = taskHandoffMarkdown(item, list, Date.now())
     void window.canvas.tasks.exportHandoff({ itemId: item.id, title: item.title, markdown }).then((r) => {
-      setExported(r.kind === 'written' ? `Written to ${displayPath(r.path).short}${r.redacted > 0 ? ` · ${r.redacted} secret${r.redacted === 1 ? '' : 's'} redacted` : ''}` : r.kind === 'cancelled' ? null : `Not exported — ${r.reason}`)
-    }, () => setExported('Not exported — the export did not answer'))
+      setExported(r.kind === 'written' ? `Written to ${displayPath(r.path).short}${r.redacted > 0 ? ` · ${r.redacted} secret${r.redacted === 1 ? '' : 's'} redacted` : ''}` : r.kind === 'cancelled' ? null : `Not exported: ${r.reason}`)
+    }, () => setExported('Not exported: the export did not answer'))
   }
   return (
     <section className="orch__deliverables" data-orch-deliverables={list.length} aria-label="Deliverables">
@@ -157,13 +157,13 @@ export function OrchDeliverables({ subject, item, workItems = [], panels, refres
         </span>
       </div>
       <p className="orch__caption" data-orch-deliverables-account>
-        {account.line}. A file is a <strong>live reference</strong> (read as it is now) unless a review captured its content — then a change since is named.
+        {account.line}. A file is a <strong>live reference</strong> (read as it is now) unless a review captured its content, in which case a change since is named.
         {read.evidence.reachedStart ? '' : ' The record held more than one read covers, so older entries may be missing here.'}
       </p>
       {exported !== null && <p className="orch__caption" data-orch-deliverables-exported role="status">{exported}</p>}
       {comparison !== null && previous !== undefined && (
         <details className="orch__brief" data-orch-deliverables-compare={previous.id} open>
-          <summary className="orch__brief-summary">Compared with the last successful run of this recipe — “{previous.title}”</summary>
+          <summary className="orch__brief-summary">Compared with the last successful run of this recipe: “{previous.title}”</summary>
           <ul className="orch__control-notes">{comparison.map((line) => <li key={line} className="orch__caption">{line}</li>)}</ul>
         </details>
       )}

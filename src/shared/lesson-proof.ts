@@ -240,12 +240,12 @@ export function judgeProof(f: ProofFacts): ProofRecord {
     ...(f.check === null ? {} : { check: { command: f.check.command, exitCode: f.check.exitCode, tail: f.check.tail.slice(-PROOF_TAIL_MAX) } })
   }
   const n = (k: number, one: string): string => `${k} ${one}${k === 1 ? '' : 's'}`
-  if (changed.length === 0) return { ...base, verdict: 'no-change', reason: 'the replay changed nothing, so it proves nothing — try a fuller brief' }
+  if (changed.length === 0) return { ...base, verdict: 'no-change', reason: 'the replay changed nothing, so it proves nothing. Try a fuller brief' }
   if (rec.length > 0) return { ...base, verdict: 'recurred', reason: `the mistake came back in ${n(new Set(rec.map((r) => r.path)).size, 'file')} with the rule applied` }
   // The rule was in the tree the diff is taken against, so a change to its
   // file is the agent editing (or deleting) the rule under test.
-  if (changed.includes(ruleFile)) return { ...base, verdict: 'failed', reason: `the replay changed ${ruleFile} itself, so it did not test the rule as written — prove it again` }
-  if (f.check === null) return { ...base, verdict: 'no-check', reason: 'the mistake did not come back, but there was no check to run — name the task\'s check and prove it again' }
+  if (changed.includes(ruleFile)) return { ...base, verdict: 'failed', reason: `the replay changed ${ruleFile} itself, so it did not test the rule as written; prove it again` }
+  if (f.check === null) return { ...base, verdict: 'no-check', reason: 'the mistake did not come back, but there was no check to run. Name the task\'s check and prove it again' }
   if (f.check.exitCode !== 0) return { ...base, verdict: 'check-failed', reason: `the mistake did not come back, but the check failed (${f.check.exitCode === null ? 'it was stopped' : `exit ${f.check.exitCode}`})` }
   // Not touching a lesson's file at all can be the rule working ("leave the
   // generated file alone"), so it still holds — but the line says so.
@@ -254,7 +254,7 @@ export function judgeProof(f: ProofFacts): ProofRecord {
   const checkFiles = changed.filter((c) => CHECK_FILE_RE.test(c))
   const notes = [
     ...(touched ? [] : ['none of them a lesson\'s file']),
-    ...(checkFiles.length === 0 ? [] : [`it also changed ${checkFiles.slice(0, 3).join(', ')}${checkFiles.length > 3 ? ' and more' : ''}, which the check may read — look before accepting`])
+    ...(checkFiles.length === 0 ? [] : [`it also changed ${checkFiles.slice(0, 3).join(', ')}${checkFiles.length > 3 ? ' and more' : ''}, which the check may read; look before accepting`])
   ]
   return { ...base, verdict: 'holds', reason: `the mistake did not come back and the check passed, over ${n(changed.length, 'changed file')}${notes.length === 0 ? '' : ` — ${notes.join('; ')}`}` }
 }

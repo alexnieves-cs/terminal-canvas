@@ -52,7 +52,7 @@ export function subscribeDraft(id: string, fn: () => void): () => void {
 /** The one door: the pure operation over the draft (or the saved record), the result kept and announced. */
 export function applyDraftOp(id: string, saved: PersistedTemplate | undefined, op: DraftOp): EditResult {
   // A deleted record's draft is not editable: the record is the authority (the critic).
-  if (saved === undefined) { drafts.delete(id); return { kind: 'refused', reason: `no template is called ${id} — it was deleted` } }
+  if (saved === undefined) { drafts.delete(id); return { kind: 'refused', reason: `no template is called ${id}; it was deleted` } }
   const base = drafts.get(id)?.template ?? saved
   const result = op.type === 'add' ? addNode(base, op.node)
     : op.type === 'arrange' ? op.moves.reduce<EditResult>((r, m) => (r.kind === 'refused' ? r : moveNode(r.template, m.key, m.dx, m.dy)), { kind: 'ok', template: base })

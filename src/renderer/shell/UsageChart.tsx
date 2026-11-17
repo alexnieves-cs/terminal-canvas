@@ -64,7 +64,7 @@ export function UsageChart (props: UsageChartProps): JSX.Element | null {
             formatter={(_value, _name, entry) => {
               const row = entry.payload as (typeof data)[number]
               const tokens = `${row.tokens.toLocaleString()} tokens`
-              return [row.costUsd === undefined ? `${tokens} — unpriced` : `$${row.costUsd.toFixed(2)} · ${tokens}`, '']
+              return [row.costUsd === undefined ? `${tokens}, unpriced` : `$${row.costUsd.toFixed(2)} · ${tokens}`, '']
             }}
           />
           <Bar dataKey="drawn" radius={[2, 2, 0, 0]} isAnimationActive={false}>

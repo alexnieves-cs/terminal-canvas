@@ -78,7 +78,7 @@ export function ReplaySheet({ chats, turnsOf }: ReplaySheetProps): JSX.Element {
             <label className="replay__compare">
               <span>Compare with</span>
               <select data-replay-compare value={b?.id ?? ''} onChange={(e) => compareReplay(e.target.value === '' ? null : e.target.value)}>
-                <option value="">nothing — this conversation alone</option>
+                <option value="">nothing, this conversation alone</option>
                 {chats.filter((c) => c.id !== a?.id).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </label>
@@ -132,7 +132,7 @@ function lastWords(frame: ReplayFrame): string | null {
 function snapshotWords(rows: readonly TurnSnapshotRow[], turn: number): string {
   if (turn < 1) return 'Nothing to branch from before the first message.'
   const hit = snapshotFor(rows, turn)
-  if (hit === null) return rows.length === 0 ? 'No snapshots for this conversation — turn on "Snapshot each agent turn" in Settings to branch with its files.' : `No snapshot at or before ${messageWords(turn)}.`
+  if (hit === null) return rows.length === 0 ? 'No snapshots for this conversation. Turn on "Snapshot each agent turn" in Settings to branch with its files.' : `No snapshot at or before ${messageWords(turn)}.`
   return hit.exact ? `Branches with its files as they were after ${messageWords(turn)}.` : `Branches with its files from after ${messageWords(hit.row.turn)}, the nearest snapshot before this.`
 }
 

@@ -382,10 +382,10 @@ export function fitPermissionMode(found: EffectiveMode | null): PermissionMode |
 export const PERMISSION_MODE_WORDS: Readonly<Record<PermissionMode, { asks: boolean; does: string }>> = {
   manual: { asks: true, does: 'asks before it runs a command or edits a file' },
   acceptEdits: { asks: true, does: 'edits files without asking, and asks before it runs a command' },
-  plan: { asks: true, does: 'only plans — it changes nothing until you approve the plan' },
+  plan: { asks: true, does: 'only plans, and it changes nothing until you approve the plan' },
   auto: { asks: false, does: 'decides for itself when to ask' },
-  dontAsk: { asks: false, does: 'never asks — anything not already allowed is refused' },
-  bypassPermissions: { asks: false, does: 'never asks — it runs every command and edit' }
+  dontAsk: { asks: false, does: 'never asks, and anything not already allowed is refused' },
+  bypassPermissions: { asks: false, does: 'never asks and runs every command and edit' }
 }
 
 /** M403 (B5). The one plain line a start shows: what the agent will do, and which setting says so. */
@@ -397,7 +397,7 @@ export function permissionModeLine(agent: string, found: EffectiveMode | null): 
   if (found.mode === 'unrecognised') return null
   const file = found.path.split('/').slice(-2).join('/')
   const where = found.scope === 'user' ? `~/${file}` : `this repository's ${file}`
-  if (found.mode === 'default') return `${agent} asks before it runs a command or edits a file — default mode, set in ${where}`
+  if (found.mode === 'default') return `${agent} asks before it runs a command or edits a file (default mode, set in ${where})`
   return `${agent} ${PERMISSION_MODE_WORDS[found.mode].does} — ${found.mode} mode, set in ${where}`
 }
 

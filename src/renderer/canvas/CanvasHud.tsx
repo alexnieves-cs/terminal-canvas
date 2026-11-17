@@ -113,12 +113,12 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
             reachable beside it (and via the palette). */}
         {fitTask !== undefined && empty !== true && (
           <button type="button" className="icon-button" data-hud-fit-task disabled={fitTask.disabledReason !== undefined}
-            title={fitTask.disabledReason ?? 'Fit task — the active task\'s panels in view'}
+            title={fitTask.disabledReason ?? 'Fit task: the active task\'s panels in view'}
             aria-label={fitTask.disabledReason === undefined ? 'Fit task' : `Fit task: ${fitTask.disabledReason}`}
             {...shellControl(() => { if (fitTask.disabledReason === undefined) fitTask.run() })}><FitTaskGlyph /><span className="canvas-hud__fit-label">Fit task</span></button>
         )}
         {empty !== true && (
-          <button type="button" className="icon-button" data-hud-fit title={`Fit all — every panel in view (${fitAllChord})`}
+          <button type="button" className="icon-button" data-hud-fit title={`Fit all: every panel in view (${fitAllChord})`}
             aria-label="Fit all" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">Fit all</span></button>
         )}
         <span className="canvas-hud__tiers" role="group" aria-label="Zoom tier">
@@ -167,7 +167,7 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
           launcher's banner and the environment report the tmux fact. */}
       {/* M123. The launcher's notice reaches only an empty canvas; a user with panels sees it HERE. */}
       {updateNewer !== undefined && updateNewer !== null && (
-        <span className="canvas-hud__notice" data-hud-update={updateNewer.version} title="Open release — the app does not install it">
+        <span className="canvas-hud__notice" data-hud-update={updateNewer.version} title="Open the release page. The app does not install it for you">
           <a href={updateNewer.url} onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: '', target: updateNewer.url }) }}>{updateNewer.version} is out</a>
         </span>
       )}

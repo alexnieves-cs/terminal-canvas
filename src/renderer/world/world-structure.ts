@@ -520,7 +520,7 @@ export function cardHeadline(
   }
   if (opts.partners) {
     const names = opts.partners.others.map((id) => opts.partnerName?.(id) ?? id)
-    return { text: `${opts.partners.file} — also being written by ${names.join(', ')}`, tone: 'warn' }
+    return { text: `${opts.partners.file}, also being written by ${names.join(', ')}`, tone: 'warn' }
   }
   if (opts.activity === 'quiet') {
     const mins = Math.max(1, Math.round((now - record.lastTs) / 60_000))

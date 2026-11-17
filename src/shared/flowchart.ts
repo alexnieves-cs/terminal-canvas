@@ -147,7 +147,7 @@ export function isEnds(value: unknown): value is Ends {
 /** What each form is FOR, in one sentence — the palette's subtitle and the inspector's line. */
 export function shapeFormSentence(form: ShapeForm): string {
   switch (form) {
-    case 'process': return 'a step — something that is done'
+    case 'process': return 'a step: something that is done'
     case 'decision': return 'a question with more than one way out'
     case 'terminator': return 'where the flow starts or ends'
     case 'io': return 'something that goes in or comes out'

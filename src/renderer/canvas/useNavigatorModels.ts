@@ -128,9 +128,9 @@ export function useNavigatorModels(deps: UseNavigatorModelsDeps) {
       const target = orchestratorTarget(orchestratorCandidates(panelsRef.current))
       if (target !== null) return sendRefusalSentence(await window.canvas.agentSession.send(target, text, []))
       const made = await beginNewChatRef.current({ title: 'supervisor', appendSystemPrompt: SUPERVISOR_PROMPT, message: text })
-      return made.kind === 'refused' ? made.reason : 'no orchestrator yet — made a supervisor chat; your message is in its composer, unsent'
+      return made.kind === 'refused' ? made.reason : 'no orchestrator yet, so I made a supervisor chat; your message is in its composer, unsent'
     } catch (error) {
-      return `not sent — ${error instanceof Error ? error.message : String(error)}`
+      return `not sent: ${error instanceof Error ? error.message : String(error)}`
     }
   }, [])
   useKeyboardNav({
@@ -339,7 +339,7 @@ export function useNavigatorModels(deps: UseNavigatorModelsDeps) {
     setWorkItems((current) => current.map((i) => {
       if (i.id !== itemId) return i
       const laneOpen = i.panelId !== undefined && i.state === WORK_ITEM_STATES[1] && panelsRef.current.some((p) => p.rect.id === i.panelId)
-      return carryWorkItem({ ...i, state, ...(laneOpen ? { note: 'lane still open — close the chat to stop it' } : {}), updatedAt: Date.now() })
+      return carryWorkItem({ ...i, state, ...(laneOpen ? { note: 'lane still open; close the chat to stop it' } : {}), updatedAt: Date.now() })
     }))
   }, [markDone])
   // Frame a panel's one task on the canvas, or say why not — Orchestrate's "focus

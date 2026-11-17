@@ -103,7 +103,7 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
       // composer's waiting list (editable), never in the well as if sent.
       if (turn.delivery === 'queued') continue
       const text = turn.blocks.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
-      if (text !== '') rows.push({ kind: 'user', id: turn.id, text, ...(typeof turn.at === 'number' ? { at: turn.at } : {}), ...(turn.delivery === 'not-delivered' ? { undelivered: turn.deliveryNote ?? 'not delivered — the agent never received this message' } : {}) })
+      if (text !== '') rows.push({ kind: 'user', id: turn.id, text, ...(typeof turn.at === 'number' ? { at: turn.at } : {}), ...(turn.delivery === 'not-delivered' ? { undelivered: turn.deliveryNote ?? 'not delivered: the agent never received this message' } : {}) })
       turn.blocks.forEach((b, i) => { if (b.type === 'image') rows.push({ kind: 'image', id: `${turn.id}:${i}`, mediaType: b.mediaType, size: b.size }) })
       for (const block of turn.blocks) {
         if (block.type !== 'tool_result') continue
@@ -165,7 +165,7 @@ export function chatPhaseWord(phase: ChatPhase | null): string {
   return phase.file === undefined ? phase.name : `${phase.name} ${shortPath(phase.file)}`
 }
 
-export const REASON_CHAT_STREAMING = 'the agent is still answering — interrupt it, or wait'
+export const REASON_CHAT_STREAMING = 'the agent is still answering; interrupt it, or wait'
 /**
  * M77. Whether this chat's agent has RUN — the one definition `Open review`
  * gates on in the pane and the palette: a process alive, a result seen this
@@ -184,12 +184,12 @@ export function chatHasRun(state: { snapshot: AgentSessionSnapshot | null; turns
 export { DENY_MESSAGE, KEEP_PLANNING_MESSAGE, denyMessageFor } from '@shared/transcript'
 /** M76. A question is open: the composer names the fix, which is above it. */
 /** M119. The row's label, not `claude`: acp is the first other row that asks. */
-export const REASON_CHAT_PENDING = 'claude is waiting for your answer — allow or deny above'
+export const REASON_CHAT_PENDING = 'claude is waiting for your answer; allow or deny above'
 // M358. A plan is approved or sent back, never "allowed or denied".
 export const reasonChatPending = (label: string, toolName?: string): string =>
-  toolName === PLAN_TOOL ? `${label} has a plan waiting — approve it or keep planning above` : `${label} is waiting for your answer — allow or deny above`
-export const reasonChatHandshake = (label: string): string => `waiting for ${label} to open its session — the first message goes when it answers`
-export const REASON_CHAT_HANDSHAKE_INTERRUPT = 'the agent has not opened its session yet — close the panel to stop it'
+  toolName === PLAN_TOOL ? `${label} has a plan waiting; approve it or keep planning above` : `${label} is waiting for your answer; allow or deny above`
+export const reasonChatHandshake = (label: string): string => `waiting for ${label} to open its session. The first message goes when it answers`
+export const REASON_CHAT_HANDSHAKE_INTERRUPT = 'the agent has not opened its session yet; close the panel to stop it'
 /** M99: claude's own `noCli` row, under the name every M73 door imports. */
 export const REASON_CHAT_NO_CLAUDE = BACKENDS.claude.reasons.noCli
 export const REASON_CHAT_IDLE = 'nothing is in flight'
@@ -232,7 +232,7 @@ export function composerMidTurn(
   }
   return {
     queue: { enabled: true },
-    correct: row.interrupts ? { enabled: true } : { enabled: false, reason: `${row.reasons.noInterrupt} — Send after this turn instead` }
+    correct: row.interrupts ? { enabled: true } : { enabled: false, reason: `${row.reasons.noInterrupt}. Send after this turn instead` }
   }
 }
 
@@ -251,7 +251,7 @@ export function queueRows(snapshot: AgentSessionSnapshot | null): QueueRow[] {
     text: q.text,
     images: q.images.length,
     editable: q.auto !== true,
-    tag: q.correction === true ? 'next — after the stop' : q.auto === true ? 'auto run' : q.reason === 'concurrency' ? 'waiting for a free agent' : 'after this turn'
+    tag: q.correction === true ? 'next, after the stop' : q.auto === true ? 'auto run' : q.reason === 'concurrency' ? 'waiting for a free agent' : 'after this turn'
   }))
 }
 
@@ -305,16 +305,16 @@ export function composerStatus(input: {
     // M315. A turn that is waiting on the PERSON is not "answering": the
     // footer said the agent was busy while it was blocked on them.
     if (input.waiting === true) return { kind: 'answering', text: 'Waiting for your answer above' + (attached === '' ? '' : ` · ${attached}, sent with your next message`) }
-    const stop = input.interruptEnabled ? 'Answering — Stop interrupts' : `Answering — ${input.interruptReason ?? 'it cannot be interrupted from here'}`
+    const stop = input.interruptEnabled ? 'Answering. Stop interrupts' : `Answering. ${input.interruptReason ?? 'it cannot be interrupted from here'}`
     return { kind: 'answering', text: attached === '' ? stop : `${stop} · ${attached}, sent with your next message` }
   }
   if (input.sending) return { kind: 'sending', text: 'Sending…' }
   if (!input.sendEnabled) return { kind: 'unavailable', text: input.sendReason ?? 'this chat cannot send right now' }
-  if (attached !== '') return { kind: 'attached', text: `${attached} — sent with your next message` }
-  if (input.memoryUnresolved !== undefined) return { kind: 'memory-unresolved', text: `no memories can go with this message — ${input.memoryUnresolved}` }
+  if (attached !== '') return { kind: 'attached', text: `${attached} goes with your next message` }
+  if (input.memoryUnresolved !== undefined) return { kind: 'memory-unresolved', text: `no memories can go with this message: ${input.memoryUnresolved}` }
   if (input.memory !== undefined) return { kind: 'memory', text: input.memory }
   if (input.grant !== undefined) return { kind: 'grant', text: input.grant }
-  return { kind: 'ready', text: 'Ready — ⌘↩ sends' }
+  return { kind: 'ready', text: 'Ready. ⌘↩ sends' }
 }
 
 /**

@@ -19,9 +19,9 @@ export type OrchWriteOutcome =
   | { kind: 'refused'; sentence: string }
   | { kind: 'failed'; sentence: string }
 
-const NO_IDENTITY = 'the content identity of these changes could not be read, so nothing was written — refresh, look again and retry'
-const MOVED_COMMIT = 'the changes moved since you read them — nothing was committed; refresh, look again and retry'
-const MOVED_DISCARD = 'the changes moved since you read them — nothing was discarded; refresh, look again and retry'
+const NO_IDENTITY = 'the content identity of these changes could not be read, so nothing was written. Refresh, look again and retry'
+const MOVED_COMMIT = 'the changes moved since you read them, so nothing was committed. Refresh, look again and retry'
+const MOVED_DISCARD = 'the changes moved since you read them, so nothing was discarded. Refresh, look again and retry'
 
 export async function orchCommit(input: { root: string; paths: readonly string[]; message: string; identity: ReviewIdentity | undefined }): Promise<OrchWriteOutcome> {
   if (input.identity === undefined) return { kind: 'refused', sentence: NO_IDENTITY }
@@ -32,7 +32,7 @@ export async function orchCommit(input: { root: string; paths: readonly string[]
     switch (r.kind) {
       case 'committed': return { kind: 'done', sentence: `committed ${r.sha.slice(0, 10)}` }
       case 'nothing-to-commit': return { kind: 'refused', sentence: 'nothing to commit' }
-      case 'head-moved': return { kind: 'moved', sentence: 'HEAD moved since these changes were read — nothing was committed' }
+      case 'head-moved': return { kind: 'moved', sentence: 'HEAD moved since these changes were read, so nothing was committed' }
       case 'subject-moved': return { kind: 'moved', sentence: MOVED_COMMIT }
       case 'refused': return { kind: 'refused', sentence: r.detail }
       default: return { kind: 'failed', sentence: r.detail }

@@ -185,7 +185,7 @@ export function tourStep(reduced: boolean): TourStep {
  * Why a verb is refused in a past room. One sentence, so the card, the ask
  * field and the open door cannot each invent their own.
  */
-export const PAST_ROOM_REASON = 'past room — go Live to act'
+export const PAST_ROOM_REASON = 'past room; go Live to act'
 
 export interface RoomVerb {
   id: string

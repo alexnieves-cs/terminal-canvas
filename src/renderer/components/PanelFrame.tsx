@@ -450,7 +450,7 @@ export function PanelFrame({
         {/* M106. The one menu the frame grows: the full title, the kind, and the
             door to every verb the palette holds for this panel. */}
         <span className="pf__menu-host" ref={menuHostRef}>
-          <button type="button" ref={menuButtonRef} className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More — the full title and every verb for this panel"
+          <button type="button" ref={menuButtonRef} className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More: the full title and every verb for this panel"
             {...shellControl(() => setMenuOpen((v) => !v))}>⋯</button>
           {menuOpen && (
             <div className="pf__menu" role="menu" ref={menuRef} data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={onMenuKey}
@@ -472,7 +472,7 @@ export function PanelFrame({
                   view / Restore size beside the palette's door.
                   M408 (D1): every row below is `panelVerbs` — the ONE list the
                   panel's context menu renders too — run through `runPanelVerb`. */}
-              {menuTask?.kind === 'many' && <p className="pf__note" data-panel-menu-task="many">part of {menuTask.titles.length} tasks — {menuTask.titles.join(' and ')}; act from a card</p>}
+              {menuTask?.kind === 'many' && <p className="pf__note" data-panel-menu-task="many">part of {menuTask.titles.length} tasks: {menuTask.titles.join(' and ')}; act from a card</p>}
               {menuTask?.kind === 'one' && (
                 <div className="pf__menu-task" data-panel-menu-task="one">
                   <div className="pf__note">task · {menuTask.title}</div>
@@ -491,8 +491,8 @@ export function PanelFrame({
           )}
         </span>
         {/* M92. Lock and pin are STATE MARKS with the fix in their title; maximise is a control. */}
-        {mark?.locked && <span className="pf__mark pf__mark--lock" data-panel-locked title="locked — drag and resize refuse; Unlock panel in the palette or the pane">{Lock}</span>}
-        {mark?.pinned && <span className="pf__mark pf__mark--pin" data-panel-pinned title="pinned — kept live wherever the camera is; Unpin panel in the palette or the pane">{Pin}</span>}
+        {mark?.locked && <span className="pf__mark pf__mark--lock" data-panel-locked title="Locked, so drag and resize refuse. Unlock panel in the palette or the pane">{Lock}</span>}
+        {mark?.pinned && <span className="pf__mark pf__mark--pin" data-panel-pinned title="Pinned, so it stays live wherever the camera is. Unpin panel in the palette or the pane">{Pin}</span>}
         {trailCount > 0 && marks.toggleTrail !== undefined && (
           <button
             type="button"
@@ -508,7 +508,7 @@ export function PanelFrame({
         {close !== null && (
           <button type="button" className="pf__verb pf__verb--word pf__maximise" data-panel-maximise={mark?.maximised ? 'restore' : 'maximise'}
             disabled={marks.readOnly}
-            title={marks.readOnly ? 'the merged view is read-only' : mark?.maximised ? 'Restore size — back to where it was' : 'Fill view — this panel fills the window'}
+            title={marks.readOnly ? 'the merged view is read-only' : mark?.maximised ? 'Restore its size and place' : 'Fill the window with this panel'}
             aria-label={mark?.maximised ? 'Restore size' : 'Fill view'}
             {...shellControl(() => { if (!marks.readOnly) (mark?.maximised ? marks.restore : marks.maximise)(id) })}>{mark?.maximised ? <Restore /> : <Maximize />}</button>
         )}

@@ -132,14 +132,14 @@ export function DeckNode(props: FileNodeProps & { onView: (id: string, view: Dec
       if (action !== 'keep' && action !== 'discard') return { kind: 'refused', reason: 'use keep or discard, then slide numbers or all' }
       // Keeping writes a proposal into the file. That is the review, and a
       // review is a person's: an agent may withdraw its proposal, never accept it.
-      if (action === 'keep' && origin === 'door') return { kind: 'refused', reason: `a proposal to ${name} is kept by a person, on the deck — an agent or workflow may only discard it` }
+      if (action === 'keep' && origin === 'door') return { kind: 'refused', reason: `a proposal to ${name} is kept by a person, on the deck. An agent or workflow may only discard it` }
       if (readOnlyRef.current) return { kind: 'refused', reason: 'leave merged view to review this deck' }
       return outcome(await session.review(action, ids))
     },
     // A full-window overlay takes the keyboard off whatever the person is typing
     // into; only the person opens it (the critic: an agent line could).
     present: async (origin) => {
-      if (origin === 'door') return { kind: 'refused', reason: `presenting ${name} takes the whole window — a person starts it, on the deck or from the palette` }
+      if (origin === 'door') return { kind: 'refused', reason: `presenting ${name} takes the whole window, so a person starts it, on the deck or from the palette` }
       setPresenting(true); return { kind: 'ran' }
     },
     exportPdf: async () => {
@@ -184,7 +184,7 @@ export function DeckNode(props: FileNodeProps & { onView: (id: string, view: Dec
 
   const summary = disk?.kind === 'text' ? deckSummary(text, { slide: current }) : ''
   const changes = review === 'pending' ? deckChanges(state.view) : review === 'conflict' ? 'proposal out of date' : ''
-  const unavailable = disk === undefined ? 'Reading deck…' : disk.kind !== 'text' ? (disk.kind === 'unreadable' ? disk.detail : `File ${disk.kind} — restore the Markdown file, then refresh.`) : disk.truncatedLines > 0 ? 'This file is too long to show as slides.' : null
+  const unavailable = disk === undefined ? 'Reading deck…' : disk.kind !== 'text' ? (disk.kind === 'unreadable' ? disk.detail : `File ${disk.kind}. Restore the Markdown file, then refresh.`) : disk.truncatedLines > 0 ? 'This file is too long to show as slides.' : null
   const editable = !readOnly && !state.busy && disk?.kind === 'text' && disk.truncatedLines === 0
 
   return <PanelFrame id={id} kind="file" kindWord="deck" rect={panel.rect} z={panel.z} selected={props.selected}
@@ -200,7 +200,7 @@ export function DeckNode(props: FileNodeProps & { onView: (id: string, view: Dec
         onClick={() => { void controller.exportPdf().then(report) }}>PDF</button>
       {/* M251. The .pptx door beside the PDF one, the same shape: main reads the
           file, scrubs every field and names what a slide could not hold. */}
-      <button type="button" className="pf__verb" disabled={unavailable !== null} title="Export to PowerPoint — titles, bullets, pictures and speaker notes; secrets scrubbed, anything left out named" onMouseDown={(e) => e.stopPropagation()}
+      <button type="button" className="pf__verb" disabled={unavailable !== null} title="Export to PowerPoint: titles, bullets, pictures and speaker notes; secrets scrubbed, anything left out named" onMouseDown={(e) => e.stopPropagation()}
         data-deck-export-pptx
         onClick={() => { void window.canvas.export.deckPptx({ path }).then((r) => report(r.kind === 'written' || r.kind === 'cancelled' ? { kind: 'ran', note: deckExportSentence(r) } : { kind: 'refused', reason: deckExportSentence(r) })) }}>PPTX</button>
     </>}>
@@ -233,7 +233,7 @@ export function DeckNode(props: FileNodeProps & { onView: (id: string, view: Dec
         </div>
         {review !== 'none' && draft && <section className="deck-node__review" data-deck-review={review}>
           {review === 'conflict'
-            ? <p>{name} changed on disk since the proposal — slide{draft.items.length === 1 ? '' : 's'} {draft.items.map((i) => i.id).join(', ')} can no longer be kept. Discard it and ask again.</p>
+            ? <p>{name} changed on disk since the proposal, so slide{draft.items.length === 1 ? '' : 's'} {draft.items.map((i) => i.id).join(', ')} can no longer be kept. Discard it and ask again.</p>
             : <p>{draft.by ? `${draft.by} proposed` : 'Proposed'} {deckChanges(state.view)}.</p>}
           {review === 'pending' && <ul>{draft.items.map((item) => <li key={item.id} data-deck-item={item.id}>
             <button type="button" className="deck-node__jump" aria-pressed={previewing === item.id} onClick={() => { setPreviewing(previewing === item.id ? null : item.id); if (item.old) go(item.old.index) }}>Slide {item.id.replace(/^r/, '')} {sideWord(item)}</button>

@@ -294,7 +294,7 @@ function scanHeader(lines: string[]): Header {
   // Never the file's own words: a refusal travels back to whoever asked (an
   // agent's line), and a linked or mistaken file's first line is not theirs to
   // read (the boundary critic's finding 5).
-  return { ok: false, reason: 'this is not a flowchart — its first line is not `flowchart` or `graph`' }
+  return { ok: false, reason: 'this is not a flowchart, because its first line is not `flowchart` or `graph`' }
 }
 
 /** Cheap sniff for a paste handler: does the first meaningful line open a flowchart? */
@@ -350,9 +350,9 @@ const NOTE_ASYMMETRIC = 'an asymmetric shape is drawn as a process'
 const NOTE_DOUBLE_CIRCLE = 'a double circle is drawn as a start / end'
 const NOTE_THICK = 'thick lines are drawn at normal weight'
 const NOTE_HEADS = 'circle and cross arrowheads are drawn as plain arrowheads'
-const NOTE_NESTED = 'a nested subgraph is flattened — its shapes belong to the innermost group only'
-const NOTE_UNCLOSED = 'a subgraph was never closed with end — closed at the end of the text'
-const NOTE_TWICE = 'declared twice with a different shape or text — the first is kept'
+const NOTE_NESTED = 'a nested subgraph is flattened, and its shapes belong to the innermost group only'
+const NOTE_UNCLOSED = 'a subgraph was never closed with end, so it was closed at the end of the text'
+const NOTE_TWICE = 'declared twice with a different shape or text, so the first is kept'
 
 interface Found { raw: string; quoted: boolean; closer: string; next: number }
 
@@ -708,8 +708,8 @@ function parseStatement(s: string): Plan | null {
 
 interface Directive { canon: string; reason: string }
 
-const ACTION_REASON = (canon: string): string => `${canon} would run or open something — interactions are never imported`
-const STYLE_REASON = (canon: string): string => `${canon} is styling — styling is not imported`
+const ACTION_REASON = (canon: string): string => `${canon} would run or open something, and interactions are never imported`
+const STYLE_REASON = (canon: string): string => `${canon} is styling, and styling is not imported`
 const DIRECTIVES: ReadonlyMap<string, Directive> = new Map<string, Directive>([
   ['click', { canon: 'click', reason: ACTION_REASON('click') }],
   ['callback', { canon: 'callback', reason: ACTION_REASON('callback') }],
@@ -729,7 +729,7 @@ const REASON_CLASS = 'class styling is not imported'
 const REASON_DIRECTION = 'direction inside a subgraph is not imported'
 const REASON_SUBGRAPH_EDGE = 'edges to a subgraph are not imported'
 const REASON_INVISIBLE = 'invisible links are not imported'
-const REASON_ACC_BLOCK = 'inside an accDescr block — accessibility text is not imported'
+const REASON_ACC_BLOCK = 'inside an accDescr block, and accessibility text is not imported'
 const REASON_STRAY_END = 'end with no subgraph open'
 const REASON_EMPTY_SUBGRAPH = REASON_NOT_UNDERSTOOD
 
@@ -879,7 +879,7 @@ class Importer {
     if (n.cls) this.drop(st, REASON_CLASS)
     let acc = this.nodes.get(n.id)
     if (!acc) {
-      if (this.nodes.size >= MERMAID_MAX_NODES) throw new Refusal(`more than ${MERMAID_MAX_NODES} shapes — too big to import as one diagram`)
+      if (this.nodes.size >= MERMAID_MAX_NODES) throw new Refusal(`more than ${MERMAID_MAX_NODES} shapes, too big to import as one diagram`)
       acc = { id: n.id, form: 'process', text: normaliseShapeText(n.id), shaped: false }
       this.nodes.set(n.id, acc)
     }
@@ -913,7 +913,7 @@ class Importer {
       const count = froms.length * tos.length
       if (count === 0) continue
       // Checked BEFORE the cross product is built: `A & B & … --> C & D & …` in one line must not allocate its way past the cap.
-      if (this.edges.length + count > MERMAID_MAX_EDGES) throw new Refusal(`more than ${MERMAID_MAX_EDGES} connectors — too big to import as one diagram`)
+      if (this.edges.length + count > MERMAID_MAX_EDGES) throw new Refusal(`more than ${MERMAID_MAX_EDGES} connectors, too big to import as one diagram`)
       for (const f of froms) {
         for (const t of tos) {
           const edge: FlowEdge = { from: f.id, to: t.id }
@@ -934,7 +934,7 @@ class Importer {
 /** Mermaid flowchart text into the graph view. Never throws; a bound crossed or a non-flowchart is `refused`. */
 export function parseMermaid(text: string): MermaidParse {
   if (typeof text !== 'string') return { kind: 'refused', reason: 'there is no text to read' }
-  if (text.length > MERMAID_MAX_CHARS) return { kind: 'refused', reason: `this is ${text.length.toLocaleString('en-US')} characters — the importer reads at most ${MERMAID_MAX_CHARS.toLocaleString('en-US')}` }
+  if (text.length > MERMAID_MAX_CHARS) return { kind: 'refused', reason: `this is ${text.length.toLocaleString('en-US')} characters, and the importer reads at most ${MERMAID_MAX_CHARS.toLocaleString('en-US')}` }
   const lines = text.replace(/\r\n?/g, '\n').split('\n')
   const head = scanHeader(lines)
   if (!head.ok) return { kind: 'refused', reason: head.reason }

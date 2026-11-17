@@ -310,7 +310,7 @@ export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx:
   if (op.kind === 'team-snapshot') {
     return op.key === `snapshot:${ctx.userId}` ? OK : refuse('a People view snapshot may only be written by the person it shows')
   }
-  if (role === null) return refuse('this workspace is not shared — its canvas is not written to the room')
+  if (role === null) return refuse('this workspace is not shared, so its canvas is not written to the room')
   if (role === 'viewer') return refuse('you are a viewer of this workspace')
   switch (op.kind) {
     case 'rect':
@@ -326,7 +326,7 @@ export function authorizeCanvasOp(role: WorkspaceRole | null, op: CanvasOp, ctx:
     case 'delete':
       if (ctx.panelOwner === null) return ctx.panelDeleted === true ? OK : refuse(`panel ${op.panelId} is not on the shared canvas`)
       if (role === 'owner' || ctx.panelOwner === ctx.userId) return OK
-      return refuse('an editor removes only their own panels — ask the workspace owner')
+      return refuse('an editor removes only their own panels; ask the workspace owner')
     case 'group-set':
     case 'group-delete':
       return OK

@@ -224,7 +224,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
   const dispatchWorkItemAttempt = useCallback(async (itemId: string, teammateId: string, root?: string, swarm?: SwarmMark): Promise<StartWorkOutcome> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const item = workItemsRef.current.find((i) => i.id === itemId)
-    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId} — it may have been closed` }
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId}; it may have been closed` }
     const patch = (fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }): PersistedWorkItem | undefined => {
       // Recovery reads the association again before React is obliged to
       // render. Keep the mirror current at the write, the same rule M197's
@@ -241,13 +241,15 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     nextIdRef.current = seedAfter([chatId], nextIdRef.current)
     const standingPanel = panelsRef.current.find((p) => p.rect.id === chatId)
     if (standingPanel !== undefined && !isChatPanel(standingPanel)) {
-      const reason = `${chatId} now belongs to a ${standingPanel.kind} panel — choose a new task or close the conflicting panel`
+      const reason = `${chatId} now belongs to a ${standingPanel.kind} panel. Choose a new task or close the conflicting panel`
       patch({ note: reason })
       return { kind: 'refused', reason }
     }
     // A completed dispatch is idempotent. Only the named refused-send stage
     // retries a message through an existing conversation.
-    const retryingSend = item.note?.startsWith('the lane and the conversation are ready, but the first message was refused — ') === true ||
+    // The em-dash form is what builds before M647 wrote; a card saved then still retries.
+    const refusedSend = (n: string | undefined): boolean => n !== undefined && /^the lane and the conversation are ready, but the first message was refused(: | — )/.test(n)
+    const retryingSend = refusedSend(item.note) ||
       item.note === 'the lane and the conversation are ready, but the first message has not been sent yet'
     // M319. The card's backend (absent is claude). The sheet judged it against
     // the task; this is the executor's own gate for the doors with no sheet
@@ -256,7 +258,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     // HERE — before a worktree exists — rather than after the agent starts.
     const backend = backendOf(item)
     if (swarm !== undefined && !BACKENDS[backend].appendsPrompt && standingPanel === undefined) {
-      const reason = `${BACKENDS[backend].reasons.noPrompt} — choose claude for an arrangement`
+      const reason = `${BACKENDS[backend].reasons.noPrompt}, so choose claude for an arrangement`
       patch({ note: reason })
       return { kind: 'refused', reason }
     }
@@ -306,7 +308,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         ports: probe?.ports ?? null
       })
       if (pre.blocked !== undefined) {
-        const reason = `Not started — ${pre.blocked}`
+        const reason = `Not started: ${pre.blocked}`
         patch({ note: reason })
         return { kind: 'refused', reason }
       }
@@ -339,7 +341,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       // message instead (below). The sheet said so before the start.
       const lanePrompt = swarm === undefined ? DISPATCH_PROMPT : swarmSystemPrompt(swarm, SUPERVISOR_PROMPT)
       const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, ...carryBackend(item), ...(BACKENDS[backend].appendsPrompt ? { appendSystemPrompt: lanePrompt } : {}) })
-      if (created.kind === 'refused') { patch({ note: `the lane is ready, but the conversation was refused — ${created.reason}` }); return { kind: 'refused', reason: created.reason } }
+      if (created.kind === 'refused') { patch({ note: `the lane is ready, but the conversation was refused: ${created.reason}` }); return { kind: 'refused', reason: created.reason } }
       const GAP = 48
       // The card and the offset are computed HERE, from the ref, not inside
       // the updater: React runs an updater later, while the recovery record
@@ -387,7 +389,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     const sent = await window.canvas.agentSession.send(chatId, message, [])
     const notSent = sendRefusalSentence(sent)
     if (notSent !== null) {
-      patch({ note: `the lane and the conversation are ready, but the first message was refused — ${notSent}` })
+      patch({ note: `the lane and the conversation are ready, but the first message was refused: ${notSent}` })
       return { kind: 'refused', reason: notSent }
     }
     patch({ note: undefined })
@@ -446,13 +448,13 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const preset = SWARM_PRESETS[presetId]
     const item = workItemsRef.current.find((i) => i.id === itemId)
-    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId} — it may have been closed` }
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId}; it may have been closed` }
     const mate = teammatesRef.current.find((t) => t.id === teammateId)
     // Named here rather than left to `swarmRefusal`, which SKIPS the teammate
     // arms for the doors that never ask for one (the card's menu). An executor
     // that reached main with a teammate id nothing answers to would be refused
     // by `board:lane` one step later, in main's words, after a seat was minted.
-    if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${teammateId} — it may have been deleted; open Agent profiles` }
+    if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${teammateId}. It may have been deleted; open Agent profiles` }
     // THE LAST GATE, and the same function the sheet's disabled Start read.
     // A caller that reached here another way (the verb, a card's menu) is
     // judged by the same sentences rather than by a second opinion.
@@ -469,7 +471,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     if (started.kind === 'refused') return started
     const primaryId = started.panelId
     const anchor = panelsRef.current.find((p) => p.rect.id === primaryId)
-    if (anchor === undefined) return { kind: 'refused', reason: `the ${preset.label} lane was made but its panel is gone — the arrangement was not built` }
+    if (anchor === undefined) return { kind: 'refused', reason: `the ${preset.label} lane was made but its panel is gone, so the arrangement was not built` }
     // The lane's own folder, read from the panel the dispatch just committed
     // rather than carried out of `board:lane`: a seat sharing the task lane
     // must share the folder the primary seat is ACTUALLY in, and the panel is
@@ -500,7 +502,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         // edges still reach it. An arrangement whose hub edges silently went
         // nowhere would look wired and be a drawing.
         minted.set(seat.key, standingSupervisor.rect.id)
-        notes.push('this canvas already had a supervisor — the arrangement uses it as its hub')
+        notes.push('this canvas already had a supervisor, and the arrangement uses it as its hub')
         continue
       }
       const at = { x: centre.x + seat.dx, y: centre.y + seat.dy }
@@ -572,7 +574,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     // would be a worse answer to the same question.
     if (preset.opensReview === true) {
       const opened = boardVerbsRef.current.review?.(itemId)
-      if (opened !== undefined && opened.kind === 'refused') notes.push(`the review node was not opened — ${opened.reason}`)
+      if (opened !== undefined && opened.kind === 'refused') notes.push(`the review node was not opened: ${opened.reason}`)
     }
     patchNote(notes.length === 0 ? undefined : notes.join(' · '))
     return { kind: 'started', itemId, panelId: primaryId }
@@ -813,7 +815,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
         if (argv === null) return 'type the command that runs this lane\'s checks'
         const it = workItemsRef.current.find((i) => i.id === id)
         const lane = taskLaneOf(id)
-        if (it === undefined || lane === undefined) return 'the lane is gone — start the task again'
+        if (it === undefined || lane === undefined) return 'the lane is gone; start the task again'
         const watcherId = `w${nextIdRef.current++}`
         const trigger = { kind: 'path' as const, path: lane.path }
         // Main first, then the run, THEN the panel: the node's own create on
@@ -903,7 +905,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     const lane = lanes.find((w) => w.id === item.worktreeId)
     const standing = lane === undefined ? undefined : await window.canvas.board.laneStatus({ path: lane.path, root: lane.root })
     const refusal = prRefusal(item, standing, connected, mate)
-    if (refusal !== null || lane === undefined || item.teammateId === undefined || item.panelId === undefined || item.key === undefined) { patchWorkItem(itemId, { note: refusal ?? 'no lane yet — dispatch the item first' }); return }
+    if (refusal !== null || lane === undefined || item.teammateId === undefined || item.panelId === undefined || item.key === undefined) { patchWorkItem(itemId, { note: refusal ?? 'no lane yet; dispatch the item first' }); return }
     const repo = repoOfKey(item.key)
     if (repo === null) return
     // M310. The evidence rides the PR when the review gathered it.
@@ -915,7 +917,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
       patchWorkItem(itemId, { pr: { number: result.number, url: result.url }, state: WORK_ITEM_STATES[2] as PersistedWorkItem['state'], note: undefined })
       return
     }
-    if ('reason' in result) patchWorkItem(itemId, { note: `${result.kind === 'push-failed' ? 'push failed — ' : ''}${result.reason}` })
+    if ('reason' in result) patchWorkItem(itemId, { note: `${result.kind === 'push-failed' ? 'push failed: ' : ''}${result.reason}` })
   }, [credentialRows, patchWorkItem])
   const commentPr = useCallback(async (itemId: string): Promise<void> => {
     const item = workItemsRef.current.find((i) => i.id === itemId)
@@ -937,7 +939,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     const item = workItemsRef.current.find((i) => i.id === itemId)
     if (item === undefined) return
     const laneOpen = item.panelId !== undefined && item.state === WORK_ITEM_STATES[1] && panelsRef.current.some((p) => p.rect.id === item.panelId)
-    patchWorkItem(itemId, { state: WORK_ITEM_STATES[3] as PersistedWorkItem['state'], note: laneOpen ? 'lane still open — close the chat to stop it' : undefined })
+    patchWorkItem(itemId, { state: WORK_ITEM_STATES[3] as PersistedWorkItem['state'], note: laneOpen ? 'lane still open; close the chat to stop it' : undefined })
     if (item.source === 'github' && item.pr !== undefined) {
       setInputMode({ kind: 'confirm', label: `Comment the PR on ${item.key ?? 'the issue'}?`, initial: '', submit: () => { void commentPr(itemId) } })
       palette.openPalette()
@@ -995,7 +997,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     const membership = taskMemberships(shown, workItemsRef.current).find((m) => m.itemId === itemId)
     const ids = new Set(membership?.members.map((m) => m.panelId) ?? [])
     const rects = shown.filter((q) => ids.has(q.rect.id)).map((q) => q.rect)
-    if (rects.length === 0) return { kind: 'refused', reason: 'no panel of this task is on the canvas — its card and its conversation are closed' }
+    if (rects.length === 0) return { kind: 'refused', reason: 'no panel of this task is on the canvas. Its card and its conversation are closed' }
     frameRects(rects)
     return { kind: 'ran' }
   }
@@ -1004,7 +1006,7 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
   // from the anchor every render), so only the leader's rect is written and
   // the card comes with it; an undo of the entry restores both.
   const arrangeItem = (itemId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
-    if (mergedRef.current) return { kind: 'refused', reason: 'leave the merged view to arrange — its geometry is not this canvas\'s to write' }
+    if (mergedRef.current) return { kind: 'refused', reason: 'leave the merged view to arrange. Its geometry is not this canvas\'s to write' }
     const shown = displayPanelsRef.current
     const items = workItemsRef.current
     const membership = taskMemberships(shown, items).find((m) => m.itemId === itemId)
@@ -1035,10 +1037,10 @@ export function useBoardVerbs(deps: BoardVerbsDeps) {
     const carried = followers.filter((f) => moved.has(f.leaderId)).flatMap((f) => { const lead = moved.get(f.leaderId)!; const own = shown.find((q) => q.rect.id === f.id); return own === undefined ? [] : [{ ...own.rect, x: lead.x + f.dx, y: lead.y + f.dy }] })
     frameRects([...plan.rects, ...carried])
     const title = items.find((i) => i.id === itemId)?.title ?? itemId
-    return { kind: 'ran', note: `arranged ${plan.rects.length} panel${plan.rects.length === 1 ? '' : 's'} of ${title} — one undo puts them back` }
+    return { kind: 'ran', note: `arranged ${plan.rects.length} panel${plan.rects.length === 1 ? '' : 's'} of ${title}. One undo puts them back` }
   }
   boardVerbsRef.current.arrange = (panelId: string) => {
-    if (mergedRef.current) return { kind: 'refused', reason: 'leave the merged view to arrange — its geometry is not this canvas\'s to write' }
+    if (mergedRef.current) return { kind: 'refused', reason: 'leave the merged view to arrange. Its geometry is not this canvas\'s to write' }
     const shown = displayPanelsRef.current
     const items = workItemsRef.current
     const target = showTaskTarget(panelId, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))

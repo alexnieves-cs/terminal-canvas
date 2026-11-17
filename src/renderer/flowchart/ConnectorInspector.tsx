@@ -66,7 +66,7 @@ export function ConnectorInspector({ connector, fromName, toName, onPatch, onRem
           className="connector-inspector__label"
           value={label}
           maxLength={CONNECTOR_LABEL_MAX}
-          placeholder="none — double-click the line to add one"
+          placeholder="none. Double-click the line to add one"
           onChange={(e) => { setLabel(e.target.value) }}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}

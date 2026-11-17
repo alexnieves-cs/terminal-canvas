@@ -48,7 +48,7 @@ function SharedDraft({ p, workspaceId, who, onClose }: { p: SharedPanel; workspa
         value={text}
         onChange={setText}
         // No disk here to write: say whose save it is rather than doing nothing.
-        onSave={() => setNote(`Only ${who} can save this file — your edits reach them as unsaved changes.`)}
+        onSave={() => setNote(`Only ${who} can save this file. Your edits reach them as unsaved changes.`)}
         onEscape={onClose}
         path={p.title}
         shared={{ workspaceId, panelId: p.id, hosted: false, preferLocal: () => false }}
@@ -91,7 +91,7 @@ export function SharedPlaceholderLayer(props: SharedPlaceholderLayerProps): JSX.
               <SharedDraft p={p} workspaceId={workspaceId} who={who} onClose={() => setOpenId(null)} />
             ) : (
               <div className="shared-placeholder__body">
-                {`${KIND_WORD[p.kind] ?? p.kind} on ${who}’s machine — nothing runs here.`}
+                {`${KIND_WORD[p.kind] ?? p.kind} on ${who}’s machine. Nothing runs here.`}
                 {props.files.includes(p.id) && (
                   <button type="button" className="shared-placeholder__open" data-shared-draft-open={p.id}
                     onMouseDown={(e) => e.stopPropagation()} onClick={() => setOpenId(p.id)}>Edit shared draft</button>

@@ -103,7 +103,7 @@ export function promptsActions(ctx: ActionCtx): PromptsActions {
         if (name === undefined) { setInputMode(null); void withBuiltIns(fillPlaceholders(body, values)).then(deliver); return }
         setInputMode({
           kind: 'text',
-          label: `${name} (${i + 1} of ${holes.length}) — the value for {{${name}}}`,
+          label: `${name} (${i + 1} of ${holes.length}): the value for {{${name}}}`,
           initial: '',
           submit: (value) => { values[name] = value; ask(i + 1) }
         })
@@ -169,14 +169,14 @@ export function promptsActions(ctx: ActionCtx): PromptsActions {
     beginSaveTemplate: (panelIds) => {
       // The merged view's rects are lane-space: a template saved there would
       // record a geometry that exists in one render (M80's verifier).
-      if (mergedRef.current) { setInputMode({ kind: 'text', label: 'the merged view is read-only — switch to a workspace first', initial: '', submit: () => setInputMode(null) }); palette.openPalette(); return }
+      if (mergedRef.current) { setInputMode({ kind: 'text', label: 'the merged view is read-only; switch to a workspace first', initial: '', submit: () => setInputMode(null) }); palette.openPalette(); return }
       const chosen = panelsRef.current.filter((p) => panelIds.includes(p.rect.id))
       const usable = chosen.filter((p) => isTerminalPanel(p) || isChatPanel(p))
       const dropped = chosen.length - usable.length
       if (usable.length === 0) {
         // Refused BY NAME, never silently: the row was enabled because
         // something was selected, and nothing happening reads as broken.
-        setInputMode({ kind: 'text', label: 'a template is made of terminals and chats — none is selected', initial: '', submit: () => setInputMode(null) })
+        setInputMode({ kind: 'text', label: 'a template is made of terminals and chats, and none is selected', initial: '', submit: () => setInputMode(null) })
         palette.openPalette()
         return
       }
@@ -250,19 +250,19 @@ export function promptsActions(ctx: ActionCtx): PromptsActions {
       const chosen = panelsRef.current.filter((p) => panelIds.includes(p.rect.id) && (isTerminalPanel(p) || isChatPanel(p)))
       const ids = new Set(chosen.map((p) => p.templateBinding?.templateId))
       const templateId = chosen[0]?.templateBinding?.templateId
-      if (chosen.length === 0 || templateId === undefined || ids.size !== 1 || ids.has(undefined)) return { kind: 'refused', reason: 'every selected panel must have been minted by the same template — save as a new template instead' }
+      if (chosen.length === 0 || templateId === undefined || ids.size !== 1 || ids.has(undefined)) return { kind: 'refused', reason: 'every selected panel must have been minted by the same template; save as a new template instead' }
       const bound = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
-      if (bound === undefined) return { kind: 'refused', reason: `the template these panels came from is gone — save as a new template` }
-      if (isBuiltInTemplate(bound.id)) return { kind: 'refused', reason: `${bound.name} is built in — save as a new template (a copy)` }
-      if (getDraft(bound.id)?.dirty === true) return { kind: 'refused', reason: `the diagram holds unsaved edits to ${bound.name} — save or reload them first` }
+      if (bound === undefined) return { kind: 'refused', reason: `the template these panels came from is gone; save as a new template` }
+      if (isBuiltInTemplate(bound.id)) return { kind: 'refused', reason: `${bound.name} is built in; save as a new template (a copy)` }
+      if (getDraft(bound.id)?.dirty === true) return { kind: 'refused', reason: `the diagram holds unsaved edits to ${bound.name}; save or reload them first` }
       const seen = new Set<string>()
       let next: PersistedTemplate = bound
       const centre = chosen.reduce((acc, p) => ({ x: acc.x + (p.rect.x + p.rect.w / 2) / chosen.length, y: acc.y + (p.rect.y + p.rect.h / 2) / chosen.length }), { x: 0, y: 0 })
       for (const p of chosen) {
         const key = p.templateBinding!.key
-        if (seen.has(key)) return { kind: 'refused', reason: `two panels are bound to ${key} — keep one of them` }
+        if (seen.has(key)) return { kind: 'refused', reason: `two panels are bound to ${key}; keep one of them` }
         seen.add(key)
-        if (!next.nodes.some((n) => n.key === key)) return { kind: 'refused', reason: `${bound.name} has no node ${key} any more — save as a new template` }
+        if (!next.nodes.some((n) => n.key === key)) return { kind: 'refused', reason: `${bound.name} has no node ${key} any more; save as a new template` }
         const moved = moveNode(next, key, Math.round(p.rect.x + p.rect.w / 2 - centre.x), Math.round(p.rect.y + p.rect.h / 2 - centre.y))
         if (moved.kind === 'refused') return moved
         next = moved.template
@@ -291,9 +291,9 @@ export function promptsActions(ctx: ActionCtx): PromptsActions {
       return r.kind === 'ok' ? { kind: 'ok' } : r
     },
     beginWorkflowEdit: (templateId, verb) => {
-      const labels = { add: 'add <kind> — terminal, chat, pool, orchestrator or collect', move: 'move <key> <dx> <dy>', set: 'set <key> <field> <value>', remove: 'remove <key>', edge: 'edge <from> <to> <trigger>', unedge: 'unedge <from> <to>' }
+      const labels = { add: 'add <kind>: terminal, chat, pool, orchestrator or collect', move: 'move <key> <dx> <dy>', set: 'set <key> <field> <value>', remove: 'remove <key>', edge: 'edge <from> <to> <trigger>', unedge: 'unedge <from> <to>' }
       setInputMode({
-        kind: 'text', label: `${labels[verb]} — on ${allTemplates(templateRowsRef.current).find((t) => t.id === templateId)?.name ?? templateId}`, initial: '',
+        kind: 'text', label: `${labels[verb]} on ${allTemplates(templateRowsRef.current).find((t) => t.id === templateId)?.name ?? templateId}`, initial: '',
         submit: (value) => {
           const words = value.trim().split(/\s+/).filter((w) => w !== '')
           // The same plan line the agent door takes, so the two doors cannot differ.

@@ -846,7 +846,7 @@ export function diffLocal(
     const fm = panels.get(key)
     const content = wireContent(p, me.host, (id) => localPanelIds.has(id), scrub)
     for (const f of content.over) {
-      warn?.(`panel ${key}: its ${f === 'shape' ? 'shape record is' : 'arrows are'} past the shared cap of ${f === 'shape' ? SHARED_SHAPE_MAX : SHARED_CONNECTORS_MAX} characters — not written; teammates keep the last version that fit`)
+      warn?.(`panel ${key}: its ${f === 'shape' ? 'shape record is' : 'arrows are'} past the shared cap of ${f === 'shape' ? SHARED_SHAPE_MAX : SHARED_CONNECTORS_MAX} characters, so it was not written; teammates keep the last version that fit`)
     }
     const title = content.title ?? scrub(p.title ?? '').slice(0, TITLE_MAX)
     if (fm === undefined) {

@@ -172,7 +172,7 @@ export function tonightBatchFrom(
   for (const item of items) {
     if (item.state === 'done' || item.merged !== undefined) continue
     if (item.state === 'review') { skipped.push({ title: item.title, reason: 'waiting on your review' }); continue }
-    if (item.panelId === undefined) { skipped.push({ title: item.title, reason: 'not started — start it once so it has a lane' }); continue }
+    if (item.panelId === undefined) { skipped.push({ title: item.title, reason: 'not started; start it once so it has a lane' }); continue }
     if (!chatOpen(item.panelId)) { skipped.push({ title: item.title, reason: 'its conversation is closed' }); continue }
     if (tasks.length >= TONIGHT_TASKS_MAX) { skipped.push({ title: item.title, reason: `a night holds at most ${TONIGHT_TASKS_MAX} tasks` }); continue }
     const what = (item.brief ?? item.description ?? '').trim()

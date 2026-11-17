@@ -103,11 +103,11 @@ export function proposeOverride(id: string, chord: string, current: readonly Sho
       ok: false,
       reason: def.scope === 'mouse'
         ? `${def.label} is not a key chord`
-        : `${def.label} can't use ${chord} — that key isn't one this list can match.`
+        : `${def.label} can't use ${chord}, because that key isn't one this list can match.`
     }
   }
   if (def.scope === 'canvas' && !parsed.meta) {
-    return { ok: false, reason: `${def.label} needs ⌘ — a bare key belongs to the terminal you're typing in.` }
+    return { ok: false, reason: `${def.label} needs ⌘, because a bare key belongs to the terminal you're typing in.` }
   }
   // Back to the registry chord is "no override", not a stored copy of the default.
   const next = current.filter((item) => item.id !== id)

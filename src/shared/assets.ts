@@ -44,12 +44,12 @@ export function isAssetId(value: unknown): value is string {
 
 /** Why bytes were not taken in, in a sentence that names the next useful step. */
 export function assetRefusal(reason: 'too-large' | 'not-an-image' | 'missing', detail?: { bytes?: number; cap?: number }): string {
-  if (reason === 'missing') return 'that file is not there any more — choose another'
-  if (reason === 'not-an-image') return 'that file is not a PNG, JPEG, GIF or WebP — its first bytes say otherwise, whatever it is called'
+  if (reason === 'missing') return 'that file is not there any more; choose another'
+  if (reason === 'not-an-image') return 'that file is not a PNG, JPEG, GIF or WebP. Its first bytes say otherwise, whatever it is called'
   // Kilobytes under a megabyte: `0.0 MB, over this app's 0.0 MB limit` is a
   // sentence that names no number a person can act on.
   const mb = (n: number): string => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`)
-  return `that picture is ${mb(detail?.bytes ?? 0)}, over this app's ${mb(detail?.cap ?? ASSET_MAX_BYTES)} limit for one asset — shrink it, or point at it in place`
+  return `that picture is ${mb(detail?.bytes ?? 0)}, over this app's ${mb(detail?.cap ?? ASSET_MAX_BYTES)} limit for one asset; shrink it, or point at it in place`
 }
 
 /**
@@ -60,7 +60,7 @@ export function assetRefusal(reason: 'too-large' | 'not-an-image' | 'missing', d
  * action" — an object, not a hole).
  */
 export function missingImageSentence(kind: 'missing' | 'too-large' | 'not-an-image', detail?: { bytes?: number; cap?: number }): string {
-  if (kind === 'missing') return 'these bytes are not on this machine — Replace points this picture at a file that is'
+  if (kind === 'missing') return 'these bytes are not on this machine. Replace points this picture at a file that is'
   if (kind === 'too-large') return assetRefusal('too-large', detail)
   return assetRefusal('not-an-image')
 }

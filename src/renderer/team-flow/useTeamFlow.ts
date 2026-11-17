@@ -74,7 +74,7 @@ export async function writeTeamFlow(req: FlowRequest): Promise<string | null> {
     return verdict.reason
   } catch {
     undo()
-    return 'that did not reach the app — try again'
+    return 'that did not reach the app; try again'
   }
 }
 

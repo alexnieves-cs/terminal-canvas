@@ -266,7 +266,7 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
       if (refused !== null) { setNote(refused); return }
       const now = Date.now()
       ctx?.onComments?.(itemId, comments.map((c) => (ids.has(c.id) ? { ...c, sentAt: now } : c)))
-      setNote(answer === 'queued' ? 'Sent — it waits in the conversation\'s list until this turn ends' : 'Sent to the conversation — the comments stay open until you resolve them')
+      setNote(answer === 'queued' ? 'Sent. It waits in the conversation\'s list until this turn ends' : 'Sent to the conversation. The comments stay open until you resolve them')
     })
   }
   const draftComments = (): void => {
@@ -340,13 +340,13 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
         <span className="focus__decide-sentence">{h?.detail}</span>
       ) : (
         <>
-          <span className="focus__decide-sentence">{reviewedNow ? 'You have read the current changes.' : `${ctx.paths.length} file${ctx.paths.length === 1 ? '' : 's'} changed — read them, then mark them reviewed.`}</span>
+          <span className="focus__decide-sentence">{reviewedNow ? 'You have read the current changes.' : `${ctx.paths.length} file${ctx.paths.length === 1 ? '' : 's'} changed. Read them, then mark them reviewed.`}</span>
           {/* ONE filled primary: Mark reviewed until the current changes are read, then Accept. */}
           <button type="button" className={reviewedNow ? 'focus__secondary' : 'focus__primary'} data-focus-mark-reviewed disabled={!markable}
             title={markable ? 'record that you have read these changes' : h?.detail} {...shellControl(markReviewed)}>{ctx.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}</button>
           {accept !== null && (
             <button type="button" className={reviewedNow ? 'focus__primary' : 'focus__secondary'} data-focus-accept disabled={accept.blocked !== null || accept.busy}
-              title={accept.blocked ?? 'merge this task\'s branch into your main branch — you see the plan first'} {...shellControl(accept.onArm)}>{accept.busy ? 'Reading…' : 'Accept…'}</button>
+              title={accept.blocked ?? 'merge this task\'s branch into your main branch. You see the plan first'} {...shellControl(accept.onArm)}>{accept.busy ? 'Reading…' : 'Accept…'}</button>
           )}
         </>
       )}
@@ -368,7 +368,7 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
             <Menu open={switchOpen} onOpenChange={setSwitchOpen}>
               {/* Still the page's heading; the heading is the switcher's trigger. */}
               <h1 className="focus__title" data-focus-title title={item.title}>
-                <MenuTrigger className="focus__switch" data-focus-switch aria-label={`${item.title} — switch to another task`}>
+                <MenuTrigger className="focus__switch" data-focus-switch aria-label={`${item.title}: switch to another task`}>
                   <span className="focus__title-text">{item.title}</span><span className="focus__switch-caret" aria-hidden="true">▾</span>
                 </MenuTrigger>
               </h1>
@@ -392,7 +392,7 @@ export function FocusTask(props: FocusTaskProps): JSX.Element {
         <div className="focus__state">
           {header.blocker !== null && <p className="focus__blocker" data-focus-blocker role="status">{header.blocker}</p>}
           <button type="button" className="focus__next" data-focus-next disabled={header.go === null && chat !== undefined}
-            title={header.go === null ? header.next : `${header.next} — here, without leaving this page`} {...shellControl(go)}>
+            title={header.go === null ? header.next : `${header.next}, here, without leaving this page`} {...shellControl(go)}>
             <span className="focus__next-label">Next</span> {header.next}
           </button>
           {(props.history?.length ?? 0) > 0 && (
@@ -578,7 +578,7 @@ function FocusActivity({ panelId }: { panelId: string }): JSX.Element {
   const phase = orchPhase(blocks, chat.live !== null)
   const words = state === 'wants-you' ? 'Waiting on you'
     : chat.live !== null ? (phase.kind === 'idle' ? 'Working' : outward(phase.label, `panel ${panelId}`).text)
-    : chat.lastTurn !== undefined ? `${chat.lastTurn.kind === 'ok' ? 'Idle — last turn ended' : chat.lastTurn.kind === 'interrupted' ? 'Interrupted' : 'Stopped — its last turn failed'} ${formatAgo(chat.lastTurn.at)}`
+    : chat.lastTurn !== undefined ? `${chat.lastTurn.kind === 'ok' ? 'Idle, last turn ended' : chat.lastTurn.kind === 'interrupted' ? 'Interrupted' : 'Stopped, last turn failed'} ${formatAgo(chat.lastTurn.at)}`
     : 'Idle'
   return <span className="focus__activity" data-focus-activity={state ?? 'none'} role="status">{words}</span>
 }

@@ -40,7 +40,7 @@ export type ToolSpec =
   | { kind: 'refused'; reason: string }
 
 /** M252. Every door that would load or serve an unread tool's page says this — one sentence, so the pane, the palette and the agent line agree. */
-export const REASON_TOOL_UNREAD = 'this preview is a generated tool nobody has read yet — read what it can reach on the pane, and choose "I\'ve read this" before anything of it runs'
+export const REASON_TOOL_UNREAD = 'this preview is a generated tool nobody has read yet. Read what it can reach on the pane, and choose "I\'ve read this" before anything of it runs'
 
 export const TOOL_FILES_MAX = 20
 export const TOOL_FILE_BYTES_MAX = 256 * 1024
@@ -86,7 +86,7 @@ function extractObject(raw: string): { kind: 'object'; value: Record<string, unk
     if (envelope.is_error === true) return { kind: 'refused', reason: `the agent could not answer: ${typeof envelope.result === 'string' ? envelope.result : 'an error with no message'}` }
     if (isRecord(envelope.structured_output)) return { kind: 'object', value: envelope.structured_output }
   }
-  return { kind: 'refused', reason: 'the agent answered with something that is not a tool — try describing it again, in one or two sentences' }
+  return { kind: 'refused', reason: 'the agent answered with something that is not a tool. Try describing it again, in one or two sentences' }
 }
 
 export function toolSlug(name: string): string {
@@ -101,13 +101,13 @@ function unsafePath(path: string): boolean {
 }
 
 export function parseToolReply(raw: unknown, cwd: string): ToolSpec {
-  if (typeof raw !== 'string' || raw.trim() === '') return { kind: 'refused', reason: 'the agent answered nothing — try again' }
+  if (typeof raw !== 'string' || raw.trim() === '') return { kind: 'refused', reason: 'the agent answered nothing; try again' }
   const extracted = extractObject(raw)
   if (extracted.kind === 'refused') return extracted
   const obj = extracted.value
-  if (obj.kind !== 'workflow' && obj.kind !== 'app') return { kind: 'refused', reason: 'the agent answered with something that is not a tool — it must be a workflow or an app' }
+  if (obj.kind !== 'workflow' && obj.kind !== 'app') return { kind: 'refused', reason: 'the agent answered with something that is not a tool. It must be a workflow or an app' }
   const name = typeof obj.name === 'string' ? obj.name.trim().slice(0, 80) : ''
-  if (name === '') return { kind: 'refused', reason: 'the agent\'s tool has no name — try again' }
+  if (name === '') return { kind: 'refused', reason: 'the agent\'s tool has no name; try again' }
   const description = typeof obj.description === 'string' && obj.description.trim() !== '' ? obj.description.trim().slice(0, 400) : undefined
 
   if (obj.kind === 'workflow') {
@@ -125,23 +125,23 @@ export function parseToolReply(raw: unknown, cwd: string): ToolSpec {
   const devScript = typeof obj.devScript === 'string' ? obj.devScript.trim() : ''
   if (devScript === '' || devScript.length > 300 || /[\r\n]/.test(devScript)) return { kind: 'refused', reason: 'the app has no single-line dev script to serve it' }
   if (!Array.isArray(obj.files) || obj.files.length === 0) return { kind: 'refused', reason: 'the app has no files' }
-  if (obj.files.length > TOOL_FILES_MAX) return { kind: 'refused', reason: `the app has ${obj.files.length} files — a tool is at most ${TOOL_FILES_MAX}` }
+  if (obj.files.length > TOOL_FILES_MAX) return { kind: 'refused', reason: `the app has ${obj.files.length} files, and a tool is at most ${TOOL_FILES_MAX}` }
   const files: ToolFile[] = []
   const dropped: string[] = []
   let total = 0
   for (const f of obj.files) {
     if (!isRecord(f) || typeof f.path !== 'string' || typeof f.text !== 'string') return { kind: 'refused', reason: 'one of the app\'s files is not a path and a text' }
-    if (unsafePath(f.path)) return { kind: 'refused', reason: `the app wants to write ${f.path}, outside its own folder — nothing was made` }
+    if (unsafePath(f.path)) return { kind: 'refused', reason: `the app wants to write ${f.path}, outside its own folder, so nothing was made` }
     // The app writes its own package.json from `devScript`, so the script
     // the inspector shows is the one `npm run dev` runs. A second one is named.
     if (f.path === 'package.json') { dropped.push('package.json (written from the dev script instead)'); continue }
     if (files.some((x) => x.path === f.path)) return { kind: 'refused', reason: `the app names ${f.path} twice` }
     const bytes = new TextEncoder().encode(f.text).length
-    if (bytes > TOOL_FILE_BYTES_MAX) return { kind: 'refused', reason: `${f.path} is ${bytes} bytes — a tool's file is at most ${TOOL_FILE_BYTES_MAX}` }
+    if (bytes > TOOL_FILE_BYTES_MAX) return { kind: 'refused', reason: `${f.path} is ${bytes} bytes, and a tool's file is at most ${TOOL_FILE_BYTES_MAX}` }
     total += bytes
     files.push({ path: f.path, text: f.text })
   }
-  if (total > TOOL_TOTAL_BYTES_MAX) return { kind: 'refused', reason: `the app is ${total} bytes — a tool is at most ${TOOL_TOTAL_BYTES_MAX}` }
+  if (total > TOOL_TOTAL_BYTES_MAX) return { kind: 'refused', reason: `the app is ${total} bytes, and a tool is at most ${TOOL_TOTAL_BYTES_MAX}` }
   if (!files.some((f) => f.path === 'index.html')) return { kind: 'refused', reason: 'the app has no index.html to open' }
   return { kind: 'app', name, slug: toolSlug(name), port, devScript, files, dropped }
 }

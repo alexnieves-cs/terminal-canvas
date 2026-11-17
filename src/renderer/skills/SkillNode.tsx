@@ -271,7 +271,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
                 .then((r) => {
                   setFolderResult(r.kind === 'renamed' ? `renamed to ${to}`
                     : r.kind === 'refused' ? r.why
-                      : r.kind === 'failed' ? `the rename failed — ${r.why}` : r.kind)
+                      : r.kind === 'failed' ? `the rename failed: ${r.why}` : r.kind)
                   // The shelf slot and the panel record follow only a rename
                   // that actually LANDED.
                   if (r.kind === 'renamed') { setRenameTo(''); props.onRenamed(id, to) }
@@ -290,7 +290,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
                 .then((r) => {
                   if (r.kind === 'deleted') { props.onClose(id); return }
                   setFolderResult(r.kind === 'refused' ? r.why
-                    : r.kind === 'failed' ? `the delete failed — ${r.why}` : r.kind)
+                    : r.kind === 'failed' ? `the delete failed: ${r.why}` : r.kind)
                 })
                 .catch(() => setFolderResult('the delete did not answer'))
             })}

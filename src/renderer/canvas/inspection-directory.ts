@@ -39,7 +39,7 @@ export function inspectionDirectory(panel: Panel | undefined, surface: 'files' |
   if (panel === undefined) return { kind: 'no-directory' }
   let cwd: string | undefined
   if (isChatPanel(panel)) {
-    if (panel.chat.sandbox) return { kind: 'absent', reason: 'sandboxed — no project folder to read' }
+    if (panel.chat.sandbox) return { kind: 'absent', reason: 'sandboxed, so there is no project folder to read' }
     cwd = panel.chat.cwd
   } else if (isTerminalPanel(panel)) cwd = surface === 'files' ? liveCwd ?? panel.spec.cwd : panel.spec.cwd
   else if (surface === 'files' && isReviewPanel(panel)) cwd = panel.subject.repoRoot

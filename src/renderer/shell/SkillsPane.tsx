@@ -40,7 +40,7 @@ import {
  * drop on the canvas is read by the canvas host alone.
  */
 
-export const SKILLS_NO_CWD = 'no directory — select a panel with one to read what it can do'
+export const SKILLS_NO_CWD = 'no directory; select a panel with one to read what it can do'
 export const SKILLS_PENDING = 'reading…'
 
 /**
@@ -161,7 +161,7 @@ function resourceWord(card: SkillCard): string {
   // files says nothing about files (the product rules' rest rule).
   if (r.kind === 'none') return ''
   if (r.kind === 'some') return `${r.n} bundled file${r.n === 1 ? '' : 's'}`
-  return `bundled files not counted — ${r.why}`
+  return `bundled files not counted: ${r.why}`
 }
 
 function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
@@ -231,7 +231,7 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
         {SCOPES.map((s) => (
           <button key={s} type="button" className="skills-pane__filter" data-skills-scope={s}
             aria-pressed={props.scopes !== null && props.scopes.includes(s)}
-            title={`Show only ${s} — press again for every scope`}
+            title={`Show only ${s}. Press again for every scope`}
             {...shellControl(() => props.onToggleScope(s))}>{s}</button>
         ))}
         <button type="button" className="skills-pane__filter" data-skills-placed aria-pressed={props.placedOnly}
@@ -284,7 +284,7 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
 
       {props.shelfState.kind === 'unavailable' && (
         <p className="pf__note skills-pane__shelf-why" data-skills-shelf-why>
-          your columns could not be read, so every card is showing where it derives and a card you move here will not be saved — {props.shelfState.why}
+          your columns could not be read, so every card is showing where it derives and a card you move here will not be saved: {props.shelfState.why}
         </p>
       )}
 
@@ -415,7 +415,7 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                       </span>
                       {resourceWord(card) !== '' && <span className="skill-card__resources" data-skill-resources>{resourceWord(card)}</span>}
                       {!card.installed && (
-                        <span className="skill-card__note" data-skill-gone>not installed — the shelf kept its slot</span>
+                        <span className="skill-card__note" data-skill-gone>not installed, but the shelf kept its slot</span>
                       )}
                     </li>
                   ) })}

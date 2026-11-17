@@ -776,7 +776,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       ok(IDS[2],
         sharedCard && sharedCard.ambiguous === true && /2 sessions write here/.test(sharedCard.place) && /shared directory/.test(sharedCard.place) &&
           ambiguity && ambiguity.writers === '2' && /cannot be attributed to this task alone/.test(ambiguity.text) &&
-          sharedRead && /authorship is ambiguous/.test(sharedRead.words) && consistent(sharedRead) &&
+          sharedRead && /authorship is ambiguous/i.test(sharedRead.words) && consistent(sharedRead) &&
           typeof blockedWrite === 'string' && /blocked here by name/.test(blockedWrite) && noWriteButtons === 0,
         JSON.stringify({ sharedCard, ambiguity, words: sharedRead && sharedRead.words, blockedWrite, noWriteButtons, log: cLog.slice(-3) }))
 

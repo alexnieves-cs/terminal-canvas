@@ -28,7 +28,7 @@ export function reviewCommentActions(ctx: ActionCtx): ReviewCommentActions {
   return {
     reviewComment: (panelId, place, comment, origin = 'person', caller) => {
       const at = parseCommentPlace(place)
-      if (at === null) return { kind: 'refused', reason: `${place} is not a place in the diff — write path:line, or path:line:old for a removed line` }
+      if (at === null) return { kind: 'refused', reason: `${place} is not a place in the diff. Write path:line, or path:line:old for a removed line` }
       if (comment.trim() === '') return { kind: 'refused', reason: 'write the comment after its place' }
       const add = boardVerbsRef.current?.addReviewComment
       if (add === undefined) return { kind: 'refused', reason: 'the canvas is not ready yet' }

@@ -64,7 +64,7 @@ export function useApprovalOutcomes(): readonly ApprovalOutcome[] {
 /** The acknowledgment's sentence — what was decided and what it means for the next call. */
 export function approvalOutcomeWords(o: Pick<ApprovalOutcome, 'agent' | 'toolName' | 'kind'>): string {
   switch (o.kind) {
-    case 'once': return `Allowed ${o.toolName} once for ${o.agent} — the next call asks again`
+    case 'once': return `Allowed ${o.toolName} once for ${o.agent}. The next call asks again`
     case 'session': return `Allowed ${o.toolName} for ${o.agent} until this conversation closes`
     case 'deny': return `Denied ${o.toolName} — ${o.agent} was told`
   }

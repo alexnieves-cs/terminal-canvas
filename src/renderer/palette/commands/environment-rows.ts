@@ -54,18 +54,18 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
     report.shell.ok ? `Login shell read: ${report.shell.path || 'default'}` : `Login shell could not be read: ${report.shell.path || 'default'}`,
     report.shell.ok
       ? `${report.pathEntries.length} PATH entries resolved from it`
-      : `${report.shell.reason ?? 'the probe failed'} — CLIs installed through your shell's rc files may not be found`,
+      : `${report.shell.reason ?? 'the probe failed'}, so CLIs installed through your shell's rc files may not be found`,
     'shell zsh bash login probe failed'))
   const INSTALL: Record<string, string> = {
     claude: 'install the Claude Code CLI so `claude` is on your PATH',
     codex: 'install the Codex CLI so `codex` is on your PATH',
     git: 'install git (Xcode command line tools, or Homebrew)',
     // M531. Optional agents: the subtitle says what installing one gives, not that it is needed.
-    gemini: 'optional — install Gemini CLI to get its preset',
-    opencode: 'optional — install OpenCode to get its preset',
-    'cursor-agent': 'optional — install Cursor Agent to get its preset',
-    amp: 'optional — install Amp to get its preset',
-    kimi: 'optional — install Kimi CLI to get its preset'
+    gemini: 'optional; install Gemini CLI to get its preset',
+    opencode: 'optional; install OpenCode to get its preset',
+    'cursor-agent': 'optional; install Cursor Agent to get its preset',
+    amp: 'optional; install Amp to get its preset',
+    kimi: 'optional; install Kimi CLI to get its preset'
   }
   for (const cli of report.clis) {
     rows.push(info(`env.cli.${cli.name}`,
@@ -85,7 +85,7 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
       'vm sandbox sandboxed container docker orbstack apple runtime lane'))
   }
   rows.push(info('env.tmux',
-    report.tmux.kind === 'tmux' ? 'tmux: in use' : 'tmux: not in use — sessions end with the window',
+    report.tmux.kind === 'tmux' ? 'tmux: in use' : 'tmux: not in use, so sessions end with the window',
     report.tmux.path ? `${report.tmux.path} — ${report.tmux.reason}` : report.tmux.reason,
     'tmux backend session survive'))
   rows.push(info('env.path', `PATH: ${report.pathEntries.length} entries`, report.pathEntries.join(' · ') || '(empty)', 'path entries'))
@@ -101,10 +101,10 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
     control === null ? 'tc: not available in this instance' : `tc: ${control.cliPath}`,
     control === null
       ? 'another instance of this build owns the control socket'
-      : `on PATH inside every panel; outside, export PATH="${control.cliPath.replace(/\/tc$/, '')}:$PATH" — or open terminal-canvas://open?preset=…`,
+      : `on PATH inside every panel; outside, export PATH="${control.cliPath.replace(/\/tc$/, '')}:$PATH", or open terminal-canvas://open?preset=…`,
     'tc cli command line socket url scheme'))
     rows.push(info('env.probed', `Read at ${new Date(report.probedAt).toLocaleTimeString()}`,
-    'once, at launch — a CLI installed since is not seen until relaunch', 'probed at time relaunch'))
+    'once, at launch. A CLI installed since is not seen until relaunch', 'probed at time relaunch'))
   // M123. FOUR sentences for the update notice — not checked, up to date,
   // newer, could not check — and `not checked` is the rest state: the
   // launch check is off by default, and "never asked" must not read as
@@ -117,10 +117,10 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
     u.result === null
       ? 'Check for updates… asks GitHub by hand; the launch check is a setting, off by default'
       : u.result.kind === 'newer'
-        ? `${u.result.url} — nothing is downloaded or installed; download the release by hand`
+        ? `${u.result.url}. Nothing is downloaded or installed; download the release by hand`
         : u.result.kind === 'current'
           ? `read at ${new Date(u.at).toLocaleTimeString()} from the releases feed`
-          : 'the releases feed was asked and did not answer usefully — try again later',
+          : 'the releases feed was asked and did not answer usefully; try again later',
     'update release version newer github check'))
   return rows
 }

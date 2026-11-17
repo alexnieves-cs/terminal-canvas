@@ -184,7 +184,7 @@ function tonightFacts(tonight: TonightStatus | null | undefined): Fact[] {
     if (t.endedAt === undefined) continue
     const end = ((): Fact | null => {
       switch (t.state) {
-        case 'checked': return { wall: t.endedAt, kind: 'passed', panelId: t.panelId, caption: `Checked: ${t.title}${t.check === undefined ? '' : ` — \`${t.check}\` passed`}` }
+        case 'checked': return { wall: t.endedAt, kind: 'passed', panelId: t.panelId, caption: `Checked: ${t.title}${t.check === undefined ? '' : `, and \`${t.check}\` passed`}` }
         case 'claimed': return { wall: t.endedAt, kind: 'finished', panelId: t.panelId, caption: `Done, unchecked: ${t.title}` }
         case 'stuck': return { wall: t.endedAt, kind: 'failed', panelId: t.panelId, caption: `Stuck: ${t.title}${t.reason === undefined ? '' : ` — ${t.reason}`}` }
         case 'over-budget': return { wall: t.endedAt, kind: 'failed', panelId: t.panelId, caption: `Over budget: ${t.title}` }

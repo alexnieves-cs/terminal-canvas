@@ -131,8 +131,8 @@ function expectIdentity(result: ReviewResult | undefined): { expect: ReviewIdent
   return { expect: result.identity }
 }
 
-const SUBJECT_MOVED_COMMIT = 'the changes moved since this was read — nothing was committed; refresh, look again and retry'
-const SUBJECT_MOVED_DISCARD = 'the changes moved since this was read — nothing was discarded; refresh, look again and retry'
+const SUBJECT_MOVED_COMMIT = 'the changes moved since this was read, so nothing was committed. Refresh, look again and retry'
+const SUBJECT_MOVED_DISCARD = 'the changes moved since this was read, so nothing was discarded. Refresh, look again and retry'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -242,7 +242,7 @@ function renderAcross(across: ReviewAcross | undefined, sectionLabel: (panelId: 
     return <p className="pf__note review-node__note" data-review-node-note data-review-across="unavailable">no git binary was found</p>
   }
   if (across.kind === 'unreadable') {
-    return <p className="pf__note review-node__note" data-review-node-note data-review-across="unavailable">git could not open this repository — {across.detail}</p>
+    return <p className="pf__note review-node__note" data-review-node-note data-review-across="unavailable">git could not open this repository: {across.detail}</p>
   }
   const changed = across.sections.filter((s) => s.result.kind === 'changes' || s.result.kind === 'shared').length
   return (
@@ -253,7 +253,7 @@ function renderAcross(across: ReviewAcross | undefined, sectionLabel: (panelId: 
       {/* No path row: the title names the repository and the context pane's
           identity line names it too — a two-line absolute path was the
           loudest thing in the well (M86's critic). */}
-      <p className="pf__note review-node__note" data-review-node-commit-blocked>one worktree at a time — open that worktree's own review to commit or discard</p>
+      <p className="pf__note review-node__note" data-review-node-commit-blocked>one worktree at a time. Open that worktree's own review to commit or discard</p>
       {across.sections.map((section) => {
         const r = section.result
         const files = r.kind === 'changes' || r.kind === 'shared' ? r.files : []
@@ -415,8 +415,8 @@ function renderTask(
         <p className="pf__note review-node__note" data-review-task-blocker={h.blocker.kind} role="status">
           {/* M367. A hold is not answered in the conversation: its cap is raised, or the agent is stopped. */}
           {h.blocker.kind === 'cap'
-            ? <>unresolved: the lane's agent is held at its cap — allow it more from Needs you, or stop it, then review</>
-            : <>unresolved: {h.blocker.kind === 'approval' ? `the lane is waiting on you about ${h.blocker.subject}` : `the lane is waiting for you at its keyboard — ${h.blocker.subject}`} — answer it in the conversation, then review</>}
+            ? <>unresolved: the lane's agent is held at its cap. Allow it more from Needs you, or stop it, then review</>
+            : <>unresolved: {h.blocker.kind === 'approval' ? `the lane is waiting on you about ${h.blocker.subject}` : `the lane is waiting for you at its keyboard: ${h.blocker.subject}`}. Answer it in the conversation, then review</>}
         </p>
       )}
     </div>
@@ -431,7 +431,7 @@ function renderTask(
             // M285. A mark with no content identity was recorded by a build
             // that could see only the diff's shape; it is not called current.
             : h.standing === 'unknown'
-              ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here before this canvas recorded what it read — mark again to make the review checkable`
+              ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here before this canvas recorded what it read. Mark again to make the review checkable`
               : `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here`}
         </p>
       )}
@@ -477,7 +477,7 @@ function renderTask(
               // its lane and this review stay.
               <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="close-task"
                 disabled={readOnly || task.chatPanelId === undefined}
-                title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the task\'s conversation is already closed' : 'close the task\'s conversation — you confirm first'}
+                title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the task\'s conversation is already closed' : 'close the task\'s conversation. You confirm first'}
                 onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => closeArm?.set(true))}>
                 Close conversation…
               </button>
@@ -485,7 +485,7 @@ function renderTask(
             {task.onRemoveLane !== undefined && (
               <button type="button" className={`pf__verb pf__verb--word${task.chatPanelId === undefined && task.laneHeld !== true && task.laneGone !== true ? ' review-node__primary' : ''}`} data-review-task-verb="remove-lane"
                 disabled={readOnly || task.laneHeld === true || task.laneGone === true}
-                title={readOnly ? 'leave merged view to act on this review' : task.laneGone === true ? 'the lane was removed — its branch stays in the repository' : task.laneHeld === true ? REASON_WORKTREE_ATTACHED : 'remove this task\'s worktree — its branch stays; you confirm first'}
+                title={readOnly ? 'leave merged view to act on this review' : task.laneGone === true ? 'the lane was removed, but its branch stays in the repository' : task.laneHeld === true ? REASON_WORKTREE_ATTACHED : 'remove this task\'s worktree. Its branch stays, and you confirm first'}
                 onMouseDown={readOnly || task.laneHeld === true || task.laneGone === true ? undefined : press(() => task.onRemoveLane?.(task.itemId))}>
                 Remove lane…
               </button>
@@ -512,7 +512,7 @@ function renderTask(
         {accept !== null && markable && !reviewedNow && quickAccept({ files: paths.length, checks: laneChecks }).offer && (
           <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="quick-accept"
             disabled={accept.busy}
-            title="record that you read these changes, then show the merge plan — every check on this lane passed"
+            title="record that you read these changes, then show the merge plan. Every check on this lane passed"
             onMouseDown={accept.busy ? undefined : press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length, h.changes?.identity); task.onRefresh(); accept.onArm() })}>
             Review &amp; accept…
           </button>
@@ -524,7 +524,7 @@ function renderTask(
         {accept !== null && (
           <button type="button" className={`pf__verb pf__verb--word${reviewedNow && !accepted ? ' review-node__primary' : ''}`} data-review-task-verb="accept"
             disabled={accept.blocked !== null || accept.busy}
-            title={accept.blocked ?? 'merge this task\'s branch into your main branch — you see the plan first'}
+            title={accept.blocked ?? 'merge this task\'s branch into your main branch. You see the plan first'}
             onMouseDown={accept.blocked === null && !accept.busy ? press(accept.onArm) : undefined}>
             {accept.busy ? 'reading…' : 'Accept…'}
           </button>
@@ -538,14 +538,14 @@ function renderTask(
         {task.chatPanelId !== undefined || task.onStartAgain === undefined ? (
           <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="continue"
             disabled={readOnly || task.chatPanelId === undefined}
-            title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : 'focus the lane\'s conversation and draft a message about these files; nothing is sent'}
+            title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the lane\'s conversation is closed; start work again to open a new one' : 'focus the lane\'s conversation and draft a message about these files; nothing is sent'}
             onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => task.onContinue(task.itemId, paths))}>
             Continue the conversation
           </button>
         ) : (
           <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="start-again"
             disabled={readOnly}
-            title={readOnly ? 'leave merged view to act on this review' : 'the lane\'s conversation is closed — Start task again to continue it in a new conversation; nothing starts until you confirm'}
+            title={readOnly ? 'leave merged view to act on this review' : 'the lane\'s conversation is closed. Start task again to continue it in a new conversation; nothing starts until you confirm'}
             onMouseDown={readOnly ? undefined : press(() => task.onStartAgain?.(task.itemId))}>
             Continue in a new conversation…
           </button>
@@ -1052,15 +1052,15 @@ function ReviewNodeImpl({
         }
         setOutcome(
           r.kind === 'nothing-to-discard' ? 'nothing to discard'
-            : r.kind === 'refused' ? `discard refused — ${r.detail}`
+            : r.kind === 'refused' ? `discard refused: ${r.detail}`
             : r.kind === 'subject-moved' ? SUBJECT_MOVED_DISCARD
-            : `could not discard — ${r.detail}`)
+            : `could not discard: ${r.detail}`)
         setRefreshToken((n) => n + 1)
       })
       .catch((error: unknown) => {
         setDiscarding(false)
         setArmedPath(null)
-        setOutcome(`could not discard — ${String(error)}`)
+        setOutcome(`could not discard: ${String(error)}`)
       })
   }
 
@@ -1093,15 +1093,15 @@ function ReviewNodeImpl({
         }
         setOutcome(
           r.kind === 'nothing-to-discard' ? 'nothing to discard'
-            : r.kind === 'refused' ? `discard refused — ${r.detail}`
+            : r.kind === 'refused' ? `discard refused: ${r.detail}`
             : r.kind === 'subject-moved' ? SUBJECT_MOVED_DISCARD
-            : `could not discard — ${r.detail}`)
+            : `could not discard: ${r.detail}`)
         setRefreshToken((n) => n + 1)
       })
       .catch((error: unknown) => {
         setDiscarding(false)
         setArmedPath(null)
-        setOutcome(`could not discard all — ${String(error)}`)
+        setOutcome(`could not discard all: ${String(error)}`)
       })
   }
 
@@ -1128,7 +1128,7 @@ function ReviewNodeImpl({
       setOutcome(
         model.commit.kind === 'blocked'
           ? model.commit.reason
-          : 'these changes are no longer available to commit — refresh and try again')
+          : 'these changes are no longer available to commit; refresh and try again')
       return
     }
     setCommitting(true)
@@ -1155,21 +1155,21 @@ function ReviewNodeImpl({
           // work the agent already committed; git's own "nothing to commit"
           // is then the right answer in the wrong words.
           r.kind === 'refused' && task !== undefined && /nothing to commit|no changes added to commit/i.test(r.detail)
-            ? 'already committed — these changes are on the lane\'s branch; Accept merges them'
-            : r.kind === 'refused' ? `refused — ${r.detail}`
-            : r.kind === 'failed' ? `could not commit — ${r.detail}`
+            ? 'already committed. These changes are on the lane\'s branch; Accept merges them'
+            : r.kind === 'refused' ? `refused: ${r.detail}`
+            : r.kind === 'failed' ? `could not commit: ${r.detail}`
             // Its own sentence, and it names the fix rather than the fault:
             // the repository gained a commit while this one was being
             // prepared, nothing was written, and the refresh control beside
             // this button is what the user needs next. Folding it into
             // `failed` would send them to look at a git that is working.
             : r.kind === 'head-moved'
-              ? 'the repository moved since this was read — refresh and try again'
+              ? 'the repository moved since this was read; refresh and try again'
               // M285. Its own sentence: not git failing, not HEAD moving —
               // the working tree's CONTENT is not what was on screen.
               : r.kind === 'subject-moved'
                 ? SUBJECT_MOVED_COMMIT
-                : 'nothing to commit — the files changed since this was read')
+                : 'nothing to commit, because the files changed since this was read')
       })
       // A REJECTED INVOKE MUST LAND IN A VISIBLE STATE. Left to the catch-less
       // version, `committing` stays true forever: the button reads "committing…"
@@ -1178,7 +1178,7 @@ function ReviewNodeImpl({
       // user most needs to know whether it happened.
       .catch((error: unknown) => {
         setCommitting(false)
-        setOutcome(`could not commit — ${String(error)}`)
+        setOutcome(`could not commit: ${String(error)}`)
       })
   }
 
@@ -1223,7 +1223,7 @@ function ReviewNodeImpl({
               visible (never hover-gated) — the row's own "seen" state, as
               opposed to the toggle that sets it (below), which follows the
               same hover-reveal the discard verb does. */}
-          {reviewedHere && <span className="review-node__reviewed-mark" data-review-node-file-state={recorded ? 'reviewed' : 'seen'} title={recorded ? 'seen — recorded by Mark reviewed, and the lane has not moved since' : 'seen this session — Mark reviewed records it'} aria-label={recorded ? 'seen, recorded' : 'seen this session'}><Check /></span>}
+          {reviewedHere && <span className="review-node__reviewed-mark" data-review-node-file-state={recorded ? 'reviewed' : 'seen'} title={recorded ? 'Seen, recorded by Mark reviewed, and the lane has not moved since' : 'Seen this session. Mark reviewed records it'} aria-label={recorded ? 'seen, recorded' : 'seen this session'}><Check /></span>}
         </button>
         {!readOnly && !recorded && (
           <button
@@ -1231,7 +1231,7 @@ function ReviewNodeImpl({
             className="review-node__mark-reviewed"
             data-review-node-mark-reviewed={f.path}
             aria-pressed={reviewedHere}
-            title={reviewedHere ? 'Unmark — this session only, nothing is recorded' : 'Mark seen for this session only — nothing is recorded, unlike Mark reviewed'}
+            title={reviewedHere ? 'Unmark. This is this session only, and, nothing is recorded' : 'Mark seen for this session only. Nothing is recorded, unlike Mark reviewed'}
             onMouseDown={(event) => {
               event.stopPropagation()
               event.preventDefault()
@@ -1519,7 +1519,7 @@ function ReviewNodeImpl({
             {model.discard.kind !== 'none' && !readOnly && model.files.length > 1 && (
               armedPath === DISCARD_ALL_ARM ? (
                 <div className="review-node__discard-armed" data-review-node-discard-armed={DISCARD_ALL_ARM}>
-                  <p className="review-node__discard-sentence">Discard every changed file — {model.files.length} in all? Anything not committed goes with it. This cannot be undone.</p>
+                  <p className="review-node__discard-sentence">Discard every changed file, {model.files.length} in all? Anything not committed goes with it. This cannot be undone.</p>
                   <button type="button" className="review-node__discard-confirm" data-review-node-discard-confirm={DISCARD_ALL_ARM}
                     disabled={discarding} onMouseDown={press(runDiscardAll)}>{discarding ? 'discarding…' : 'Discard all'}</button>
                   <button type="button" className="review-node__discard" onMouseDown={press(() => setArmedPath(null))}>cancel</button>
@@ -1536,7 +1536,7 @@ function ReviewNodeImpl({
                 feature never built (M86's critic). */}
             {subject.across === true && (
               <button type="button" className="review-node__commit" data-review-node-commit disabled
-                title="one worktree at a time — open that worktree's own review to commit"
+                title="one worktree at a time. Open that worktree's own review to commit"
                 onMouseDown={(event) => { event.stopPropagation(); event.preventDefault() }}>Commit</button>
             )}
             {model.commit.kind !== 'none' && (

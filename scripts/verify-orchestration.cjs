@@ -863,8 +863,8 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   // An unwired door, a failed read, a record with nothing for this subject and
   // a trimmed record are four different facts, and none of them is an empty box.
   ok('workbench.1b Artifacts and Timeline say what they do not have: an unwired or failed read is named as such and not as "nothing happened", an empty record says what would be written there, a trim reaches both tabs as a gap sentence, the durable record is distinguished from the live feed in words, and neither tab can re-run anything (no retry, send, dispatch or spawn in either body)',
-    /is not a claim that nothing happened/.test(bench) && /is not a claim that none were produced/.test(bench) &&
-      /The durable record — what was written to disk, not the live feed/.test(bench) &&
+    /nothing is known about what happened/.test(bench) && /whether any were produced is unknown/.test(bench) &&
+      /The durable record: what was written to disk, not the live feed/.test(bench) &&
       /This is a gap, not a quiet period/.test(bench) &&
       /Older entries exist beyond the/.test(bench) && /This is the beginning of the record/.test(bench) &&
       (() => {
@@ -983,7 +983,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     JSON.stringify(dep))
   ok('orch-dep.2 a dependency failure blocks downstream with a NAMED reason: test\'s prerequisite build was skipped, so test reads Blocked with the recorded sentence and the source\'s name; deploy, one step further, lists test as a pending prerequisite and is not called blocked by inference',
     testFocus.blockers.length === 1 && testFocus.blockers[0].from === 'build' && testFocus.blockers[0].reason === 'skipped — exit 1 is not exit 0' &&
-      Dp.orchBlockedLine(testFocus) === 'Blocked — BUILD: skipped — exit 1 is not exit 0' &&
+      Dp.orchBlockedLine(testFocus) === 'Blocked by BUILD: skipped — exit 1 is not exit 0' &&
       deployFocus.blockers.length === 0 && Dp.orchBlockedLine(deployFocus) === null && deployFocus.prerequisites.map((e) => e.from).sort().join() === 'lint,test',
     JSON.stringify({ testFocus: { ...testFocus, lit: [...testFocus.lit] }, deployBlock: Dp.orchBlockedLine(deployFocus) }))
   ok('orch-dep.3 the focus lights the transitive closure both ways and nothing else, the lens says it is read-only, and grouping is labelled as grouping — no sentence in the module names a supervisor',
@@ -1009,7 +1009,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   const ids = (r) => r.controls.map((c) => c.id).join()
   ok('orch-limits.1 Interrupt appears only for a generating chat whose backend has an interrupt door (claude yes, codex no — the registry\'s own reason kept), Retry only after a failed or stopped turn with a prompt to retry from on a backend that resumes, and reassign and stop are ABSENT with a reason on every input; the words promise no rollback, no process end, no checkpoint, and a retry that sends nothing and repeats no failed command',
     ids(busyClaude) === 'interrupt' && /no resumable checkpoint/.test(busyClaude.controls[0].affects) && /process stays up/.test(busyClaude.controls[0].affects) && /rolled back/.test(busyClaude.controls[0].affects) &&
-      ids(busyCodex) === '' && busyCodex.absent.find((a) => a.id === 'interrupt').reason === 'codex has no interrupt — close the panel to stop it' &&
+      ids(busyCodex) === '' && busyCodex.absent.find((a) => a.id === 'interrupt').reason === 'codex has no interrupt; close the panel to stop it' &&
       ids(idleClaude) === '' && ids(exitedClaude) === 'retry' && /sends nothing/.test(exitedClaude.controls[0].affects) && /not assumed safe to repeat/.test(exitedClaude.controls[0].affects) &&
       ids(interruptedClaude) === 'retry' && ids(term) === '' &&
       [busyClaude, busyCodex, idleClaude, exitedClaude, term].every((r) => r.absent.some((a) => a.id === 'reassign') && r.absent.some((a) => a.id === 'stop')),
@@ -1040,8 +1040,8 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
   ok('orch-limits.3 a stopped session, an interrupted run and an unknown spend stay distinguishable: exited is stopped, an interrupted last turn on a live session is interrupted (not idle, not stopped), an aborted turn carries main\'s reason, and spend is Unknown WITH its reason for a codex session, a claude session that has reported nothing, and a non-agent',
     st({ state: 'exited', exitCode: 1 }).kind === 'stopped' && /exited \(1\)/.test(st({ state: 'exited', exitCode: 1 }).word) &&
       st({ state: 'idle', lastTurn: { kind: 'interrupted', at: 1 } }).kind === 'interrupted' && st({ state: 'idle', lastTurn: { kind: 'ok', at: 1 } }).kind === 'idle' &&
-      st({ state: 'idle', lastTurn: { kind: 'aborted', at: 1, reason: 'budget' } }).word === 'aborted — budget; the session is still up' && st({ state: 'busy' }).kind === 'running' &&
-      C.orchSpendWord({ backend: 'codex' }).word === 'Unknown — codex reports no cost' && C.orchSpendWord({ backend: 'claude' }).known === false && /reported nothing yet/.test(C.orchSpendWord({ backend: 'claude' }).word) &&
+      st({ state: 'idle', lastTurn: { kind: 'aborted', at: 1, reason: 'budget' } }).word === 'aborted: budget; the session is still up' && st({ state: 'busy' }).kind === 'running' &&
+      C.orchSpendWord({ backend: 'codex' }).word === 'Unknown: codex reports no cost' && C.orchSpendWord({ backend: 'claude' }).known === false && /reported nothing yet/.test(C.orchSpendWord({ backend: 'claude' }).word) &&
       C.orchSpendWord({}).known === false && C.orchSpendWord({ backend: 'claude', costUsd: 2 }).word === '$2.00 reported by claude',
     '')
   const bench = readFileSync(join(root, 'src/renderer/orchestration/OrchWorkbench.tsx'), 'utf8')
@@ -1513,7 +1513,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
         // M507. The seed's read is in useRestartVerbs.ts, which Canvas calls.
         /= useRestartVerbs\(\{/.test(canvasSrc) &&
         /isSettledHandoff\(e\.row\.detail\)/.test(readFileSync(join(root, 'src/renderer/canvas/useRestartVerbs.ts'), 'utf8')) &&
-        /setHandoffResult\(key, 'skipped — target is dormant'\)/.test(canvasSrc) &&
+        /setHandoffResult\(key, 'skipped: target is dormant'\)/.test(canvasSrc) &&
         /setHandoffResult\(key, `ran after exit \$\{info\.exitCode\}`\)/.test(canvasSrc) &&
         /\.then\(\(accepted\) => \{/.test(presets) && /if \(accepted === false\) return/.test(presets),
       'settled/accepted')
@@ -1599,7 +1599,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
       JSON.stringify(capRow?.action))
     ok('board.3 the row\'s status is the queue\'s why when it has one, else a concrete sentence from the agents and the lane ("ui is working; 1 idle — 4 files changed so far"); idle agents are counted, not listed, and a card is not an agent; checks read "2 passed" / "1 failed · 2 passed" / "No checks run"; a plan says its progress',
       row('perm')?.status === groups[0].why && row('perm')?.agents.map((a) => a.id).join() === 'c1' && row('perm')?.idle === 1 &&
-        row('run')?.status === 'ui is working; 1 idle — 4 files changed so far.' &&
+        row('run')?.status === 'ui is working; 1 idle · 4 files changed so far.' &&
         row('fail')?.checks.text === '1 failed · 2 passed' && row('run')?.checks.text === '3 passed' && row('todo')?.checks.text === 'No checks run' &&
         row('run')?.plan === 'Plan 1 of 4 verified · Implement UI — stopped responding' && row('run')?.action.side === 'plan',
       JSON.stringify({ perm: row('perm'), run: row('run') }))
@@ -1663,7 +1663,7 @@ ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every
     const ended = state(plan, facts({ a: { ended: true } }), 'api')
     const old = state(plan, facts({ a: { lastTurn: { kind: 'ok', at: 50 } } }), 'api')
     ok('plan.2 stopped responding is not finished, and finished is not verified: a turn that ended normally after the step started is "Finished — not verified" with the agent\'s own first line; an errored turn, a closed conversation or an ended session is "Stopped responding" with retry and reassign beside it; a turn from BEFORE the step started is not its result',
-      ok1.state === 'finished' && ok1.word === 'Finished — not verified' && /“Added the endpoint\.”/.test(ok1.detail) && ok1.actions[0] === 'verify' && ok1.tone === 'done' &&
+      ok1.state === 'finished' && ok1.word === 'Finished, not verified' && /“Added the endpoint\.”/.test(ok1.detail) && ok1.actions[0] === 'verify' && ok1.tone === 'done' &&
         died.state === 'stopped' && died.word === 'Stopped responding' && /process exited 1/.test(died.detail) && died.actions.join() === 'retry,assign' && died.tone === 'exited' &&
         gone.state === 'stopped' && /closed/.test(gone.detail) && ended.state === 'stopped' &&
         old.state === 'assigned',

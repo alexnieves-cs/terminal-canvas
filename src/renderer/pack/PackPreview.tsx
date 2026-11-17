@@ -83,7 +83,7 @@ export function PackPreview({ preview, onAdd, onClose }: { preview: PackPreviewS
         )}
 
         {/* Inert, said once and plainly: this is the promise the add keeps. */}
-        <p className="pack-preview__line">Nothing in a pack runs when it is added — every workflow and preset arrives unread, and is refused until you have read it.</p>
+        <p className="pack-preview__line">Nothing in a pack runs when it is added. Every workflow and preset arrives unread, and is refused until you have read it.</p>
 
         {result !== null && <p className="pack-preview__line" data-pack-result={result.kind}>{result.kind === 'added' ? result.sentence : result.reason}</p>}
 

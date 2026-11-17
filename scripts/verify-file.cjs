@@ -1305,7 +1305,7 @@ const p = (name) => join(DIR, name)
   const arms = has ? [F.probeOutcome(found), F.probeOutcome(notFound), F.probeOutcome(noAnswer)] : []
   ok('env.1 the report carries the shells asked and the folders checked; a CLI on the PATH is found; one absent from a shell that answered is not-found; a shell that timed out is no-answer with the ~/.zprofile fix in its sentence — never not-found',
     has && found.probe.shells.join() === '/bin/zsh' && found.probe.folders.join() === '/usr/bin,/opt/homebrew/bin' &&
-      arms[0].kind === 'found' && arms[1].kind === 'not-found' && arms[2].kind === 'no-answer' && /didn.t answer|did not answer/.test(arms[2].sentence) && /zprofile/.test(arms[2].sentence) && /install/.test(arms[1].sentence),
+      arms[0].kind === 'found' && arms[1].kind === 'not-found' && arms[2].kind === 'no-answer' && /didn.t answer|did not answer/.test(arms[2].sentence) && /zprofile/.test(arms[2].sentence) && /install/i.test(arms[1].sentence),
     JSON.stringify({ probe: found && found.probe, arms }))
 }
 
@@ -1991,7 +1991,7 @@ await (async () => {
         bareNone.kind === 'none' && /no dev script/.test(bareNone.note) &&
         found.kind === 'one' && found.project === 'shop' && found.candidates[0].url === 'http://127.0.0.1:5173/' && found.scripts.map((s) => s.name).join(',') === 'dev' &&
         noPkg.kind === 'one' && noPkg.project === undefined && noPkg.scripts.length === 0 &&
-        notAsked.kind === 'not-asked' && /nothing to ask/.test(notAsked.note) && /select the terminal/.test(notAsked.note) &&
+        notAsked.kind === 'not-asked' && /nothing to ask/.test(notAsked.note) && /select the terminal/i.test(notAsked.note) &&
         noPids.kind === 'not-asked' && asked.length === before &&
         asked.every((c) => c.startsWith('lsof ')) && asked.length === 2 &&
         asked[0] === 'lsof -nP -iTCP -sTCP:LISTEN -F pn -a -p 4242,9001',

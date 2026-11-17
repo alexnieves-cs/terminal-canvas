@@ -97,7 +97,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       if (from !== undefined) await switchWorkspace(from)
       await window.canvas.workspace.remove(id)
       reloadWorkspaces()
-      return { kind: 'refused', reason: `${result.reason} — the new workspace was not kept` }
+      return { kind: 'refused', reason: `${result.reason}, so the new workspace was not kept` }
     }
     return result
   }

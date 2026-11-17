@@ -158,10 +158,10 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   // wrong fix (the M205 critic).
   const laneRow = ctx.readiness.rows?.find((row) => row.backend === LANE_ENGINE)
   if (ctx.readiness.preferred !== LANE_ENGINE && laneRow?.discovery === 'unknown') {
-    return { kind: 'refused', field: 'engine', reason: 'Claude Code discovery has not answered yet — choose Check again' }
+    return { kind: 'refused', field: 'engine', reason: 'Claude Code discovery has not answered yet; choose Check again' }
   }
   if (ctx.readiness.preferred === undefined) {
-    return { kind: 'refused', field: 'engine', reason: 'no conversation engine has been discovered — install Claude Code, then Check again' }
+    return { kind: 'refused', field: 'engine', reason: 'no conversation engine has been discovered. Install Claude Code, then Check again' }
   }
   const preferred = ctx.readiness.preferred
   const sentence = req.intention.trim()
@@ -179,7 +179,7 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   // press will do while the sentence is still being typed, not only after.
   const lane = FIRST_LAUNCH_ENGINES[LANE_ENGINE].name
   const outcome = preferred !== LANE_ENGINE
-    ? `${FIRST_LAUNCH_ENGINES[preferred].name} will open a conversation in ${where}. Your message will open in the composer, not sent — no task branch; that needs ${lane}`
+    ? `${FIRST_LAUNCH_ENGINES[preferred].name} will open a conversation in ${where}. Your message will open in the composer, not sent. There is no task branch; that needs ${lane}`
     : standingName !== undefined
       ? `${standingName} (${lane}) will work in ${where} on a separate branch`
       // M315. The scope promise stays ("may work only in" is D04's policy,
@@ -190,10 +190,10 @@ export function firstWorkPlan(req: FirstWorkRequest, ctx: FirstWorkContext): Fir
   // waits for, and it is not step 1's question again ("say what you want to
   // work on" sat under step 3, repeating "What are you working on?").
   if (sentence === '') {
-    return { kind: 'refused', field: 'intention', reason: folder === null ? DESCRIBE_FIRST : `${DESCRIBE_FIRST} — then ${outcome}` }
+    return { kind: 'refused', field: 'intention', reason: folder === null ? DESCRIBE_FIRST : `${DESCRIBE_FIRST}, then ${outcome}` }
   }
   if (raw === '') return { kind: 'refused', field: 'folder', reason: 'choose the repository folder to work in' }
-  if (folder === null) return { kind: 'refused', field: 'folder', reason: 'type the folder as a full path starting with / — or use Choose…' }
+  if (folder === null) return { kind: 'refused', field: 'folder', reason: 'type the folder as a full path starting with /, or use Choose…' }
   // A teammate carries no backend, so D05's dispatch always creates a Claude
   // conversation: Codex alone cannot start a LANE. Rather than a wall on day
   // one (the README sells Codex), the start resolves to what the installed
@@ -261,8 +261,8 @@ export function firstWorkRepoAnswer(status: RepoStatus, folder: string, top?: st
     // teammate's place: a grant there is everything the person owns, and a
     // dotfiles repository in $HOME is the ordinary way to reach this arm.
     const real = status.real === undefined ? undefined : comparable(status.real)
-    if (status.home === true) return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is your home folder — a task's agent would be granted everything in it; choose the repository's own folder` }
-    if (comparable(folder) === '/' || real === '/') return { kind: 'refused', reason: 'the filesystem root is not a repository folder a task can be granted — choose the repository\'s own folder' }
+    if (status.home === true) return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is your home folder, and a task's agent would be granted everything in it; choose the repository's own folder` }
+    if (comparable(folder) === '/' || real === '/') return { kind: 'refused', reason: 'the filesystem root is not a repository folder a task can be granted; choose the repository\'s own folder' }
     // A SYMLINK: the typed folder and git's top level are the same directory
     // under two spellings. main's gate judges the realpath, and placeContains
     // compares strings, so a place stored as the link either mints a twin or
@@ -272,7 +272,7 @@ export function firstWorkRepoAnswer(status: RepoStatus, folder: string, top?: st
     if (real !== undefined && top !== undefined && top !== null) {
       const t = comparable(top)
       if (real !== t && real.startsWith(t === '/' ? '/' : `${t}/`)) {
-        return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is inside the repository ${shortPath(top)} — choose the repository's own folder` }
+        return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is inside the repository ${shortPath(top)}; choose the repository's own folder` }
       }
       if (real === t && comparable(folder) !== t) return { kind: 'repository', canonical: trimSeparators(top) }
     }
@@ -284,17 +284,17 @@ export function firstWorkRepoAnswer(status: RepoStatus, folder: string, top?: st
     const root = comparable(status.root)
     const typed = comparable(folder)
     if (typed !== root && typed.startsWith(root === '/' ? '/' : `${root}/`)) {
-      return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is inside the repository ${shortPath(status.root)} — choose the repository's own folder` }
+      return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} is inside the repository ${shortPath(status.root)}; choose the repository's own folder` }
     }
     return { kind: 'repository' }
   }
-  if (status.kind === 'git-missing') return { kind: 'refused', reason: 'git was not found on this machine — a task works on its own branch; install git, or Ask without a folder' }
+  if (status.kind === 'git-missing') return { kind: 'refused', reason: 'git was not found on this machine, and a task works on its own branch; install git, or Ask without a folder' }
   // A mistyped path is not a plain folder: offering "chat in this folder" for
   // one that does not exist is the wrong fix.
   if (/no such file|cannot change to|ENOENT|does not exist/i.test(status.detail)) {
-    return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} does not exist — check the path, or use Choose…` }
+    return { kind: 'refused', reason: `${shortPath(trimSeparators(folder))} does not exist; check the path, or use Choose…` }
   }
-  return { kind: 'not-a-repository', reason: `${shortPath(trimSeparators(folder))} is not a git repository — a task works on its own branch, so it needs one` }
+  return { kind: 'not-a-repository', reason: `${shortPath(trimSeparators(folder))} is not a git repository. A task works on its own branch, so it needs one` }
 }
 
 /**

@@ -44,7 +44,7 @@ export function flowchartActions(ctx: ActionCtx): FlowchartActions {
       // One field per call — the agent's line names it; `line` is the word a
       // person uses for a stroke, `text` for the label's colour.
       const key = field === 'line' || field === 'stroke' ? 'stroke' : field === 'text' || field === 'ink' ? 'ink' : field
-      if (key !== 'form' && key !== 'fill' && key !== 'stroke' && key !== 'ink') return { kind: 'refused', reason: `${field} is not something a shape has — form, fill, line or text` }
+      if (key !== 'form' && key !== 'fill' && key !== 'stroke' && key !== 'ink') return { kind: 'refused', reason: `${field} is not something a shape has. Try form, fill, line or text` }
       return flowchartVerbs.setShapeStyle([panelId], { [key]: value })
     },
     connectObjects: (from, to, label) => {
@@ -59,7 +59,7 @@ export function flowchartActions(ctx: ActionCtx): FlowchartActions {
         case 'line': case 'stroke': return connectorVerbs.patch(id, { stroke: v })
         case 'dashed': return v === 'on' || v === 'true' || v === 'yes' ? connectorVerbs.patch(id, { dashed: true }) : v === 'off' || v === 'false' || v === 'no' ? connectorVerbs.patch(id, { dashed: false }) : { kind: 'refused', reason: 'dashed is on or off' }
         case 'label': return connectorVerbs.patch(id, { label: v.replace(/\\n/g, ' ') })
-        default: return { kind: 'refused', reason: `${field} is not something a connector has — route, arrows, line, dashed or label` }
+        default: return { kind: 'refused', reason: `${field} is not something a connector has. Try route, arrows, line, dashed or label` }
       }
     },
     duplicateObjects: (ids) => flowchartVerbs.duplicate(idList(ids)),
@@ -74,7 +74,7 @@ export function flowchartActions(ctx: ActionCtx): FlowchartActions {
       // The sheet is the approval: nothing is minted until the person presses
       // Start there, and every step is then started by that person (M327).
       self.beginStartWork({ title: out.title, brief: out.brief, plan: out.plan, onCreated: (itemId) => { flowchartVerbs.bindPlanSteps(itemId, out.stepOf) } })
-      return { kind: 'ran', note: `${out.plan.steps.length} step${out.plan.steps.length === 1 ? '' : 's'} in the New task sheet — nothing runs until you press Start` }
+      return { kind: 'ran', note: `${out.plan.steps.length} step${out.plan.steps.length === 1 ? '' : 's'} in the New task sheet. Nothing runs until you press Start` }
     },
     editShapeLabel: () => {
       const id = [...(selectedIdsRef.current ?? [])].find((sid) => { const p = panelsRef.current?.find((q) => q.rect.id === sid); return p !== undefined && isShapePanel(p) })

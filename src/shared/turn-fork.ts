@@ -250,7 +250,7 @@ export function messageWords(n: number): string {
 export function forkWords(r: ForkResult, turn: number): string {
   if (r.kind === 'refused') return `Could not branch: ${r.reason}`
   const tree = r.exactTree ? `its files as they were after ${messageWords(turn)}` : `its files from after ${messageWords(r.fromTurn)}, the nearest snapshot before ${messageWords(turn)}`
-  const talk = r.conversation === 'resumed' ? `the conversation continues from ${messageWords(turn)}` : 'the conversation starts fresh — this agent cannot resume a cut conversation'
+  const talk = r.conversation === 'resumed' ? `the conversation continues from ${messageWords(turn)}` : 'the conversation starts fresh, because this agent cannot resume a cut conversation'
   return `Branched on ${r.branch}: ${tree}, and ${talk}.`
 }
 

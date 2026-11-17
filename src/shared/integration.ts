@@ -83,7 +83,7 @@ export function staleWords(s: IntegrationStanding, labelOf: (lane: string) => st
   if (s.changed.length > 0) parts.push(`${s.changed.map(labelOf).join(', ')} changed since the combine`)
   if (s.missing.length > 0) parts.push(`${s.missing.map(labelOf).join(', ')} can no longer be read`)
   if (s.mainMoved) parts.push('the main tree has new commits')
-  return `This result is out of date — ${parts.join('; ')}. Combine and check again before integrating.`
+  return `This result is out of date: ${parts.join('; ')}. Combine and check again before integrating.`
 }
 
 /* ── Attribution ─────────────────────────────────────────────────────────── */
@@ -134,7 +134,7 @@ export function attributeConflict(plan: CombinePlan, conflict: { lane: string; p
   const where = paths.length > 0 ? ` in ${paths.join(', ')}` : ''
   return {
     kind: 'conflict', responsible: conflict.lane, participants, paths, unattributed: false,
-    summary: `${labelIn(plan, conflict.lane)} does not apply on top of ${others.length === 0 ? 'the main tree' : others.map((l) => labelIn(plan, l)).join(' + ')}${where} — it lands later, so its agent reconciles the two.`
+    summary: `${labelIn(plan, conflict.lane)} does not apply on top of ${others.length === 0 ? 'the main tree' : others.map((l) => labelIn(plan, l)).join(' + ')}${where}. It lands later, so its agent reconciles the two.`
   }
 }
 
@@ -174,8 +174,8 @@ export function attributeCheckFailure(plan: CombinePlan, applied: readonly strin
       kind: 'check', responsible: last, paths: [], unattributed: true,
       participants: applied.map((l) => ({ lane: l, label: labelIn(plan, l), role: l === last ? 'responsible' as const : 'present' as const, paths: [] })),
       summary: named.length === 0
-        ? 'The output names no file, so it cannot say which lane caused it — the last lane to land is suggested; pick another if you know better.'
-        : `The output names ${named.slice(0, 3).join(', ')}${named.length > 3 ? '…' : ''}, which no lane changed — an interaction between the lanes. The last lane to land is suggested; pick another if you know better.`
+        ? 'The output names no file, so it cannot say which lane caused it. The last lane to land is suggested; pick another if you know better.'
+        : `The output names ${named.slice(0, 3).join(', ')}${named.length > 3 ? '…' : ''}, which no lane changed, so it is an interaction between the lanes. The last lane to land is suggested; pick another if you know better.`
     }
   }
   // Most named files first; a tie goes to the lane that lands LATER (it met the others).
@@ -235,14 +235,14 @@ export function integrationFixBrief(i: FixBriefInput): string {
   if (files.length > 0) lines.push(`Files involved: ${files.join(', ')}`)
   for (const p of met) {
     if (p.paths.length === 0) continue
-    lines.push(`${p.label} changed ${p.paths.join(', ')} too — its copy: ${p.paths.map((f) => `${p.lane}/${f}`).join(', ')}`)
+    lines.push(`${p.label} changed ${p.paths.join(', ')} too. Its copy: ${p.paths.map((f) => `${p.lane}/${f}`).join(', ')}`)
   }
-  if (a.unattributed) lines.push('The output does not name a file any lane changed, so the cause is an interaction — start from the output below.')
+  if (a.unattributed) lines.push('The output does not name a file any lane changed, so the cause is an interaction. Start from the output below.')
   if (i.tail !== undefined && i.tail.trim() !== '') {
     lines.push('', 'Last lines of the output:', '```', i.tail.trimEnd(), '```')
   }
   lines.push('', 'Please fix only this, in your own lane:')
-  lines.push(`- keep ${others.length === 0 ? 'the existing behaviour' : `${others.map((p) => p.label).join(' and ')}'s change`} working — read ${others.length === 1 ? 'its' : 'their'} files, do not edit ${others.length === 1 ? 'that lane' : 'those lanes'}`)
+  lines.push(`- keep ${others.length === 0 ? 'the existing behaviour' : `${others.map((p) => p.label).join(' and ')}'s change`} working. Read ${others.length === 1 ? 'its' : 'their'} files, do not edit ${others.length === 1 ? 'that lane' : 'those lanes'}`)
   lines.push('- change only what this needs; no unrelated refactoring')
   lines.push(i.command === undefined ? '- say what you changed when you are done' : `- run \`${i.command}\` in your lane when you are done, and say what you changed`)
   return lines.join('\n')
@@ -284,12 +284,12 @@ export function integrationGate(i: {
   items.push({ text: i.standing === null ? 'lanes not re-read since the combine' : i.standing.kind === 'current' ? 'no lane changed since it was checked' : 'a lane or the main tree changed since the check', holds: i.standing?.kind === 'current' })
   for (const l of i.lanes) {
     const reviewText = l.review === 'current' ? `${l.label} reviewed at this revision`
-      : l.review === 'stale' ? `${l.label} changed since its review — review it again`
+      : l.review === 'stale' ? `${l.label} changed since its review; review it again`
         : l.review === 'no-task' ? `${l.label} belongs to no task, so no review of it is recorded`
-          : l.review === 'unknown' ? `${l.label}'s review predates revision tracking — review it again`
+          : l.review === 'unknown' ? `${l.label}'s review predates revision tracking; review it again`
             : `${l.label} is not reviewed`
     items.push({ text: reviewText, holds: l.review === 'current' })
-    items.push({ text: l.dirty ? `${l.label} has uncommitted changes — commit them in its review (the check still holds: the content is the same)` : `${l.label} is committed`, holds: !l.dirty })
+    items.push({ text: l.dirty ? `${l.label} has uncommitted changes. Commit them in its review (the check still holds: the content is the same)` : `${l.label} is committed`, holds: !l.dirty })
   }
   return { ready: items.every((x) => x.holds), items }
 }
@@ -374,7 +374,7 @@ export function receiptHeadline(r: IntegrationReceipt): string {
     const stop = r.lanes.find((l) => l.outcome !== 'merged' && l.outcome !== 'not-reached')
     return `${n} landed in ${r.into}; stopped at ${stop?.label ?? 'a lane'} — ${stop?.detail ?? stop?.outcome ?? 'not merged'}.`
   }
-  return `${n} landed in ${r.into} (${r.before.slice(0, 7)} → ${r.after.slice(0, 7)}), ${r.tree.identical ? 'byte-identical to the tree the check passed on' : 'but the landed tree DIFFERS from the checked one — run the checks on the main tree'}.`
+  return `${n} landed in ${r.into} (${r.before.slice(0, 7)} → ${r.after.slice(0, 7)}), ${r.tree.identical ? 'byte-identical to the tree the check passed on' : 'but the landed tree DIFFERS from the checked one. Run the checks on the main tree'}.`
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)

@@ -150,15 +150,15 @@ export function startWorkNeeds(choice: StartWorkChoice, ctx: StartWorkContext): 
     }
     const resolved = resolveRepository(ctx.repos, ctx.wanted)
     if (resolved.kind === 'ambiguous') {
-      needs.push({ field: 'repository', why: `${resolved.paths.length} of ${whose}repositories are clones of ${String(ctx.wanted)} — choose which one` })
+      needs.push({ field: 'repository', why: `${resolved.paths.length} of ${whose}repositories are clones of ${String(ctx.wanted)}; choose which one` })
       return needs
     }
     needs.push({
       field: 'repository',
       why: ctx.wanted !== null
-        ? `no known repository is a clone of ${ctx.wanted} — choose its folder`
+        ? `no known repository is a clone of ${ctx.wanted}; choose its folder`
         : ctx.repos.length === 0
-          ? (mate === undefined ? 'choose the repository folder to work in' : `${teammateWord(mate)}'s places hold no repository — choose another folder, or add one in Agent profiles`)
+          ? (mate === undefined ? 'choose the repository folder to work in' : `${teammateWord(mate)}'s places hold no repository. Choose another folder, or add one in Agent profiles`)
           : `choose which of ${whose === '' ? 'your' : whose}${ctx.repos.length} repositories to work in`
     })
     return needs
@@ -167,7 +167,7 @@ export function startWorkNeeds(choice: StartWorkChoice, ctx: StartWorkContext): 
   // folder already answers who for everyone else (reuse, or a new teammate
   // whose only place is exactly that folder).
   if (mate !== undefined && mate.places.length > 0 && !startWorkReaches(mate, root)) {
-    needs.push({ field: 'agent', why: `${teammateWord(mate)} may not work in ${shortPath(root)} — choose another agent, or Automatic` })
+    needs.push({ field: 'agent', why: `${teammateWord(mate)} may not work in ${shortPath(root)}; choose another agent, or Automatic` })
   }
   return needs
 }

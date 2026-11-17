@@ -704,7 +704,7 @@ async function until(pred, ms = 3000) {
     const dec = [P.askDecision(1, {}), P.askDecision(1, { a: 'allow' }), P.askDecision(2, { a: 'allow' }), P.askDecision(2, { a: 'allow', b: 'allow' }), P.askDecision(2, { a: 'allow', b: 'deny' })]
     ok('ask.policy.1 an ask needs one allow, or two distinct people\'s once the agent\'s spend reaches the team\'s line; one deny decides it; the count reads as words',
       need.join(',') === '1,1,2,1,1' && dec.join(',') === 'open,allowed,open,allowed,denied' &&
-        P.askProgressWords(2, { a: 'allow' }) === '1 of 2 allowed — spend past the team\'s line needs two people' && P.askProgressWords(1, {}) === 'waiting for one person',
+        P.askProgressWords(2, { a: 'allow' }) === '1 of 2 allowed. Spend past the team\'s line needs two people' && P.askProgressWords(1, {}) === 'waiting for one person',
       JSON.stringify({ need, dec }))
 
     const a = M.ops.authorizeCanvasOp
@@ -872,7 +872,7 @@ async function until(pred, ms = 3000) {
     const two = M.asks.teamAskWords({ ...base, need: 2, allows: 1, scrubbed: 1, ownerName: null, panelTitle: '' })
     ok('team.words.1 a team ask says whose agent (by presence\'s name, else "A teammate" — never an id), the whole line, the progress, and a scrub\'s count when one was hidden',
       one.who === "Ada's agent · api agent" && one.action === 'Bash — npm test' && one.progress === "one person's allow decides it" && one.scrubbed === undefined &&
-        two.who === "A teammate's agent" && two.progress === "1 of 2 allowed — spend past the team's line needs two people" && two.scrubbed === '1 secret hidden before it left their machine',
+        two.who === "A teammate's agent" && two.progress === "1 of 2 allowed. Spend past the team's line needs two people" && two.scrubbed === '1 secret hidden before it left their machine',
       JSON.stringify({ one, two }))
   }
 

@@ -97,13 +97,13 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
               const why =
                 res.kind === 'exists' ? 'there is already a file with that name'
                   : res.detail
-              prompt(name, `Couldn\u2019t create that note \u2014 ${why}`, true)
+              prompt(name, `Couldn\u2019t create that note: ${why}`, true)
             })
             .catch((error: unknown) => {
               // Mandatory, for FileNode's reason: an unhandled rejection
               // leaves the input mode open forever with no explanation, which
               // reads as the app having frozen.
-              prompt(name, `Couldn\u2019t create that note \u2014 ${String(error)}`, true)
+              prompt(name, `Couldn\u2019t create that note: ${String(error)}`, true)
             })
         }
       })
@@ -293,7 +293,7 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
     if (answer.kind === 'refused') return { kind: 'refused', reason: answer.reason }
     if (answer.parse.kind !== 'pack') return { kind: 'refused', reason: answer.parse.reason }
     setPackPreview({ token: answer.token, path: answer.path, pack: answer.parse.pack, warnings: answer.parse.warnings, requirements: answer.requirements ?? { credentials: [], tools: [] } })
-    return { kind: 'ran', note: `${answer.parse.pack.manifest.name} — nothing is added until you choose Add` }
+    return { kind: 'ran', note: `${answer.parse.pack.manifest.name}. Nothing is added until you choose Add` }
   }, [])
   // M255. The sample dev-relations pack: main writes it once under userData
   // and answers the path; it is then READ like any pack — same preview, same
@@ -319,7 +319,7 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
     const changed = await window.canvas.preset.markReviewed(id)
     if (!changed) return { kind: 'refused', reason: 'that preset no longer exists' }
     reloadPresets()
-    return { kind: 'ran', note: 'marked read — it will spawn now' }
+    return { kind: 'ran', note: 'marked read, so it will spawn now' }
   }, [reloadPresets])
 
   /**
@@ -343,7 +343,7 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
       // node, sees the line and marks it reviewed; until then it is refused
       // by name with the line quoted, so the refusal is also the review.
       if (reviewed === false) {
-        return { kind: 'failed', reason: `this workflow came from outside this canvas (a file, or an agent's answer) and has not been read yet — open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
+        return { kind: 'failed', reason: `this workflow came from outside this canvas (a file, or an agent's answer) and has not been read yet. Open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
       }
       // The CALLER travels with the line: without it a teammate's plan could
       // write a verb into a template and run it with its identity erased.
@@ -361,7 +361,7 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
     // Three states, never two: a kind with no runtime is not a failure of the
     // node, and saying "failed" about it would send a person looking for a
     // fault in a shape that is correct.
-    return { kind: 'failed', reason: `a ${node.kind} node runs as part of the workflow, not on its own — Run the workflow to start it`, ms: Date.now() - started }
+    return { kind: 'failed', reason: `a ${node.kind} node runs as part of the workflow, not on its own. Run the workflow to start it`, ms: Date.now() - started }
   }, [])
   const runNodeRef = useRef(runNodeNow)
   runNodeRef.current = runNodeNow
@@ -390,7 +390,7 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
    * per commit rather than one per keystroke), and tint (a sticky's alone).
    */
   const addNote = useCallback((form: string, text?: string, world?: Point): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
-    if (!isNoteForm(form)) return { kind: 'refused', reason: `${form} is not a note form — ${NOTE_FORMS.join(', ')}` }
+    if (!isNoteForm(form)) return { kind: 'refused', reason: `${form} is not a note form. Try ${NOTE_FORMS.join(', ')}` }
     const at = world ?? viewCentre(hostRef.current, viewportRef.current)
     const noteId = `nt${nextIdRef.current++}`
     // M395. A sticky or a text with no place of its own lands in the FREE spot
@@ -427,7 +427,7 @@ export function useObjectVerbs(deps: UseObjectVerbsDeps) {
   const setNoteTint = useCallback((panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
     const target = panelsRef.current.find((p) => p.rect.id === panelId)
     if (target === undefined || !isNotePanel(target)) return { kind: 'refused', reason: 'that panel is not a note' }
-    if (!isNoteTint(tint)) return { kind: 'refused', reason: `${tint} is not a tint — ${NOTE_TINTS.join(', ')}` }
+    if (!isNoteTint(tint)) return { kind: 'refused', reason: `${tint} is not a tint. Try ${NOTE_TINTS.join(', ')}` }
     if (target.note.form !== 'sticky') return { kind: 'refused', reason: 'only a sticky note carries a tint' }
     setPanels((current) => {
       const updated = current.map((p) => (p.rect.id === panelId && isNotePanel(p) ? { ...p, note: { ...p.note, tint } } : p))

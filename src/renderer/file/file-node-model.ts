@@ -202,5 +202,5 @@ export interface MissingStory {
 export function missingStory(seenText: boolean, name: string): MissingStory {
   return seenText
     ? { arm: 'gone', headline: `${name} was deleted or moved`, detail: 'It was here when this panel opened and is no longer at this path. If it was renamed, open it again from its new place; if it was deleted, recreate it here.' }
-    : { arm: 'never', headline: `${name} was never found here`, detail: 'Nothing has existed at this path since this panel opened — the path may be mistyped, or the file moved before this canvas was saved.' }
+    : { arm: 'never', headline: `${name} was never found here`, detail: 'Nothing has existed at this path since this panel opened. The path may be mistyped, or the file moved before this canvas was saved.' }
 }

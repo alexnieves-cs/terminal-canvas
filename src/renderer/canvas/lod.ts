@@ -145,8 +145,8 @@ export function pinCount(panels: readonly { kind: string; pinned?: true | boolea
  * disagree. Undefined means the pin applies.
  */
 export function pinRefusal(kind: string, pinned: boolean, count: number): string | undefined {
-  if (pinned) return 'already pinned — Unpin panel is the row'
-  if (kind !== 'terminal') return `only a terminal panel tiers — a ${kind} panel is never carded, so a pin means nothing`
-  if (count >= PIN_MAX) return `${count} panels are already pinned (the live budget is ${LIVE_BUDGET}, one kept for the focused panel) — unpin one first`
+  if (pinned) return 'already pinned; Unpin panel is the row'
+  if (kind !== 'terminal') return `only a terminal panel tiers. A ${kind} panel is never carded, so a pin means nothing`
+  if (count >= PIN_MAX) return `${count} panels are already pinned (the live budget is ${LIVE_BUDGET}, one kept for the focused panel); unpin one first`
   return undefined
 }

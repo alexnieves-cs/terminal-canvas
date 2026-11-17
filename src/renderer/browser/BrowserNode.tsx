@@ -168,7 +168,7 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
       const e = event as Event & { errorCode?: number; errorDescription?: string; validatedURL?: string; isMainFrame?: boolean }
       if (e.isMainFrame === false || e.errorCode === -3) return
       setLoading(false)
-      setFailure(`${e.validatedURL ?? 'the page'} did not load — ${e.errorDescription ?? 'unknown error'} (${e.errorCode ?? '?'})`)
+      setFailure(`${e.validatedURL ?? 'the page'} did not load: ${e.errorDescription ?? 'unknown error'} (${e.errorCode ?? '?'})`)
     }
     el.addEventListener('did-attach', onAttach)
     el.addEventListener('did-navigate', readAddress)
@@ -303,7 +303,7 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
               {...shellControl(() => props.onSetDevice(id, d.id))}>{d.label}</button>
           ))}
           <button type="button" className="pf__verb pf__verb--word" data-preview-capture disabled={readOnly || guestId === null}
-            title={guestId === null ? 'no page is open in this pane — open one, then capture it' : 'A picture of this page, placed on the canvas'}
+            title={guestId === null ? 'no page is open in this pane; open one, then capture it' : 'A picture of this page, placed on the canvas'}
             {...shellControl(() => { void props.onCapture().then((r) => say(r.kind === 'refused' ? r.reason : (r.note ?? 'captured'))) })}>Capture</button>
           <button type="button" className="pf__verb pf__verb--word" data-preview-discover disabled={readOnly || busy}
             title="Ask the selected panel what project it is running and whether anything is listening"
@@ -326,7 +326,7 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
               ? props.bindReason
               : panel.preview === undefined
                 ? 'The selected panel\'s folder becomes the work this preview reloads for'
-                : `Point this preview at a different folder — it reloads for ${panel.preview.root} now`}
+                : `Point this preview at a different folder. It reloads for ${panel.preview.root} now`}
             {...shellControl(() => { const r = props.onBindSource(id); say(r.kind === 'refused' ? r.reason : (r.note ?? 'bound')) })}>{panel.preview === undefined ? 'Bind source' : 'Change source'}</button>
         </div>
         {said !== null && <p className="pf__note browser-node__said" data-preview-said role="status">{said}</p>}
@@ -361,7 +361,7 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
           // M252. What the tool will reach, BEFORE anything of it runs — the
           // folder, every address in its files, the dev script it asks for.
           <div className="browser-node__unread" data-preview-unread role="status">
-            <p className="pf__note">A generated tool — nothing of it has run. Its page is code an agent wrote; read what it can reach first.</p>
+            <p className="pf__note">A generated tool. Nothing of it has run yet. Its page is code an agent wrote; read what it can reach first.</p>
             {reach !== undefined && (() => {
               const lines = capabilityLines(reach)
               return (
@@ -373,8 +373,8 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
               )
             })()}
             <button type="button" className="pf__verb pf__verb--word" data-preview-mark-read disabled={readOnly || props.onMarkRead === undefined}
-              title={readOnly ? 'the merged view is read-only' : 'Let this pane load its page — the dev server still starts only when you ask for it'}
-              {...shellControl(() => props.onMarkRead?.(id))}>I've read this — allow it to run</button>
+              title={readOnly ? 'the merged view is read-only' : 'Let this pane load its page. The dev server still starts only when you ask for it'}
+              {...shellControl(() => props.onMarkRead?.(id))}>I've read this, allow it to run</button>
           </div>
         ) : (
           <div className="browser-node__host" ref={hostRef} data-preview-width={panel.device ?? 'full'}

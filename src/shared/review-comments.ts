@@ -217,7 +217,7 @@ export function composeFollowUp(input: FollowUpInput): string {
   if (input.failing.length > 0) {
     out.push('', 'Checks that failed when this canvas ran them:')
     input.failing.forEach((f, i) => {
-      out.push(`${points.length + i + 1}. \`${f.command}\` — ${f.ended}`)
+      out.push(`${points.length + i + 1}. \`${f.command}\`: ${f.ended}`)
       for (const line of (f.lastLines ?? []).slice(-12)) out.push(`   | ${line}`)
     })
   }
@@ -294,7 +294,7 @@ export function verificationOf(v: VerificationInput): Verification {
 
   if (v.standing === 'current') holds.push('reviewed at this revision')
   else if (v.standing === 'stale') missing.push('the changes moved since your review')
-  else if (v.standing === 'unknown') missing.push('your review predates revision tracking — review again')
+  else if (v.standing === 'unknown') missing.push('your review predates revision tracking; review again')
   else missing.push('not reviewed')
 
   // `passed` survives the binding only when the content it tested is the content now.
@@ -303,7 +303,7 @@ export function verificationOf(v: VerificationInput): Verification {
   const stale = v.checks.filter((c) => c.outcome === 'stale')
   if (passedNow.length > 0 && failed.length === 0) holds.push(`${passedNow.length} check${passedNow.length === 1 ? '' : 's'} passed on this revision`)
   if (failed.length > 0) missing.push(`${failed.length} check${failed.length === 1 ? '' : 's'} failed`)
-  else if (passedNow.length === 0) missing.push(stale.length > 0 ? 'checks ran on an earlier revision — run them again' : 'no check has run on this revision')
+  else if (passedNow.length === 0) missing.push(stale.length > 0 ? 'checks ran on an earlier revision; run them again' : 'no check has run on this revision')
 
   if (open.length === 0 && (v.comments ?? []).some((c) => c.proposedBy === undefined)) holds.push('every comment resolved')
   // M360. A second reviewer's point is read before this can be verified.
@@ -318,10 +318,10 @@ export function verificationOf(v: VerificationInput): Verification {
 
   if (v.agentWorking) {
     return sentOpen.length > 0
-      ? { stage: 'changes-requested', word: 'changes requested — agent working', tone: 'working', holds, missing }
+      ? { stage: 'changes-requested', word: 'changes requested, agent working', tone: 'working', holds, missing }
       : { stage: 'working', word: 'agent working', tone: 'working', holds, missing }
   }
   if (missing.length === 0) return { stage: 'verified', word: 'verified', tone: 'green', holds, missing }
   if (v.standing === 'stale') return { stage: 'stale', word: 'changed since your review', tone: 'amber', holds, missing }
-  return { stage: 'agent-finished', word: 'agent finished — not verified', tone: 'amber', holds, missing }
+  return { stage: 'agent-finished', word: 'agent finished, not verified', tone: 'amber', holds, missing }
 }

@@ -79,7 +79,7 @@ export function useAnnotations(deps: UseAnnotationsDeps) {
     setEditingAnnotation((current) => (current === id ? null : current))
   }, [])
   const beginAnnotate = useCallback((): { kind: string; reason?: string } => {
-    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only — leave it to annotate' }
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only; leave it to annotate' }
     setAnnotating(true)
     return { kind: 'entered' }
   }, [])

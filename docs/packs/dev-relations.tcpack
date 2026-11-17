@@ -250,11 +250,11 @@
   "omitted": [
     {
       "what": "every skill",
-      "why": "every agent reads a skill, so writing one is not inert — a pack names the tools it needs and installs none"
+      "why": "every agent reads a skill, so writing one is not inert. A pack names the tools it needs and installs none"
     },
     {
       "what": "every credential",
-      "why": "this app's credentials never leave its own encrypted store — the manifest names which ones the pack needs, never a value"
+      "why": "this app's credentials never leave its own encrypted store. The manifest names which ones the pack needs, never a value"
     }
   ],
   "redacted": 0

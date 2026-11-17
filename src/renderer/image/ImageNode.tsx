@@ -53,7 +53,7 @@ export interface ImageNodeProps {
 /** The sentence per arm — words, not codes (the empty-state rule). */
 export function imageArmSentence(result: ImageResult, path: string): string {
   const short = displayPath(path).short
-  if (result.kind === 'missing') return `${short} is not there any more — the file was moved or deleted`
+  if (result.kind === 'missing') return `${short} is not there any more. The file was moved or deleted`
   if (result.kind === 'too-large') return `${short} is ${(result.bytes / (1024 * 1024)).toFixed(1)} MB, over the ${Math.round(result.cap / (1024 * 1024))} MB this panel shows`
   if (result.kind === 'not-an-image') return `${short} is not a PNG, JPEG, GIF or WebP file`
   return ''

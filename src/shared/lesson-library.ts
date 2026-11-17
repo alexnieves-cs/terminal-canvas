@@ -136,8 +136,8 @@ export function skillPath(name: string): string {
 
 /** Accepting needs a proof that holds for this exact text. */
 export function canAccept(rule: Pick<RuleDraft, 'text' | 'kind' | 'name' | 'description'>, proof: ProofRecord | undefined): { ok: true } | { ok: false; reason: string } {
-  if (proof === undefined) return { ok: false, reason: 'prove the rule first — a replay with it applied must show the mistake gone and the check passing' }
-  if (proof.ruleText !== rule.text || proof.ruleShape !== ruleShape(rule)) return { ok: false, reason: 'the rule changed since it was proved — prove it again' }
+  if (proof === undefined) return { ok: false, reason: 'prove the rule first. A replay with it applied must show the mistake gone and the check passing' }
+  if (proof.ruleText !== rule.text || proof.ruleShape !== ruleShape(rule)) return { ok: false, reason: 'the rule changed since it was proved; prove it again' }
   if (!proofHolds(rule, proof)) return { ok: false, reason: `the proof did not hold: ${proof.reason}` }
   return { ok: true }
 }

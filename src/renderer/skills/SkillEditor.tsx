@@ -51,10 +51,10 @@ export interface SkillEditorProps {
 }
 
 export const REASON_NO_STAMP = 'the file has not finished being read yet, so a save could not tell whether it changed underneath you'
-export const REASON_TRUNCATED = 'this file is longer than the read cap, so saving here would cut it — edit it in a file panel instead'
+export const REASON_TRUNCATED = 'this file is longer than the read cap, so saving here would cut it. Edit it in a file panel instead'
 export const REASON_UNCHANGED = 'nothing has changed yet'
 export const REASON_UNGRAMMATICAL =
-  'the frontmatter block carries something the small grammar cannot read — a comment, a block scalar or an anchor — so these fields are read-only. Save preserves that block byte for byte instead of re-writing it, and the body below is still yours to edit.'
+  'the frontmatter block carries something the small grammar cannot read (a comment, a block scalar or an anchor), so these fields are read-only. Save preserves that block byte for byte instead of re-writing it, and the body below is still yours to edit.'
 
 export function SkillEditor(props: SkillEditorProps): JSX.Element {
   const { text, sourcePath } = props
@@ -248,7 +248,7 @@ export function SkillEditor(props: SkillEditorProps): JSX.Element {
           <span className="skill-editor__result" data-skill-edit-result={result.kind}>
             {result.kind === 'written' ? 'saved'
               : result.kind === 'refused' ? result.why
-                : result.kind === 'failed' ? `the write failed — ${result.why}`
+                : result.kind === 'failed' ? `the write failed: ${result.why}`
                   : result.kind}
           </span>
         )}
@@ -257,7 +257,7 @@ export function SkillEditor(props: SkillEditorProps): JSX.Element {
           does not reach a file, and a delete goes to the trash so the Finder
           is the way back. */}
       <p className="skill-editor__note" data-skill-edit-note>
-        A save is not undo history — Cmd+Z will not bring the old file back. Deleting a skill moves its folder to the Trash, which is where a save you regret has to be recovered from.
+        A save is not undo history, so Cmd+Z will not bring the old file back. Deleting a skill moves its folder to the Trash, which is where a save you regret has to be recovered from.
       </p>
     </div>
   )

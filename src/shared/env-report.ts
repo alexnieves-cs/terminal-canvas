@@ -76,10 +76,10 @@ export function probeOutcome(report: EnvReport): ProbeOutcome {
   const folders = report.probe?.folders ?? report.pathEntries
   const asked = `asked ${shells.length === 0 ? 'no shell' : shells.join(', ')} · checked ${folders.length} folder${folders.length === 1 ? '' : 's'}`
   if (!report.shell.ok || report.probe?.timedOut === true) {
-    return { kind: 'no-answer', sentence: `the shell didn't answer (${report.shell.reason ?? 'no reply'}) — a slow or prompting ~/.zshrc; put PATH edits in ~/.zprofile, then Check again · ${asked}` }
+    return { kind: 'no-answer', sentence: `the shell didn't answer (${report.shell.reason ?? 'no reply'}), likely a slow or prompting ~/.zshrc; put PATH edits in ~/.zprofile, then Check again · ${asked}` }
   }
   if (missing.length === 0) return { kind: 'found', sentence: `${found.join(', ')} found · ${asked}` }
-  return { kind: 'not-found', sentence: `${missing.join(', ')} not found — install ${missing.length === 1 ? 'it' : 'them'} so ${missing.length === 1 ? 'it is' : 'they are'} on the login PATH · ${asked}` }
+  return { kind: 'not-found', sentence: `${missing.join(', ')} not found. Install ${missing.length === 1 ? 'it' : 'them'} so ${missing.length === 1 ? 'it is' : 'they are'} on the login PATH · ${asked}` }
 }
 
 /** For harnesses that register the handler without a real probe behind it. */

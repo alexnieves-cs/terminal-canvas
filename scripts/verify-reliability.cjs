@@ -180,7 +180,7 @@ const savedRects = (userData) => {
     const said = await R.waitUntil(async () => { const n = await notice(app); return n.some((l) => l.group === 'crash') ? n : false }, 15000) || await notice(app)
     const crashLines = said.filter((l) => l.group === 'crash')
     ok(`recover.4 the reopened app says what happened in one sentence: it closed unexpectedly, the canvas is back${tmux ? ', and the six terminals reconnected' : ''} — and it does not call it a quit`,
-      crashLines.length === 1 && /closed unexpectedly/.test(crashLines[0].text) && /your canvas is back/.test(crashLines[0].text) &&
+      crashLines.length === 1 && /closed unexpectedly/.test(crashLines[0].text) && /your canvas is back/i.test(crashLines[0].text) &&
         (tmux ? /6 terminals reconnected, still running/.test(crashLines[0].text) && said.every((l) => l.group !== 'ended') : said.some((l) => l.group === 'stopped')) &&
         !said.some((l) => /you quit|was closed/.test(l.text)),
       JSON.stringify(said))

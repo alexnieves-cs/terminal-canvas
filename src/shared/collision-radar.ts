@@ -70,8 +70,8 @@ export function radarFlags(laneId: string, report: RadarReport, labelOf: (id: st
     if (c.a !== laneId && c.b !== laneId) continue
     const otherId = c.a === laneId ? c.b : c.a
     const other = labelOf(otherId)
-    if (c.conflicts !== null && c.conflicts.length > 0) out.push({ kind: 'conflict', other: otherId, text: `conflicts with ${other} in ${list(c.conflicts)} — the two will not merge as they stand` })
-    else out.push({ kind: 'overlap', other: otherId, text: `also changed by ${other}: ${list(c.files)}${c.conflicts === null ? ' (a trial merge could not run)' : ' — merges clean for now'}` })
+    if (c.conflicts !== null && c.conflicts.length > 0) out.push({ kind: 'conflict', other: otherId, text: `conflicts with ${other} in ${list(c.conflicts)}, so the two will not merge as they stand` })
+    else out.push({ kind: 'overlap', other: otherId, text: `also changed by ${other}: ${list(c.files)}${c.conflicts === null ? ' (a trial merge could not run)' : ', merges clean for now'}` })
   }
   return [...out.filter((f) => f.kind === 'conflict'), ...out.filter((f) => f.kind === 'overlap')]
 }

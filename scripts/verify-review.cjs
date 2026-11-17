@@ -2575,7 +2575,7 @@ if (GIT) {
   const empty = R.composeFollowUp({ title: 'T', comments: [{ id: 'r', path: 'a', side: 'new', line: 1, quote: '', body: 'b', at: 1, resolved: true }], failing: [], unmet: ['x'] })
   ok('review-comment.3 the follow-up quotes each open comment at its place, numbers every point so the reply can be matched, carries the failing check\'s own last lines, lists the unconfirmed criteria, leaves a resolved comment out, and composes nothing when there is nothing to address',
     text.includes('1. src/auth.ts:42') && text.includes('   >   return token') && text.includes('Validate the token first.') &&
-      text.includes('2. src/old.ts:7 (removed line)') && text.includes('3. `npm test` — exit 1') &&
+      text.includes('2. src/old.ts:7 (removed line)') && text.includes('3. `npm test`: exit 1') &&
       text.includes('   | expected 200, got 401') && text.includes('- docs updated') &&
       text.includes('The intended outcome: Users can log in with SSO') && !text.includes('resolved already') &&
       empty === '',
@@ -2600,7 +2600,7 @@ if (GIT) {
   const moved = v({ standing: 'stale' })
   ok('review-comment.4 VERIFIED only when the review is current, a witnessed check passed on this content, none failed, every comment is resolved and every criterion confirmed; an agent stopping with none of that reads "agent finished — not verified" and names what is missing; a stale or unplaceable pass, an open comment or an unticked criterion each keep it short; sent comments with the agent at work read "changes requested"',
     all.stage === 'verified' && all.missing.length === 0 &&
-      idleNothing.stage === 'agent-finished' && idleNothing.word === 'agent finished — not verified' &&
+      idleNothing.stage === 'agent-finished' && idleNothing.word === 'agent finished, not verified' &&
       idleNothing.missing.includes('not reviewed') && idleNothing.missing.includes('no check has run on this revision') &&
       staleOnly.stage === 'agent-finished' && staleOnly.missing.some((m) => /earlier revision/.test(m)) &&
       unknownOnly.stage === 'agent-finished' &&
@@ -2686,7 +2686,7 @@ if (GIT) {
       JSON.stringify(task.finished[0].evidence) === JSON.stringify({ kind: 'output', outputId: 'w-abc-1', panelId: 'w' }) &&
       /`npm test` exited 1 in tests watcher/.test(task.finished[0].text) &&
       task.finished.some((l) => l.tone === 'passed' && l.evidence.kind === 'panel') &&
-      task.finished.some((l) => /the agent replied — “I fixed the token check.”/.test(l.text)) &&
+      task.finished.some((l) => /the agent replied: “I fixed the token check.”/.test(l.text)) &&
       !task.finished.some((l) => /rm x/.test(l.text)) && !task.changed.some((l) => /Dispatched/.test(l.text)) &&
       task.changed.some((l) => /Review mark recorded — 2 files/.test(l.text) && l.evidence.kind === 'review') &&
       task.changed.some((l) => /now holds 3 changed files/.test(l.text)),
@@ -3062,7 +3062,7 @@ if (GIT) {
   const brief = R.integrationFixBrief({ attribution: check, to: '/w/b', labelOf: (l) => l, command: 'npm test', exitCode: 1, tail: 'FAIL test/api.test.ts', base: 'abcdef1234' })
   ok('integrate.2 the brief to the responsible agent is scoped: what failed together and with whom, the files, where the other lane\'s copy is (read, never edit), the output\'s last lines, and the check to run again',
     /can each pass alone/.test(brief) && /npm test` exited 1/.test(brief) && /abcdef1/.test(brief) && /Files involved: src\/api\.ts, test\/api\.test\.ts/.test(brief) &&
-      /A changed src\/api\.ts too — its copy: \/w\/a\/src\/api\.ts/.test(brief) && /do not edit that lane/.test(brief) && /```\nFAIL test\/api\.test\.ts\n```/.test(brief) && /run `npm test` in your lane/.test(brief),
+      /A changed src\/api\.ts too\. Its copy: \/w\/a\/src\/api\.ts/.test(brief) && /do not edit that lane/.test(brief) && /```\nFAIL test\/api\.test\.ts\n```/.test(brief) && /run `npm test` in your lane/.test(brief),
     brief)
   const w = { base: 'b1', inputs: [{ lane: '/w/a', head: 'h1', digest: 'd1', dirty: true }, { lane: '/w/b', head: 'h2', digest: 'd2', dirty: false }] }
   const same = R.integrationStanding(w, { kind: 'inputs', root: '/r', base: 'b1', lanes: [{ lane: '/w/a', head: 'h9', digest: 'd1', dirty: false }, { lane: '/w/b', head: 'h2', digest: 'd2', dirty: false }] })
@@ -3303,7 +3303,7 @@ if (GIT) {
     tools.map((t) => t.tool).join() === 'pnpm,uvicorn,npm,node,jq,docker' &&
       R.toolsOf('FOO=1 BAR=2 cargo test && cd x; ./gradlew check | tee out').join() === 'cargo,tee' &&
       missing.blocked !== undefined && /\{param:nope\}/.test(missing.blocked) && ids(missing) === 'placeholder:{param:nope},tool:uvicorn,port:api' &&
-      /uvicorn is not on the login PATH — a service would fail/.test(missing.items.find((i) => i.id === 'tool:uvicorn').line) && missing.items.find((i) => i.id === 'port:api').severity === 'warn' &&
+      /uvicorn is not on the login PATH, so a service would fail/.test(missing.items.find((i) => i.id === 'tool:uvicorn').line) && missing.items.find((i) => i.id === 'port:api').severity === 'warn' &&
       clear.blocked === undefined && clear.plan.install.join() === 'pnpm install --frozen-lockfile' && clear.plan.services.map((sv) => `${sv.name}:${sv.port}`).join() === 'web:4110,api:4111' && clear.plan.checks.length === 2 &&
       noSetup.blocked !== undefined && /repository setup saved/.test(noSetup.blocked) && ids(noSetup).includes('capability:interrupt') &&
       unprobed.blocked === undefined && unprobed.items.some((i) => i.id === 'tools' && !i.ok && i.severity === 'warn'),
@@ -3428,7 +3428,7 @@ if (GIT) {
     const words1 = R.radarWords('p1', report, (id) => ({ p2: 'Fix login', p3: 'Docs' })[id] ?? id)
     const words3 = R.radarWords('p3', report, (id) => ({ p1: 'API' })[id] ?? id)
     ok('radar.4 each card gets its OWN side of a collision: the conflict says it will not merge and names the other lane; the clean overlap names the shared files and says it merges clean for now',
-      words1.length === 2 && /conflicts with Fix login in a\.txt/.test(words1[0]) && /also changed by Docs: b\.txt — merges clean/.test(words1[1]) &&
+      words1.length === 2 && /conflicts with Fix login in a\.txt/.test(words1[0]) && /also changed by Docs: b\.txt, merges clean/.test(words1[1]) &&
         words3.length === 1 && /also changed by API: b\.txt/.test(words3[0]) && R.radarWords('p9', report, String).length === 0,
       JSON.stringify({ words1, words3 }))
   } finally { rm(base, { recursive: true, force: true }) }

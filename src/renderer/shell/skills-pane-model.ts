@@ -113,7 +113,7 @@ export interface SkillColumn {
 const NOT_A_SKILL: SkillResources = { kind: 'unknown', why: 'only a skill bundles resources' }
 /** M137. A skill whose resources were not counted is not "not a skill"; the sentence was false for it. */
 const UNCOUNTED: SkillResources = { kind: 'unknown', why: 'its resources were not counted' }
-const GONE: SkillResources = { kind: 'unknown', why: 'not installed — its file was not read' }
+const GONE: SkillResources = { kind: 'unknown', why: 'not installed, so its file was not read' }
 
 /** The title a derived column wears; a placed one wears its record's. */
 function derivedTitle(columnId: string): string {

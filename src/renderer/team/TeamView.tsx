@@ -121,7 +121,7 @@ export function TeamView({ accounts }: { accounts?: Accounts }): JSX.Element {
           <p>Sign in with GitHub to see who in your organization is working, and what on.</p>
           <button type="button" className="share-dialog__btn share-dialog__btn--primary" data-team-sign-in
             disabled={accounts?.pending === true || unconfigured !== null}
-            title={unconfigured ?? 'Opens GitHub in your browser — the same sign-in as the top bar’s account button'}
+            title={unconfigured ?? 'Opens GitHub in your browser, with the same sign-in as the top bar’s account button'}
             onClick={() => accounts?.signIn()}>{accounts?.pending === true ? 'Waiting for the browser…' : 'Sign in with GitHub'}</button>
           {unconfigured !== null && <span className="team__note">{unconfigured}</span>}
         </div>
@@ -332,9 +332,9 @@ function ObserverPane({ tile, onLeave }: { tile: TeamTile; onLeave: () => void }
         {following && (
           <div className="team__banner" role="status" data-team-follow-banner>
             {cursor !== null
-              ? <>Following <strong>{name}</strong>’s cursor — press F or Esc to stop</>
+              ? <>Following <strong>{name}</strong>’s cursor. Press F or Esc to stop</>
               : theirViewport !== null
-                ? <><strong>{name}</strong>’s cursor is off their canvas — holding on their view · F or Esc to stop</>
+                ? <><strong>{name}</strong>’s cursor is off their canvas, so this holds on their view · F or Esc to stop</>
                 : <>Waiting for <strong>{name}</strong>’s cursor · F or Esc to stop</>}
           </div>
         )}
@@ -381,8 +381,8 @@ function ObserverStatus({ observed, name }: { observed: ObservedView | null; nam
   let text: string
   if (observed === null || observed.connection === 'connecting') text = 'connecting…'
   else if (observed.connection === 'off') text = observed.reason ?? 'presence is off'
-  else if (observed.connection === 'disconnected') text = 'disconnected — reconnecting'
-  else if (observed.peer === null) text = observed.snapshot === null ? `${name} is not on this workspace right now` : `${name} left — showing their last canvas`
+  else if (observed.connection === 'disconnected') text = 'disconnected, reconnecting'
+  else if (observed.peer === null) text = observed.snapshot === null ? `${name} is not on this workspace right now` : `${name} left. Showing their last canvas`
   else if (observed.snapshot === null) text = `waiting for ${name}’s canvas…`
   else {
     const ms = observed.snapshotSeenAt === null ? 0 : Date.now() - observed.snapshotSeenAt

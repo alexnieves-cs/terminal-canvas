@@ -75,7 +75,7 @@ ok('rd-l-f.host.1 twenty seconds of silence pauses the last live panes, and one 
   early.phase === 'live' && early.paused.length === 0 &&
   host.phase === 'paused' && host.paused.length === 4 &&
   host.paused.every((p, i) => p.panelId === panes[i].panelId && p.pid === panes[i].pid) &&
-  banner === "Session host stopped responding. tmux server on this Mac didn't answer for 20s. 4 sessions are paused, not lost — their output is buffered." &&
+  banner === "Session host stopped responding. tmux server on this Mac didn't answer for 20s. 4 sessions are paused, not lost. Their output is buffered." &&
   retry === 'Retrying in 8s' &&
   M.HOST_RETRY_MS === 8000 && M.HOST_SILENT_MS === 20000,
   JSON.stringify({ phase: host.phase, n: host.paused.length, banner, retry }))

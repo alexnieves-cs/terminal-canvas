@@ -119,7 +119,7 @@ export function buildReviewNodeModel(input: {
     case 'git-missing':
       return { heading, root, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'repo-unreadable':
-      return { heading, root, summary: 'unavailable', note: `git could not open this repository — ${result.detail}`, files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
+      return { heading, root, summary: 'unavailable', note: `git could not open this repository: ${result.detail}`, files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'baseline-lost':
       return { heading, root, summary: 'unattributable', note: 'this repository could not be read against its baseline', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'clean':
@@ -156,7 +156,7 @@ export function buildReviewNodeModel(input: {
         kind: 'blocked',
         reason:
           `${result.panelCount} panels share this checkout, so these changes ` +
-          'cannot be attributed to one agent — committing them here would put ' +
+          'cannot be attributed to one agent, and committing them here would put ' +
           'another agent\'s work under this message.'
       },
       // M53. Blocked for a stronger reason than the commit: a discard here
@@ -164,7 +164,7 @@ export function buildReviewNodeModel(input: {
       // on its own count as well; this is the visible half.
       discard: {
         kind: 'blocked',
-        reason: `${result.panelCount} panels share this checkout — a discard here could throw away another agent's work`
+        reason: `${result.panelCount} panels share this checkout, and a discard here could throw away another agent's work`
       }
     }
   }

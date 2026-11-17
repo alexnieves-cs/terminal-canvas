@@ -70,14 +70,14 @@ export function ShapeInspector({ shape, onStyle, onChart }: { shape: ShapeRecord
           <div className="shape-inspector__row" role="group" aria-label="Export">
             <span className="shape-inspector__label">Export</span>
             <div className="shape-inspector__acts">
-              <button type="button" className="shape-inspector__act" data-shape-chart="export-mermaid" title="Export the chart as Mermaid — secrets scrubbed" onClick={() => { onChart('export-mermaid') }}>Mermaid…</button>
-              <button type="button" className="shape-inspector__act" data-shape-chart="export-svg" title="Export the chart as SVG — text only, secrets scrubbed" onClick={() => { onChart('export-svg') }}>SVG…</button>
+              <button type="button" className="shape-inspector__act" data-shape-chart="export-mermaid" title="Export the chart as Mermaid, with secrets scrubbed" onClick={() => { onChart('export-mermaid') }}>Mermaid…</button>
+              <button type="button" className="shape-inspector__act" data-shape-chart="export-svg" title="Export the chart as SVG, text only, with secrets scrubbed" onClick={() => { onChart('export-svg') }}>SVG…</button>
             </div>
           </div>
           <div className="shape-inspector__row" role="group" aria-label="Work">
             <span className="shape-inspector__label">Work</span>
             <div className="shape-inspector__acts">
-              <button type="button" className="shape-inspector__act" data-shape-chart="plan" title="New task from this chart — its steps become a task plan; nothing runs until you press Start" onClick={() => { onChart('plan') }}>New task from this chart…</button>
+              <button type="button" className="shape-inspector__act" data-shape-chart="plan" title="New task from this chart. Its steps become a task plan; nothing runs until you press Start" onClick={() => { onChart('plan') }}>New task from this chart…</button>
             </div>
           </div>
         </>

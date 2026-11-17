@@ -122,7 +122,7 @@ export function useReviewVerbs(deps: UseReviewVerbsDeps) {
   const reviewTaskLane = useCallback((itemId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
     const item = workItemsRef.current.find((i) => i.id === itemId)
     if (item === undefined) return { kind: 'refused', reason: WORK_ITEM_GONE }
-    if (item.worktreeId === undefined) return { kind: 'refused', reason: 'no lane yet — start work on this item first' }
+    if (item.worktreeId === undefined) return { kind: 'refused', reason: 'no lane yet; start work on this item first' }
     // The SAME records the card's readiness was judged against, read by the
     // handoff hook rather than by the palette's list — which loads only when
     // ⌘K opens, and would refuse this verb on a real lane until it did.
@@ -130,7 +130,7 @@ export function useReviewVerbs(deps: UseReviewVerbsDeps) {
     // The worktree was removed outside this app, or its record was pruned.
     // Never fall back to another root: reviewing a different repository under
     // this task's name is the substitution the guide forbids by name.
-    if (record === undefined) return { kind: 'refused', reason: 'the worktree this task was started in is not listed any more — start work again to give it a fresh lane' }
+    if (record === undefined) return { kind: 'refused', reason: 'the worktree this task was started in is not listed any more. Start work again to give it a fresh lane' }
     // M315. One review per task. A second press used to stack a second node
     // beside the first, off-screen, and the person saw nothing happen. The
     // existing one is brought into view instead — the press always LANDS.

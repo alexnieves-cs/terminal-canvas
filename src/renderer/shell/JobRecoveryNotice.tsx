@@ -111,7 +111,7 @@ function JobRow({ job, choose }: { job: JobAccount; choose: JobRecoveryModel['ch
       )}
       <span className="reopen-notice__verbs">
         {job.choices.includes('reconnect') && (
-          <button type="button" className="rail-row__verb" data-job-choice="reconnect" title="Show where it is — it kept running" {...shellControl(() => choose(job.id, 'reconnect'))}>reconnect</button>
+          <button type="button" className="rail-row__verb" data-job-choice="reconnect" title="Show where it is. It kept running" {...shellControl(() => choose(job.id, 'reconnect'))}>reconnect</button>
         )}
         {job.choices.includes('continue') && (
           <button type="button" className="rail-row__verb" data-job-choice="continue" title="Run the items that never started; nothing that finished runs again" {...shellControl(() => choose(job.id, 'continue'))}>
@@ -124,12 +124,12 @@ function JobRow({ job, choose }: { job: JobAccount; choose: JobRecoveryModel['ch
           </button>
         )}
         {job.choices.includes('retry') && named.size > 0 && (
-          <button type="button" className="rail-row__verb" data-job-choice="retry-named" title="Run the ticked items again — you looked at what they changed" {...shellControl(() => choose(job.id, 'retry', [...named]))}>
+          <button type="button" className="rail-row__verb" data-job-choice="retry-named" title="Run the ticked items again. You looked at what they changed" {...shellControl(() => choose(job.id, 'retry', [...named]))}>
             retry {count(named.size, 'ticked item')}
           </button>
         )}
         {job.choices.includes('abandon') && (
-          <button type="button" className="rail-row__verb" data-job-choice="abandon" title="Leave it as it is — nothing runs, the record stays" {...shellControl(() => choose(job.id, 'abandon'))}>abandon</button>
+          <button type="button" className="rail-row__verb" data-job-choice="abandon" title="Leave it as it is. Nothing runs, and the record stays" {...shellControl(() => choose(job.id, 'abandon'))}>abandon</button>
         )}
       </span>
     </li>

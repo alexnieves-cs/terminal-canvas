@@ -52,8 +52,8 @@ export interface OrchDependencyFocus {
   lit: Set<string>
 }
 
-export const ORCH_DEP_READ_ONLY = 'Dependency editing is not available here yet — this lens is read-only. Draw or change a handoff on the canvas.'
-export const ORCH_DEP_GROUPING = 'grouping only — not a supervisor'
+export const ORCH_DEP_READ_ONLY = 'Dependency editing is not available here yet, and this lens is read-only. Draw or change a handoff on the canvas.'
+export const ORCH_DEP_GROUPING = 'grouping only, not a supervisor'
 
 const CONDITIONS: Readonly<Record<string, string>> = {
   'on exit': 'fires when the source process exits, with any code',
@@ -64,14 +64,15 @@ const CONDITIONS: Readonly<Record<string, string>> = {
 }
 
 export function orchDepCondition(trigger: string | undefined): string {
-  if (trigger === undefined) return 'a bare link — nothing crosses it on its own; it records a relation only'
+  if (trigger === undefined) return 'a bare link. Nothing crosses it on its own; it records a relation only'
   return CONDITIONS[trigger] ?? `fires ${trigger}`
 }
 
 /** A recorded sentence → the status word. The sentence stays beside it, verbatim. */
 export function orchDepStatus(sentence: string | undefined, sourceState: string | undefined): OrchDepStatus {
   if (sentence !== undefined) {
-    const s = sentence.startsWith('joined — ') ? sentence.slice('joined — '.length) : sentence
+    // `joined: ` since M647; `joined — ` is what older builds recorded.
+    const s = sentence.replace(/^joined(: | — )/, '')
     if (s.startsWith('handed off') || s.startsWith('reloaded')) return 'fired'
     if (s.startsWith('skipped')) return 'skipped'
     if (s.startsWith('queued')) return 'queued'
@@ -131,5 +132,5 @@ export function orchBlockedLine(focus: OrchDependencyFocus): string | null {
   const b = focus.blockers[0]
   if (b === undefined) return null
   const more = focus.blockers.length > 1 ? ` (+${focus.blockers.length - 1} more)` : ''
-  return `Blocked — ${b.fromTitle}: ${b.reason}${more}`
+  return `Blocked by ${b.fromTitle}: ${b.reason}${more}`
 }

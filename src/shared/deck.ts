@@ -226,10 +226,10 @@ const slideWords = (ids: readonly string[]): string => `slide${ids.length === 1 
 export function applyKept(diskText: string, draft: SlideDraft | null | undefined, ids: readonly string[] | 'all'): KeepResult {
   if (!draft || draft.items.length === 0) return { kind: 'refused', reason: 'there is no proposed change to keep' }
   const unknown = ids === 'all' ? [] : ids.filter((id) => !draft.items.some((item) => item.id === id))
-  if (unknown.length) return { kind: 'refused', reason: `no proposed change to ${slideWords(unknown)} — the proposal holds ${slideWords(draft.items.map((i) => i.id))}` }
+  if (unknown.length) return { kind: 'refused', reason: `no proposed change to ${slideWords(unknown)}. The proposal holds ${slideWords(draft.items.map((i) => i.id))}` }
   const named = ids === 'all' ? draft.items.map((i) => i.id) : [...ids]
   if (hashText(diskText) !== draft.baseHash) {
-    return { kind: 'conflict', reason: `the file changed on disk since the proposal — ${slideWords(named)} cannot be kept against it; discard and ask again` }
+    return { kind: 'conflict', reason: `the file changed on disk since the proposal, so ${slideWords(named)} cannot be kept against it; discard and ask again` }
   }
   const { apply } = keepItems(draft, ids)
   if (apply.length === 0) return { kind: 'applied', text: diskText, remaining: draft }
@@ -327,10 +327,10 @@ function inlineHtml(runs: Inline[]): string {
 function imageHtml(alt: string, src: string, resolve: (src: string) => ImageAnswer): string {
   // Never fetched: a remote picture in an exported file is a request to a
   // server the person did not choose, at the moment they export.
-  if (isRemoteImage(src)) return `<p class="img-missing">remote image not loaded — ${esc(alt || src)}</p>`
+  if (isRemoteImage(src)) return `<p class="img-missing">remote image not loaded: ${esc(alt || src)}</p>`
   const answer = resolve(src)
   if (answer.kind === 'data' && /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]*$/.test(answer.url)) return `<img alt="${esc(alt)}" src="${answer.url}">`
-  return `<p class="img-missing">image not found — ${esc(src)}</p>`
+  return `<p class="img-missing">image not found: ${esc(src)}</p>`
 }
 
 /**
