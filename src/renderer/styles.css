@@ -13760,6 +13760,35 @@ tr[data-session-row]:focus-within .sessions-world,
    fixed icon slot, then the name, on one baseline (unslop.dock.1). */
 .shell[data-dock="expanded"] .dock__button { display: flex; align-items: center; gap: var(--sp-3); }
 .shell[data-dock="expanded"] .dock__button > svg { flex: 0 0 auto; }
+/* M648. A TERMINAL'S STRIP, SHOWN, KEEPS ITS NAME AND ITS STATE WHOLE. M641
+   fixed the strip at rest; once it was hovered or selected, all six facts
+   came back onto a default-size terminal (476px) and each got a sliver:
+   `Claude — l…`, `…/steward/…`, `feature/…`, `ledger-ex…`, and the state
+   pill squeezed to its 4ch floor, which read as `( w`. Two causes. The word
+   kept M410's shrink of 100, made for a state that is a SENTENCE, so it
+   gave way first; and the three contextual facts (path, branch, the agent
+   line) had nowhere to go but narrower. Now:
+     * the word shrinks like the name (1, not 100). M410's 22ch cap still
+       bounds a sentence, so the name still leads;
+     * the path, the branch and the agent line give way first (100), and
+       below the width each needs to read whole they are not laid out at
+       all. Half a path is not a fact, and every one of them is still a
+       hover away: the name's tooltip carries the command and the full
+       working directory (M407), the inspector the rest.
+   The order they leave in is the order they repeat the name. The agent line
+   (`ledger-export · claude`) is the name's folder and engine again, so it
+   goes first; the path's leaf is usually the name's folder, so it goes next;
+   the branch says something nothing else on the strip says, so it stays
+   longest. The widths are the strip's own (a container query on the strip,
+   which is absolutely positioned with left and right set, so its size never
+   depends on its content and the containment changes nothing it lays out).
+   Nothing here refits xterm: the strip is outside the body (the frame rule). */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome { container: tc-rim / inline-size; }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__word { flex-shrink: 1; }
+.pf--kind-terminal:has(.panel__slot) .pf__chrome :is(.pf__path, .pf__branch, .pf__summary) { flex-shrink: 100; }
+@container tc-rim (max-width: 759px) { .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__summary { display: none; } }
+@container tc-rim (max-width: 619px) { .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__path { display: none; } }
+@container tc-rim (max-width: 459px) { .pf--kind-terminal:has(.panel__slot) .pf__chrome .pf__branch { display: none; } }
 /* ── /st:W ── */
 
 
