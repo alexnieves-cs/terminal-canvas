@@ -1,0 +1,46 @@
+# Rewrites a published release's notes from docs/release-notes/<version>.md,
+# keeping the install steps release.yml wrote above them.
+#
+# Why this exists: release.yml copies a version's notes into the release page
+# once, at publish time. A typo or a stale line fixed in the repo afterwards
+# never reaches the page people actually read, and a cloud session cannot edit
+# a release by hand. This is the door for that one edit, and nothing more: no
+# build, no assets, no tag. Run it by hand with the tag to refresh.
+name: release-notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to refresh, for example v6.2.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rewrite the notes under the install steps
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="docs/release-notes/${TAG#v}.md"
+          [ -f "$notes" ] || { echo "no $notes"; exit 1; }
+          gh release view "$TAG" --json body --jq .body > current.md
+          # release.yml's install header ends with the line saying the DMG
+          # passed verify:packaged. Everything up to it is kept as written,
+          # so the signed or unsigned wording the publish job chose survives.
+          line=$(grep -n 'passed `verify:packaged`' current.md | head -n1 | cut -d: -f1 || true)
+          [ -n "$line" ] || { echo "install header not found; refusing to guess"; exit 1; }
+          head -n "$line" current.md > notes.md
+          { echo; tail -n +2 "$notes"; } >> notes.md
+          diff current.md notes.md || true
+          gh release edit "$TAG" --notes-file notes.md

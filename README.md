@@ -14,7 +14,7 @@
   <a href="https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml"><img alt="verify" src="https://github.com/alexnieves-cs/terminal-canvas/actions/workflows/verify.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <a href="docs/guide/install.md"><img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS-lightgrey.svg"></a>
-  <img alt="Version 6.2.0" src="https://img.shields.io/badge/version-6.2.0-5edce6.svg">
+  <a href="https://github.com/alexnieves-cs/terminal-canvas/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/alexnieves-cs/terminal-canvas?color=5edce6"></a>
 </p>
 
 <p align="center">
@@ -34,8 +34,10 @@
   compares against, painted on a Mac from sample data.
 </sub></p>
 
-> **Status: `v6.2.0`.** macOS, Apple silicon and Intel. Free and open source. The release is not signed
-> yet, so macOS objects on first launch; [Install](#install) has the fix.
+> **Status: `v6.2.0`.** macOS, Apple silicon and Intel. Free and open source under MIT. The release is
+> not signed yet, so macOS objects on first launch; [Install](#install) has the fix. Want a look
+> first? The [live demo](https://alexnieves-cs.github.io/terminal-canvas/demo/) runs in your browser
+> with scripted agents, nothing to install.
 
 ## Why
 
@@ -98,8 +100,8 @@ usage limit, and wait for you in the morning queue.
 
 ## Install
 
-1. Download the `.dmg` from the [latest release](https://github.com/alexnieves-cs/terminal-canvas/releases/latest)
-   and drag **Terminal Canvas** to Applications.
+1. Download the `.dmg` for your Mac from the [latest release](https://github.com/alexnieves-cs/terminal-canvas/releases/latest):
+   `arm64` for Apple silicon, `x64` for Intel. Drag **Terminal Canvas** to Applications.
 2. The release is not signed, so macOS blocks the first launch. Open **System Settings → Privacy
    & Security** and choose **Open Anyway**, or run:
 
@@ -112,7 +114,14 @@ usage limit, and wait for you in the morning queue.
 3. Install an agent CLI such as `claude` or `codex` and sign in to it once in a terminal.
 4. Optional: `brew install tmux`, so agents keep running through a reload or a quit.
 
-To build from source instead:
+Or install with Homebrew. The repository is its own tap, so the tap needs its URL:
+
+```sh
+brew tap alexnieves-cs/terminal-canvas https://github.com/alexnieves-cs/terminal-canvas
+brew install --cask terminal-canvas
+```
+
+To build from source instead (macOS, Node 20 or later, Xcode Command Line Tools):
 
 ```sh
 git clone https://github.com/alexnieves-cs/terminal-canvas.git
@@ -158,7 +167,8 @@ says how the suites are organised.
 
 Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Tried the
 app or the demo? [Share feedback](https://github.com/alexnieves-cs/terminal-canvas/issues/new?template=feedback.yml);
-it is a short form.
+it is a short form. Found a security problem? Report it privately, as [SECURITY.md](SECURITY.md)
+describes.
 
 ## License
 

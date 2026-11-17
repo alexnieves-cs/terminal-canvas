@@ -1,5 +1,10 @@
 # Getting started with Terminal Canvas
 
+> The current install steps (DMG for Apple silicon and Intel, Homebrew, Open Anyway) and the
+> first task are in the [user guide](guide/README.md), published at
+> <https://alexnieves-cs.github.io/terminal-canvas/docs/>. This older page stays for the
+> build-from-source path.
+
 A calm dark window with an infinite canvas in it. You arrange agents, terminals, files,
 previews, workflows, pictures and notes on that canvas, and everything you put there stays where
 you left it.
