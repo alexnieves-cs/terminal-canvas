@@ -130,7 +130,7 @@ export function morningQueue(tasks: readonly TaskBriefing[], inputs: readonly Br
     const failedLines = t.finished.filter((l) => l.tone === 'failed')
     for (const l of failedLines) out.push({ kind: 'failed', itemId: t.itemId, title: t.title, text: l.text, ...(l.evidence === undefined ? {} : { evidence: l.evidence }) })
     if (failedLines.length === 0 && auto !== undefined && 'stuck' in auto) {
-      out.push({ kind: 'failed', itemId: t.itemId, title: t.title, text: `${auto.check === undefined ? 'its check' : `\`${auto.check}\``} kept failing — the auto run gave up`, evidence: { kind: 'review', itemId: t.itemId } })
+      out.push({ kind: 'failed', itemId: t.itemId, title: t.title, text: `${auto.check === undefined ? 'its check' : `\`${auto.check}\``} kept failing, and the auto run gave up`, evidence: { kind: 'review', itemId: t.itemId } })
     }
     for (const l of t.decisions) out.push({ kind: 'decision', itemId: t.itemId, title: t.title, text: l.text, ...(l.evidence === undefined ? {} : { evidence: l.evidence }) })
     if (failedLines.length > 0 || (auto !== undefined && 'stuck' in auto)) continue
@@ -138,7 +138,7 @@ export function morningQueue(tasks: readonly TaskBriefing[], inputs: readonly Br
     const hasWork = files !== undefined && files > 0
     if (!hasWork && verdict === undefined) continue
     const kind: MorningKind = verdict === 'checked' ? 'checked' : verdict === 'claimed' ? 'claimed' : 'review'
-    const what = hasWork ? `${plural(files as number, 'changed file')} to review` : 'finished — nothing changed in the lane'
+    const what = hasWork ? `${plural(files as number, 'changed file')} to review` : 'finished, but nothing changed in the lane'
     const how = kind === 'checked' ? ` · ${auto !== undefined && 'check' in auto && auto.check !== undefined ? `\`${auto.check}\` passed` : AUTO_VERDICT_WORDS.checked}`
       : kind === 'claimed' ? ` · ${AUTO_VERDICT_WORDS.claimed}, nothing checked it` : ''
     out.push({ kind, itemId: t.itemId, title: t.title, text: `${what}${how}`, evidence: { kind: 'review', itemId: t.itemId }, ...(files === undefined ? {} : { files }) })
@@ -187,7 +187,7 @@ export function briefTask(t: BriefingTaskInput, since: number, decisions: readon
   }
   if (t.lastReply !== undefined && t.lastReply.at >= since) {
     finished.push({
-      text: `the agent replied${t.lastReply.excerpt === '' ? '' : ` — “${t.lastReply.excerpt}”`}`,
+      text: `the agent replied${t.lastReply.excerpt === '' ? '' : `: “${t.lastReply.excerpt}”`}`,
       at: t.lastReply.at, tone: 'neutral', evidence: { kind: 'panel', panelId: t.lastReply.panelId }
     })
   }
@@ -207,7 +207,7 @@ export function briefTask(t: BriefingTaskInput, since: number, decisions: readon
   // a failed check, then the review handoff's own action, then verification.
   const failedCount = finished.filter((l) => l.tone === 'failed').length
   const next = decisionLines.length > 0
-    ? `Answer ${decisionLines.length === 1 ? 'the decision' : `the ${decisionLines.length} decisions`} below — the task waits on ${decisionLines.length === 1 ? 'it' : 'them'}`
+    ? `Answer ${decisionLines.length === 1 ? 'the decision' : `the ${decisionLines.length} decisions`} below. The task waits on ${decisionLines.length === 1 ? 'it' : 'them'}`
     : failedCount > 0
       ? `Open the failed check${failedCount === 1 ? '' : 's'} and send the agent a follow-up from the review`
       : t.handoff !== undefined && t.handoff.actionLabel.trim() !== ''

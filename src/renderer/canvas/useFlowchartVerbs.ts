@@ -106,7 +106,7 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
 
   const addShape = useCallback((form: string, text?: string, world?: Point): VerbResult & { id?: string } => {
     if (mergedRef.current === true) return { kind: 'refused', reason: 'leave merged view to add a shape' }
-    if (!isShapeForm(form)) return { kind: 'refused', reason: `${form} is not a shape — ${SHAPE_FORMS.join(', ')}` }
+    if (!isShapeForm(form)) return { kind: 'refused', reason: `${form} is not a shape. Try ${SHAPE_FORMS.join(', ')}` }
     const at = world ?? worldCentre()
     const id = `sh${nextIdRef.current++}`
     const label = normaliseShapeText(text ?? '')
@@ -150,10 +150,10 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
     // Each field is judged by name, and a bad one refuses the WHOLE verb: a
     // restyle that applied half of what was asked would leave the person
     // guessing which half.
-    if (patch.form !== undefined && !isShapeForm(patch.form)) return { kind: 'refused', reason: `${patch.form} is not a shape — ${SHAPE_FORMS.join(', ')}` }
-    if (patch.fill !== undefined && !isShapeFill(patch.fill)) return { kind: 'refused', reason: `${patch.fill} is not a fill — ${SHAPE_FILLS.join(', ')}` }
-    if (patch.stroke !== undefined && !isShapeStroke(patch.stroke)) return { kind: 'refused', reason: `${patch.stroke} is not a line — ${SHAPE_STROKES.join(', ')}` }
-    if (patch.ink !== undefined && !isShapeInk(patch.ink)) return { kind: 'refused', reason: `${patch.ink} is not a text colour — ${SHAPE_INKS.join(', ')}` }
+    if (patch.form !== undefined && !isShapeForm(patch.form)) return { kind: 'refused', reason: `${patch.form} is not a shape. Try ${SHAPE_FORMS.join(', ')}` }
+    if (patch.fill !== undefined && !isShapeFill(patch.fill)) return { kind: 'refused', reason: `${patch.fill} is not a fill. Try ${SHAPE_FILLS.join(', ')}` }
+    if (patch.stroke !== undefined && !isShapeStroke(patch.stroke)) return { kind: 'refused', reason: `${patch.stroke} is not a line. Try ${SHAPE_STROKES.join(', ')}` }
+    if (patch.ink !== undefined && !isShapeInk(patch.ink)) return { kind: 'refused', reason: `${patch.ink} is not a text colour. Try ${SHAPE_INKS.join(', ')}` }
     setPanels((current) => {
       const updated = current.map((p) => {
         if (!ids.has(p.rect.id) || !isShapePanel(p)) return p
@@ -221,7 +221,7 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
     if (mergedRef.current === true) return { kind: 'refused', reason: 'leave merged view to duplicate' }
     const want = new Set(targetIds(ids))
     const objects = collectCopy(panelsRef.current ?? [], want)
-    if (objects.length === 0) return { kind: 'refused', reason: want.size === 0 ? 'select a shape, a note or a picture first' : 'only shapes, notes and pictures duplicate — a terminal or a chat would be a second process' }
+    if (objects.length === 0) return { kind: 'refused', reason: want.size === 0 ? 'select a shape, a note or a picture first' : 'only shapes, notes and pictures duplicate, because a terminal or a chat would be a second process' }
     // Minted outside the updater (an updater must be pure); z set inside it.
     const placed = placeCopies(objects, () => nextIdRef.current++, DUPLICATE_OFFSET, DUPLICATE_OFFSET, 0)
     setPanels((current) => {
@@ -236,7 +236,7 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
 
   const copyObjects = useCallback((): VerbResult => {
     const objects = collectCopy(panelsRef.current ?? [], new Set(targetIds()))
-    if (objects.length === 0) return { kind: 'refused', reason: 'nothing to copy — select a shape, a note or a picture' }
+    if (objects.length === 0) return { kind: 'refused', reason: 'nothing to copy; select a shape, a note or a picture' }
     const marker = clipboardMarker(objects.length, Date.now())
     holdCopy(objects, marker)
     void navigator.clipboard.writeText(marker)
@@ -297,7 +297,7 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
 
   const align = useCallback((edge: string, ids?: readonly string[]): VerbResult => {
     if (mergedRef.current === true) return { kind: 'refused', reason: 'leave merged view to arrange' }
-    if (!ALIGN_EDGES.includes(edge as AlignEdge)) return { kind: 'refused', reason: `${edge} is not an edge — ${ALIGN_EDGES.join(', ')}` }
+    if (!ALIGN_EDGES.includes(edge as AlignEdge)) return { kind: 'refused', reason: `${edge} is not an edge. Try ${ALIGN_EDGES.join(', ')}` }
     const want = new Set(targetIds(ids))
     // A LOCKED object keeps its place (M92's lock: drag and resize refuse; so does an arrangement).
     const rects = (panelsRef.current ?? []).filter((p) => want.has(p.rect.id) && p.locked !== true).map((p) => p.rect)
@@ -309,7 +309,7 @@ export function useFlowchartVerbs(deps: FlowchartVerbsDeps): FlowchartVerbs {
   const distribute = useCallback((axis: string, ids?: readonly string[]): VerbResult => {
     if (mergedRef.current === true) return { kind: 'refused', reason: 'leave merged view to arrange' }
     const a = axis === 'across' || axis === 'h' || axis === 'horizontal' ? 'h' : axis === 'down' || axis === 'v' || axis === 'vertical' ? 'v' : null
-    if (a === null) return { kind: 'refused', reason: `${axis} is not a direction — across or down` }
+    if (a === null) return { kind: 'refused', reason: `${axis} is not a direction. Try across or down` }
     const want = new Set(targetIds(ids))
     const rects = (panelsRef.current ?? []).filter((p) => want.has(p.rect.id) && p.locked !== true).map((p) => p.rect)
     if (rects.length < 3) return { kind: 'refused', reason: 'select three or more objects to space evenly' }

@@ -137,9 +137,9 @@ export function syncLine(roster: Pick<PresenceRoster, 'connection' | 'reason' | 
   const changes = `${n} change${n === 1 ? '' : 's'}`
   switch (roster.connection) {
     case 'connected': return n > 0 ? `Syncing ${changes}…` : null
-    case 'connecting': return n > 0 ? `Reconnecting — ${changes} waiting` : 'Reconnecting…'
-    case 'disconnected': return n > 0 ? `Offline — ${changes} waiting to sync` : 'Offline — changes sync when the server is back'
-    case 'off': return `Not syncing — ${roster.reason ?? 'presence is off'}`
+    case 'connecting': return n > 0 ? `Reconnecting, ${changes} waiting` : 'Reconnecting…'
+    case 'disconnected': return n > 0 ? `Offline, ${changes} waiting to sync` : 'Offline. Changes sync when the server is back'
+    case 'off': return `Not syncing: ${roster.reason ?? 'presence is off'}`
   }
 }
 

@@ -1332,7 +1332,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         data-orch-island-source={isl.source}
         data-orch-island-ambiguous={ambiguous || undefined}
         aria-pressed={islandFocused(isl)}
-        title="Select the task — Open on canvas is in the inspector"
+        title="Select the task. Open on canvas is in the inspector"
         {...shellControl(() => { setFocusIslandId(isl.id === primaryIsland?.id ? null : isl.id); setSelectedIds([]); setFreshNeeds(new Set()) })}
       >
         {/* Kind and state share ONE line, and the stage is that WORD, not the bars the
@@ -1378,8 +1378,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               <div key={isl.id} className="orch__island-row">
                 {islandCard(isl, false)}
                 <span className="orch__island-tools" aria-label={`Move ${isl.goal}`}>
-                  <button type="button" className="orch__mini" data-orch-island-move="up" data-orch-island-of={isl.id} disabled={orderedIds.indexOf(isl.id) === 0} title="Move up — presentation only, nothing is dispatched" {...shellControl(() => moveIsland(isl.id, -1))}>▲</button>
-                  <button type="button" className="orch__mini" data-orch-island-move="down" data-orch-island-of={isl.id} disabled={orderedIds.indexOf(isl.id) === orderedIds.length - 1} title="Move down — presentation only, nothing is dispatched" {...shellControl(() => moveIsland(isl.id, 1))}>▼</button>
+                  <button type="button" className="orch__mini" data-orch-island-move="up" data-orch-island-of={isl.id} disabled={orderedIds.indexOf(isl.id) === 0} title="Move up. This is presentation only, and, nothing is dispatched" {...shellControl(() => moveIsland(isl.id, -1))}>▲</button>
+                  <button type="button" className="orch__mini" data-orch-island-move="down" data-orch-island-of={isl.id} disabled={orderedIds.indexOf(isl.id) === orderedIds.length - 1} title="Move down. This is presentation only, and, nothing is dispatched" {...shellControl(() => moveIsland(isl.id, 1))}>▼</button>
                 </span>
               </div>
             ))}
@@ -1406,7 +1406,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <button type="button" className="orch__tab orch__tab--on" aria-pressed={true} data-orch-view-tasks>Tasks</button>
             {(['scene', 'watch', 'list'] as const).map((l) => (
               <button key={l} type="button" className="orch__tab" aria-pressed={false} data-orch-lens={l}
-                title={l === 'scene' ? 'The tasks as platforms and their agents as a scene' : l === 'watch' ? 'Watch the sessions work — files as towers, writes and commands as they happen' : 'Every session, by name, in a table'}
+                title={l === 'scene' ? 'The tasks as platforms and their agents as a scene' : l === 'watch' ? 'Watch the sessions work: files as towers, writes and commands as they happen' : 'Every session, by name, in a table'}
                 {...shellControl(() => showLens(l))}>{l === 'scene' ? 'Scene' : l === 'watch' ? 'Watch' : 'List'}</button>
             ))}
           </span>
@@ -1624,11 +1624,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           </div>
             <span className="orch__lens" role="group" aria-label="Scene, watch or list">
               <button type="button" className="orch__tab" aria-pressed={false} data-orch-view-tasks
-                title="Back to the task list — what needs you, what is running, what is ready for review"
+                title="Back to the task list: what needs you, what is running, what is ready for review"
                 {...shellControl(() => setView('tasks'))}>Tasks</button>
               {(['scene', 'watch', 'list'] as const).map((l) => (
                 <button key={l} type="button" className={`orch__tab${lens === l ? ' orch__tab--on' : ''}`} aria-pressed={lens === l}
-                  data-orch-lens={l} title={l === 'watch' ? 'Watch the sessions work — files as towers, writes and commands as they happen' : undefined}
+                  data-orch-lens={l} title={l === 'watch' ? 'Watch the sessions work: files as towers, writes and commands as they happen' : undefined}
                   {...shellControl(() => showLens(l))}>{l === 'scene' ? 'Scene' : l === 'watch' ? 'Watch' : 'List'}</button>
               ))}
             </span>
@@ -1639,7 +1639,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <span className="orch__lens" role="group" aria-label="Saved views" data-orch-views={savedViews.length}>
               {savedViews.map((v) => (
                 <button key={v.id} type="button" className="orch__tab" data-orch-view={v.id}
-                  title={`show this workspace's ${v.name} view — filters, camera and layout only; it starts nothing`}
+                  title={`show this workspace's ${v.name} view (filters, camera and layout only). It starts nothing`}
                   {...shellControl(() => applyView(v))}>{v.name}</button>
               ))}
               {viewName === null ? (
@@ -1889,7 +1889,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   <li key={row.id} className="orch__needs-row" data-orch-needs-row={row.id}>
                     <button type="button" className="orch__needs-main" {...shellControl(() => select(row.id))}>
                       <span className="orch__needs-title"><span className="orch__dot status-dot" data-tone="needs-you" aria-hidden="true" />{row.title}</span>
-                      <span className="orch__needs-ask">needs you — reply in its conversation</span>
+                      <span className="orch__needs-ask">needs you. Reply in its conversation</span>
                     </button>
                     <span className="orch__needs-actions">
                       <button type="button" className="orch__mini" {...shellControl(() => jump(row.id))}>Open on canvas</button>
@@ -2026,12 +2026,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 )}
                 {handoffDraft !== null && handoffTarget !== undefined && onContinueOnBackend !== undefined && (
                   <div className="orch__retry" data-orch-handoff={selectedRow.id} role="group" aria-label="Continue on another backend">
-                    <div className="orch__section-title">Continue on another backend — a draft, nothing sent</div>
+                    <div className="orch__section-title">Continue on another backend. A draft, nothing sent</div>
                     <label className="orch__caption">To{' '}
                       <select className="orch__select" data-orch-handoff-to value={handoffTarget} onChange={(e) => { setHandoffTo(e.target.value as AgentBackend); setHandoffEdit(null) }}>
                         {handoffTargets.map((b) => <option key={b} value={b}>{BACKENDS[b].label}</option>)}
                       </select>
-                      {' '}— a new conversation in the same folder. {BACKENDS[handoffFrom!].label}'s conversation cannot be resumed there, so only this text carries.
+                      {'. '}It is a new conversation in the same folder. {BACKENDS[handoffFrom!].label}'s conversation cannot be resumed there, so only this text carries.
                     </label>
                     <textarea className="orch__term-log orch__retry-prompt orch__handoff-text" data-orch-handoff-text aria-label="Hand-off text" rows={10} spellCheck={false}
                       value={handoffEdit ?? handoffDraft.text}
@@ -2058,7 +2058,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 )}
                 {retryPreview !== null && (
                   <div className="orch__retry" data-orch-retry-preview={selectedRow.id} role="group" aria-label="Retry preview">
-                    <div className="orch__section-title">Retry — a preview, nothing sent</div>
+                    <div className="orch__section-title">Retry. A preview, nothing sent</div>
                     <p className="orch__caption">To <strong data-orch-retry-target>{retryPreview.target}</strong> on {retryPreview.backend}{retryPreview.cwd !== undefined ? ` in ${displayPath(retryPreview.cwd).short}` : ''}.</p>
                     <pre className="orch__term-log orch__retry-prompt" aria-label="Prompt to resend">{outward(retryPreview.prompt, `panel ${selectedRow.id}`).text}</pre>
                     <p className="orch__caption">{retryPreview.note}</p>
@@ -2075,10 +2075,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                       <div className="orch__section-title">Dependencies</div>
                       <button type="button" className="orch__mini" data-orch-dep-focus aria-pressed={depFocus} {...shellControl(() => setDepFocus((v) => !v))}>{depFocus ? 'Show all' : 'Focus dependencies'}</button>
                     </div>
-                    {!depTouches && <p className="orch__caption">No typed relation touches this object — the spokes in the scene are grouping, not dependencies.</p>}
+                    {!depTouches && <p className="orch__caption">No typed relation touches this object. The spokes in the scene are grouping, not dependencies.</p>}
                     {depFocusData.prerequisites.length > 0 && (
                       <>
-                        <span className="orch__caption">Prerequisites — what must happen first</span>
+                        <span className="orch__caption">Prerequisites: what must happen first</span>
                         <ul className="orch__dep-list" data-orch-dep-prereqs>
                           {depFocusData.prerequisites.map((e) => (
                             <li key={`${e.from}:${e.to}`} className="orch__dep-row" data-orch-dep-edge={`${e.from}:${e.to}`} data-orch-dep-status={e.status}>
@@ -2093,7 +2093,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     )}
                     {depFocusData.dependents.length > 0 && (
                       <>
-                        <span className="orch__caption">Dependents — what waits on this</span>
+                        <span className="orch__caption">Dependents: what waits on this</span>
                         <ul className="orch__dep-list" data-orch-dep-dependents>
                           {depFocusData.dependents.map((e) => (
                             <li key={`${e.from}:${e.to}`} className="orch__dep-row" data-orch-dep-edge={`${e.from}:${e.to}`} data-orch-dep-status={e.status}>
@@ -2122,8 +2122,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     write here, no change is attributed to this task alone. */}
                 {/* M299: one line, the whole sentence on its title (the critic: a long amber paragraph). */}
                 {island.placement.kind === 'shared' && (island.writers > 1 || island.sharedWith.length > 0) && (
-                  <p className="orch__caption orch__island-ambiguity" data-orch-island-ambiguity={island.writers} title={`Shared directory — ${island.writers} sessions write in ${displayPath(island.placement.path).short}${island.sharedWith.length > 0 ? `, across ${island.sharedWith.length + 1} islands` : ''}; a change here cannot be attributed to this task alone, and the workbench says so per read.`}>
-                    Shared directory — {island.writers} sessions write here; a change cannot be attributed to this task alone
+                  <p className="orch__caption orch__island-ambiguity" data-orch-island-ambiguity={island.writers} title={`Shared directory: ${island.writers} sessions write in ${displayPath(island.placement.path).short}${island.sharedWith.length > 0 ? `, across ${island.sharedWith.length + 1} islands` : ''}; a change here cannot be attributed to this task alone, and the workbench says so per read.`}>
+                    Shared directory: {island.writers} sessions write here; a change cannot be attributed to this task alone
                   </p>
                 )}
                 <p className="orch__inspector-next" data-orch-next={islandWaiting !== undefined ? 'answer' : islandStage === WORK_ITEM_STATES[2] ? 'review' : 'watch'}>
@@ -2147,7 +2147,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                       one thing a person must know before starting it again. */}
                   {onSaveArrangement !== undefined && island.memberIds.length > 0 && (
                     <button type="button" className="orch__mini" data-orch-save-arrangement
-                      title="save the agents, their directories and the handoffs between them as a template — starting it opens conversations with their messages ready, and sends nothing"
+                      title="save the agents, their directories and the handoffs between them as a template. Starting it opens conversations with their messages ready, and sends nothing"
                       {...shellControl(() => { void onSaveArrangement(island.id) })}>Save arrangement</button>
                   )}
                 </div>
@@ -2206,7 +2206,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 const need = filteredActivity.filter((e) => classifyActivity(e) === 'intervene').length
                 return (
                   <p className="orch__caption orch__activity-weights" data-orch-activity-weights={need}>
-                    {need === 0 ? 'Nothing here needs you — every row is information.' : `${need} need${need === 1 ? 's' : ''} you · ${filteredActivity.length - need} for information`}
+                    {need === 0 ? 'Nothing here needs you. Every row is information.' : `${need} need${need === 1 ? 's' : ''} you · ${filteredActivity.length - need} for information`}
                     {' '}<button type="button" className="orch__mini" data-orch-activity-intervene={interveneOnly ? 'on' : 'off'} aria-pressed={interveneOnly}
                       {...shellControl(() => setInterveneOnly(!interveneOnly))}>{interveneOnly ? 'Show everything' : 'Needs you only'}</button>
                   </p>

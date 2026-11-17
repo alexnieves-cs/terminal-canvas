@@ -559,7 +559,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await click('[data-orch-lens="list"]')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="dB"] button') !== null`), 6000)
       await click('[data-orch-list-row="dB"] button')
-      const blocked = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-orch-inspector="dB"] [data-orch-dep-blocked]'); return b && /skipped — exit 1 is not exit 0/.test(b.textContent) ? b.textContent : false })()`), 12000)
+      const blocked = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-orch-inspector="dB"] [data-orch-dep-blocked]'); return b && /skipped: exit 1 is not exit 0/.test(b.textContent) ? b.textContent : false })()`), 12000)
       const prereq = await wc.executeJavaScript(`(() => { const r = document.querySelector('[data-orch-deps="dB"] [data-orch-dep-prereqs] [data-orch-dep-edge="dA:dB"]'); return r ? { status: r.getAttribute('data-orch-dep-status'), text: r.textContent } : null })()`)
       const readonly = await wc.executeJavaScript(`document.querySelector('[data-orch-deps="dB"] [data-orch-dep-readonly]')?.textContent ?? null`)
       await demo('m289-1-blocked')
@@ -578,8 +578,8 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       await demo('m289-2-lens')
       const spawnsAfter = chatSpawns.length
       ok(ID,
-        woke === true && live === true && typeof blocked === 'string' && /^Blocked — /.test(blocked) &&
-          prereq && prereq.status === 'skipped' && /fires only when the source exits with code 0/.test(prereq.text) && /skipped — exit 1 is not exit 0/.test(prereq.text) &&
+        woke === true && live === true && typeof blocked === 'string' && /^Blocked by /.test(blocked) &&
+          prereq && prereq.status === 'skipped' && /fires only when the source exits with code 0/.test(prereq.text) && /skipped: exit 1 is not exit 0/.test(prereq.text) &&
           typeof readonly === 'string' && /read-only/.test(readonly) && /canvas/.test(readonly) &&
           dependent && dependent.status === 'skipped' &&
           scene && scene.label === 'on exit 0' && /not a supervisor/.test(String(scene.grouping)) && scene.spokes >= 1 && scene.spokesMarked === true && scene.depMarked === true,
@@ -776,7 +776,7 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
       ok(IDS[2],
         sharedCard && sharedCard.ambiguous === true && /2 sessions write here/.test(sharedCard.place) && /shared directory/.test(sharedCard.place) &&
           ambiguity && ambiguity.writers === '2' && /cannot be attributed to this task alone/.test(ambiguity.text) &&
-          sharedRead && /authorship is ambiguous/.test(sharedRead.words) && consistent(sharedRead) &&
+          sharedRead && /authorship is ambiguous/i.test(sharedRead.words) && consistent(sharedRead) &&
           typeof blockedWrite === 'string' && /blocked here by name/.test(blockedWrite) && noWriteButtons === 0,
         JSON.stringify({ sharedCard, ambiguity, words: sharedRead && sharedRead.words, blockedWrite, noWriteButtons, log: cLog.slice(-3) }))
 
@@ -882,9 +882,9 @@ runPanelsSuite('orchestrate', WATCHDOG_MS, async (ctx) => {
         lim0 && lim0.map((l) => l.id).join() === 'concurrency,spend,window,time' && lim0.every((l) => (l.kind === 'enforced' || l.kind === 'advisory') && typeof l.coverage === 'string' && l.coverage.length > 20) && kindRule(lim0) &&
           lim0.find((l) => l.id === 'time').value === 'no time limit' && /no runtime here enforces/.test(lim0.find((l) => l.id === 'time').coverage) &&
           lim1 && /terminals and watchers are not counted/.test(lim1.find((l) => l.id === 'concurrency').coverage) &&
-          unknownSpend && unknownSpend.kind === 'unknown' && /^Spend: Unknown — /.test(unknownSpend.word) &&
+          unknownSpend && unknownSpend.kind === 'unknown' && /^Spend: Unknown: /.test(unknownSpend.word) &&
           knownSpend && /^Spend: \$\d/.test(knownSpend.word) && /reported by claude/.test(knownSpend.word) &&
-          !!spB && typeof stopped === 'string' && /^stopped — the session exited/.test(stopped),
+          !!spB && typeof stopped === 'string' && /^stopped: the session exited/.test(stopped),
         JSON.stringify({ lim0, lim1: lim1 && lim1.find((l) => l.id === 'concurrency'), unknownSpend, knownSpend, stopped, log: cLog.slice(-3) }))
 
       // orch-limits.app.3 — commit and discard, re-checked.

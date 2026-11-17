@@ -287,7 +287,7 @@ function TerminalPanelImpl({
       className={`${agentClass}${rimInset === true ? ' pf--rim-inset' : ''}`.trim()}
       // M44. A named group for a screen reader; the kind rides the label so
       // "claude — terminal" reads as one thing rather than an anonymous div.
-      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined, 'data-far-card': !live || flipped ? '' : undefined }}
+      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel}, terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined, 'data-far-card': !live || flipped ? '' : undefined }}
       title={panelLabel}
       titleHint={titleHint}
       headerPath={pathShown?.short}
@@ -349,7 +349,7 @@ function TerminalPanelImpl({
             session whose process is not live (one front-end at a time). A
             LABELLED word after the pill, the row's own control slot. */}
         {onOpenAsChat !== undefined && session.spec.agent === 'claude-code' && session.status.kind !== 'running' && !readOnly && (
-          <button type="button" className="pf__verb pf__verb--word" data-open-as-chat title="Open as chat — the same session, rendered as a transcript" aria-label="Open as chat"
+          <button type="button" className="pf__verb pf__verb--word" data-open-as-chat title="Open as chat: the same session, rendered as a transcript" aria-label="Open as chat"
             {...shellControl(() => onOpenAsChat(session.id))}>to chat</button>
         )}
       </>}
@@ -496,7 +496,7 @@ function PanelCard({ session, agentState, detail, title, state, shown, variant }
               sentence for both; the pill in the chrome is what tells them
               apart. (A word line here said it a second time on one frame.) */}
           {/* M178 (F.19): the sentence before the verb — an asleep card with no tail is not a blank. */}
-          {session.dormant && (recorded === undefined || recorded.length === 0) && <div className="panel__card-sentence">asleep — nothing recorded before the last quit</div>}
+          {session.dormant && (recorded === undefined || recorded.length === 0) && <div className="panel__card-sentence">asleep, with nothing recorded before the last quit</div>}
           <div className="panel__card-idle" data-tone={shown.tone}>click to start</div>
         </div>
       )

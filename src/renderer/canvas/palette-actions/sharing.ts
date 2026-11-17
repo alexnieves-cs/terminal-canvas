@@ -24,7 +24,7 @@ export type SharingActions = Pick<PaletteActions,
   | 'signIn'
 >
 
-const PROPOSED = 'the share dialog is open — the person decides there'
+const PROPOSED = 'the share dialog is open, and the person decides there'
 const ROLES = ['editor', 'viewer', 'none'] as const
 
 export function sharingActions(_ctx: ActionCtx): SharingActions {

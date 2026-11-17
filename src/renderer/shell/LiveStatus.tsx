@@ -45,7 +45,7 @@ function LiveStatusImpl({ running, waiting, onJumpWaiting }: LiveStatusProps): J
           type="button"
           className="live-status__item live-status__item--verb"
           data-tone={TONE_NEEDS_YOU}
-          title={`${waiting} ${needsYou} — jump to the longest-waiting (⌘J)`}
+          title={`${waiting} ${needsYou}. Jump to the longest-waiting (⌘J)`}
           {...shellControl(onJumpWaiting)}
         >
           <StatusDot tone={TONE_NEEDS_YOU} />

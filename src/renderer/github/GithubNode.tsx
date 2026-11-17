@@ -95,7 +95,7 @@ export function GithubNode(props: GithubNodeProps): JSX.Element {
           })()}</span>
         )}
         {readAt !== undefined && result !== null && result.kind === 'items' && (
-          <span className="pf__summary sync-word" data-sync-stale={fresh.stale ? 'true' : 'false'} data-github-fresh title={fresh.stale ? 'This list may no longer match GitHub — refresh to read it again' : 'When this list was read from GitHub'}>{fresh.stale ? `${fresh.word} · may be stale` : fresh.word}</span>
+          <span className="pf__summary sync-word" data-sync-stale={fresh.stale ? 'true' : 'false'} data-github-fresh title={fresh.stale ? 'This list may no longer match GitHub. Refresh to read it again' : 'When this list was read from GitHub'}>{fresh.stale ? `${fresh.word} · may be stale` : fresh.word}</span>
         )}
         {offlineAt !== null && <OfflineCachedMark source="github" lastUpdated={offlineAt} />}
         <button type="button" className="pf__control icon-button" data-github-refresh title="Read GitHub again" aria-label="Read GitHub again" {...shellControl(load)}><Refresh /></button>
@@ -143,7 +143,7 @@ export function GithubNode(props: GithubNodeProps): JSX.Element {
                               title={props.readOnly === true ? 'leave merged view to start' : waitsOnYou ? `Start an agent reviewing ${item.id}` : `Start an agent on ${item.id}`}
                               onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); if (props.readOnly !== true) props.onSpawn(item) }}>{waitsOnYou ? 'Start review' : 'Start session'}</button>
                             <button type="button" className="pf__verb pf__verb--word" data-work-add={item.id} disabled={props.readOnly === true}
-                              title={props.readOnly === true ? 'leave merged view to add' : `Put ${item.id} on the board — a second press updates it`}
+                              title={props.readOnly === true ? 'leave merged view to add' : `Put ${item.id} on the board. A second press updates it`}
                               onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); if (props.readOnly === true) return; props.onAddToBoard(item); setAdded((s) => new Set(s).add(item.id)) }}>{added.has(item.id) ? 'Added' : props.boardKeys?.has(item.id) ? 'On board' : 'Add to board'}</button>
                             <a className="github-item__link" href={item.url} data-github-link onMouseDown={(e) => e.stopPropagation()}
                               onAuxClick={(e) => { e.preventDefault() }}

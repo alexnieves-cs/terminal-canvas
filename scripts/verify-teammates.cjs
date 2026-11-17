@@ -86,7 +86,7 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
     const unknown = gate.check('t9', '/home/u/work/api')
     const noId = gate.check(undefined, '/anywhere')
     ok('gate.1 the gate allows a path inside, refuses one outside naming the teammate, the path and the fix (add <folder> to this teammate\'s places), refuses an unknown teammate by name, and lets a request with NO teammate through untouched (a plain panel is the user\'s own hands)',
-      okAns.ok === true && bad.ok === false && /ada/.test(bad.reason) && /\.ssh/.test(bad.reason) && /add .*places/.test(bad.reason) &&
+      okAns.ok === true && bad.ok === false && /ada/.test(bad.reason) && /\.ssh/.test(bad.reason) && /add .*places/i.test(bad.reason) &&
         unknown.ok === false && /t9/.test(unknown.reason) && noId.ok === true,
       JSON.stringify({ okAns, bad, unknown, noId }))
   }

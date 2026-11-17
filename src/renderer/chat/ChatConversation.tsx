@@ -138,7 +138,7 @@ const ToolRow = memo(function ToolRow({ row, panelId, reveal }: { row: Extract<C
       {diffOpen && (
         <div className="chat__tool-diff" data-chat-tool-diff-body data-chat-tool-diff-state={diff === null ? 'reading' : diff.kind === 'diff' ? diff.diff.kind : diff.kind}>
           {diff === null ? <p className="review-node__hunk-note">reading…</p>
-            : diff.kind === 'no-baseline' ? <p className="review-node__hunk-note">no baseline — this chat was created outside a repository, or before its agent ran</p>
+            : diff.kind === 'no-baseline' ? <p className="review-node__hunk-note">no baseline. This chat was created outside a repository, or before its agent ran</p>
             : diff.kind === 'unchanged' ? <p className="review-node__hunk-note">unchanged against the baseline</p>
             : diff.diff.kind === 'binary' ? <p className="review-node__hunk-note">binary file</p>
             : diff.diff.kind === 'unavailable' ? <p className="review-node__hunk-note">this diff could not be read</p>
@@ -536,23 +536,23 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
       }
       // M322. Said once, in the list's own words: a stop that could not be
       // written leaves the correction FIRST in line, not silently queued.
-      if (mode === 'correct') setQueueNote(interrupted ? 'Stopping the turn — your correction goes next' : 'The turn could not be stopped — your correction goes first when it ends')
+      if (mode === 'correct') setQueueNote(interrupted ? 'Stopping the turn. Your correction goes next' : 'The turn could not be stopped. Your correction goes first when it ends')
     })
   }
   /** M322. A waiting message's edit, saved; an empty edit is refused here (Remove is the verb for that). */
   const saveEdit = (): void => {
     if (editing === null) return
     const text = editing.text.trim()
-    if (text === '') { setQueueNote('An empty message cannot be sent — Remove it instead'); return }
+    if (text === '') { setQueueNote('An empty message cannot be sent. Remove it instead'); return }
     const turnId = editing.turnId
     void window.canvas.agentSession.queueEdit({ id, op: 'edit', turnId, text }).then((ok) => {
-      setQueueNote(ok ? null : 'That message was already sent — it can no longer be edited')
+      setQueueNote(ok ? null : 'That message was already sent, so it can no longer be edited')
       setEditing(null)
     })
   }
   const removeWaiting = (turnId: string): void => {
     if (editing?.turnId === turnId) setEditing(null)
-    void window.canvas.agentSession.queueEdit({ id, op: 'remove', turnId }).then((ok) => { if (!ok) setQueueNote('That message was already sent — it can no longer be removed') })
+    void window.canvas.agentSession.queueEdit({ id, op: 'remove', turnId }).then((ok) => { if (!ok) setQueueNote('That message was already sent, so it can no longer be removed') })
   }
   /** M322. An undelivered message: dropped from the transcript (main's, and this mirror when only the log held it). */
   const discardUndelivered = (turnId: string): void => {
@@ -737,7 +737,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
           return (
             <ApprovalPrompt key={p.requestId} requestId={p.requestId} toolName={p.toolName} risk={approvalRisk(p.toolName, p.input)}
               label={`${p.toolName} asks for permission`}
-              sentence={<>{BACKENDS[backend].label} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span> — allow it?</>}
+              sentence={<>{BACKENDS[backend].label} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span>. Allow it?</>}
               onAllow={(scope) => answer(p.requestId, true, scope === 'session' ? 'session' : undefined)}
               onDeny={() => answer(p.requestId, false)} />
           )
@@ -766,7 +766,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
               <div className="chat__popup" data-chat-popup={popup.trigger.kind} role="listbox" aria-label={popup.trigger.kind === 'file' ? 'Files' : 'Prompts'}>
                 {fillStep !== undefined ? (
                   <div className="chat__fill" data-chat-fill>
-                    <div className="chat__popup-note">{fillStep.prompt.name} — fill its holes, then insert</div>
+                    <div className="chat__popup-note">{fillStep.prompt.name}: fill its holes, then insert</div>
                     {fillStep.names.map((name) => (
                       <label key={name} className="chat__fill-field">
                         <span className="chat__fill-name">{`{{${name}}}`}</span>
@@ -802,12 +802,12 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
                           </button>
                         )
                       })}
-                      {popup.files.more > 0 && <div className="chat__popup-note">+{popup.files.more} more — keep typing</div>}
+                      {popup.files.more > 0 && <div className="chat__popup-note">+{popup.files.more} more. Keep typing</div>}
                     </>
                   )
                 ) : (
                   (popup.prompts?.length ?? 0) === 0 ? (
-                    <div className="chat__popup-note" data-chat-popup-empty>no prompts match — save one with ⌘K, or add .claude/commands/*.md to this directory</div>
+                    <div className="chat__popup-note" data-chat-popup-empty>no prompts match. Save one with ⌘K, or add .claude/commands/*.md to this directory</div>
                   ) : (
                     <>
                     <div className="chat__popup-head" data-chat-popup-head>prompts · {popup.prompts?.length ?? 0}</div>
@@ -830,7 +830,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
                 about what or whether it was still right. */}
             {(waiting.length > 0 || queueNote !== null) && (
               <div className="chat__waiting" data-chat-waiting={waiting.length}>
-                {waiting.length > 0 && <p className="chat__waiting-head" data-chat-queued>{waiting.length} waiting · {(snapshot?.queue ?? []).every((q) => q.reason === 'concurrency') ? 'for a free agent — this canvas has a ceiling on how many work at once' : 'sent in this order when the turn ends'}</p>}
+                {waiting.length > 0 && <p className="chat__waiting-head" data-chat-queued>{waiting.length} waiting · {(snapshot?.queue ?? []).every((q) => q.reason === 'concurrency') ? 'for a free agent. This canvas has a ceiling on how many work at once' : 'sent in this order when the turn ends'}</p>}
                 <ol className="chat__waiting-list">
                   {waiting.map((q, i) => (
                     <li key={q.turnId} className="chat__waiting-row" data-chat-waiting-row={q.turnId} data-chat-waiting-index={i}>
@@ -844,10 +844,10 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
                         <pre className="chat__waiting-text" data-chat-waiting-text title={q.text}>{q.text}{q.images > 0 ? `\n+ ${q.images} image${q.images === 1 ? '' : 's'}` : ''}</pre>
                       )}
                       {props.readOnly !== true && q.editable && (editing?.turnId === q.turnId ? <>
-                        <button type="button" className="pf__verb pf__verb--word" data-chat-waiting-save title="Save the new words — ⌘↩" {...shellControl(saveEdit)}>Save</button>
+                        <button type="button" className="pf__verb pf__verb--word" data-chat-waiting-save title="Save the new words (⌘↩)" {...shellControl(saveEdit)}>Save</button>
                         <button type="button" className="pf__verb pf__verb--word" title="Keep the message as it was" {...shellControl(() => setEditing(null))}>Cancel</button>
                       </> : <button type="button" className="pf__verb pf__verb--word" data-chat-waiting-edit-open title="Change this message before it is sent" {...shellControl(() => setEditing({ turnId: q.turnId, text: q.text }))}>Edit</button>)}
-                      {props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word" data-chat-waiting-remove title="Remove this message — it will not be sent" {...shellControl(() => removeWaiting(q.turnId))}>Remove</button>}
+                      {props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word" data-chat-waiting-remove title="Remove this message. It will not be sent" {...shellControl(() => removeWaiting(q.turnId))}>Remove</button>}
                     </li>
                   ))}
                 </ol>
@@ -872,7 +872,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
               className="chat__input"
               data-chat-input
               value={draft}
-              placeholder={composer.send.enabled ? `Message ${backend}…` : midTurn.queue.enabled ? `Add an instruction — it waits for this turn, or Stop and send` : composer.send.reason}
+              placeholder={composer.send.enabled ? `Message ${backend}…` : midTurn.queue.enabled ? `Add an instruction. It waits for this turn, or Stop and send` : composer.send.reason}
               disabled={!acceptsText}
               title={acceptsText ? 'Your next message' : composer.send.reason}
               spellCheck={false}
@@ -893,7 +893,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
             {/* Present for the whole turn, empty draft or not: a row that
                 appeared on the first keystroke would move the text being typed. */}
             {midTurn.queue.enabled && <div className="chat__midturn" data-chat-midturn>
-              <button type="button" className="chat__verb chat__verb--word" data-chat-queue disabled={draft.trim() === '' && attachments.length === 0} title="Send after this turn — it waits in the list above, editable until it goes (⌘↩)" {...shellControl(() => send('after'))}>Send after this turn</button>
+              <button type="button" className="chat__verb chat__verb--word" data-chat-queue disabled={draft.trim() === '' && attachments.length === 0} title="Send after this turn. It waits in the list above, editable until it goes (⌘↩)" {...shellControl(() => send('after'))}>Send after this turn</button>
               <button type="button" className="chat__verb chat__verb--word" data-chat-correct disabled={!midTurn.correct.enabled || (draft.trim() === '' && attachments.length === 0)}
                 title={midTurn.correct.enabled ? 'Stop this turn and send this message first (⌘⇧↩)' : midTurn.correct.reason} {...shellControl(() => send('correct'))}>Stop and send</button>
             </div>}
@@ -913,7 +913,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
                 attachments: attachments.length,
                 ...(memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved !== undefined ? { memoryUnresolved: memoryBlock.unresolved } : {}),
                 ...(memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved === undefined ? { memory: `${memoryBlock.count} memor${memoryBlock.count === 1 ? 'y' : 'ies'} from ${memoryBlock.repository === undefined ? 'this repository' : displayPath(memoryBlock.repository, memoryBlock.repository).short} will go with your first message` } : {}),
-                ...(chat.granted !== undefined && chat.granted.length > 0 ? { grant: `${chat.granted[chat.granted.length - 1]} ran under a session grant${chat.granted.length > 1 ? ` · ${chat.granted.length} calls this session` : ''} — revoke in the pane's Detail` } : {})
+                ...(chat.granted !== undefined && chat.granted.length > 0 ? { grant: `${chat.granted[chat.granted.length - 1]} ran under a session grant${chat.granted.length > 1 ? ` · ${chat.granted.length} calls this session` : ''}. Revoke them in the pane's Detail` } : {})
               })
               return (
                 <p className="chat__status" data-chat-status={st.kind} title={st.text} aria-live="polite"
@@ -928,7 +928,7 @@ export function ChatConversation(props: ChatConversationProps): JSX.Element {
                 own shape and content (an icon, not a word) are new. */}
             <div className="chat__verbs">
               <button type="button" className="chat__verb chat__verb--send" data-chat-send disabled={!composer.send.enabled || (draft.trim() === '' && attachments.length === 0)}
-                title={composer.send.enabled ? 'Send — ⌘↩ sends' : composer.send.reason} aria-label="Send" {...shellControl(() => send('now'))}><ArrowUp /></button>
+                title={composer.send.enabled ? 'Send (⌘↩)' : composer.send.reason} aria-label="Send" {...shellControl(() => send('now'))}><ArrowUp /></button>
               <button type="button" className="chat__verb chat__verb--interrupt" data-chat-interrupt disabled={!composer.interrupt.enabled}
                 title={composer.interrupt.enabled ? 'Interrupt the answer in flight' : composer.interrupt.reason} aria-label="Interrupt" {...shellControl(interrupt)}><Stop /><span className="chat__verb-word" aria-hidden="true">Stop</span></button>
             </div>

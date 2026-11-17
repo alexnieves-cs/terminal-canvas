@@ -218,7 +218,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // The template's NAME is already the `what` row's value; the preview says
   // what it makes, which is the thing the row cannot.
   const what = chosenTemplate !== undefined ? templateShape
-    : isSupervisor ? `a supervisor: a chat that reads this canvas with \`tc status\` and answers in the canvas's own words · one per canvas — ${model.hasSupervisor === true ? 'this canvas already has one' : 'this canvas has none yet'} · it starts asleep and reads the canvas on your first send`
+    : isSupervisor ? `a supervisor: a chat that reads this canvas with \`tc status\` and answers in the canvas's own words · one per canvas. ${model.hasSupervisor === true ? 'this canvas already has one' : 'this canvas has none yet'} · it starts asleep and reads the canvas on your first send`
     : parseLineupWhatId(whatId) !== null ? `arrangement: ${LINEUPS[parseLineupWhatId(whatId) as keyof typeof LINEUPS].label}` : isChat ? `chat with ${BACKENDS[backendOfWhatId(whatId) ?? 'claude'].label} — ${rowCapabilitySentence(backendOfWhatId(whatId) ?? 'claude')}` : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
@@ -262,7 +262,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
         <span className="sheet__label">Agent</span>
         <select className="sheet__select sheet__select--mono" data-sheet-what value={whatId} onChange={(e) => { setWhatId(e.target.value); setRefusal(null) }}>
           {model.presets.map((p) => (
-            <option key={p.id} value={p.id} disabled={p.available === false}>{p.name}{p.available === false ? ' — not on PATH' : ''}</option>
+            <option key={p.id} value={p.id} disabled={p.available === false}>{p.name}{p.available === false ? ' (not on PATH)' : ''}</option>
           ))}
           <option value={COMMAND}>type a command…</option>
           {/* M73. The conversation arm, disabled by name when claude is absent. */}
@@ -274,7 +274,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           ))}
           {/* M104. The lineups: a shape of seats, previewed below before anything is minted. */}
           {LINEUP_IDS.map((id) => (
-            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!Object.values(model.available ?? { claude: model.claudeAvailable, codex: model.codexAvailable }).some(Boolean)}>arrangement: {LINEUPS[id].label} — {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' — no agent CLI on the PATH' : ''}</option>
+            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!Object.values(model.available ?? { claude: model.claudeAvailable, codex: model.codexAvailable }).some(Boolean)}>arrangement: {LINEUPS[id].label}: {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' (no agent CLI on the PATH)' : ''}</option>
           ))}
           {/* M100. One `chat as <name>` per teammate, disabled by name with no places. */}
           {teammateOptions(model.teammates ?? [], model.claudeAvailable).map((row) => (
@@ -282,7 +282,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           ))}
           {/* M81. One per canvas, disabled by name when there already is one. */}
           <option value={SUPERVISOR_WHAT_ID} disabled={!model.claudeAvailable || model.hasSupervisor === true}>
-            supervisor of this canvas{!model.claudeAvailable ? ' — not on PATH' : model.hasSupervisor === true ? ' — this canvas already has one' : ''}
+            supervisor of this canvas{!model.claudeAvailable ? ' (not on PATH)' : model.hasSupervisor === true ? ' (this canvas already has one)' : ''}
           </option>
           {/* M80. Templates, disabled by name when one cannot be started. */}
           {templates.map((t) => (
@@ -442,7 +442,7 @@ export function SheetHeader({ current, onTask, onPanel, ask }: { current: 'task'
           when no engine was found, never hidden. */}
       {ask !== undefined && (
         <button type="button" className="pf__verb pf__verb--word sheet__ask" data-sheet-ask disabled={ask.reason !== undefined}
-          title={ask.reason ?? 'A conversation with no folder — read-only, nothing to write to'}
+          title={ask.reason ?? 'A conversation with no folder. It is read-only, with nothing to write to'}
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
           onClick={(e) => { e.preventDefault(); if (ask.reason === undefined) ask.run() }}>Ask a question</button>
       )}
@@ -453,7 +453,7 @@ export function SheetHeader({ current, onTask, onPanel, ask }: { current: 'task'
               onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
               onClick={(e) => { e.preventDefault(); if (side !== current) other() }}>
               {side === 'task' ? 'Task' : 'Panel'}
-              <span className="sheet__switch-hint">{side === 'task' ? 'an agent on a repository' : 'expert — one raw panel'}</span>
+              <span className="sheet__switch-hint">{side === 'task' ? 'an agent on a repository' : 'expert: one raw panel'}</span>
             </button>
           ))}
         </div>

@@ -361,7 +361,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
             <span className="launcher__step-num" aria-hidden="true">{step()}</span>
             <div className="launcher__field">
               <span className="launcher__label">Choose an agent</span>
-              <span className="launcher__step-why">A task lane runs in Claude Code, and it is not ready yet{readiness.preferred !== undefined ? ' — Start work opens a conversation in the folder with the engine that is' : ''}.</span>
+              <span className="launcher__step-why">A task lane runs in Claude Code, and it is not ready yet{readiness.preferred !== undefined ? '. Start work opens a conversation in the folder with the engine that is' : ''}.</span>
               <div className="launcher__readiness" aria-label="Conversation engines">{engineRows}</div>
             </div>
           </li>
@@ -389,7 +389,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                 {answer.reason}
                 {answer.kind === 'not-a-repository' && onChatHere !== undefined && (
                   <button type="button" className="pf__verb pf__verb--word launcher__check" data-onboarding-chat-here
-                    title="A conversation in this folder, your sentence in its composer — nothing is sent"
+                    title="A conversation in this folder, your sentence in its composer. Nothing is sent"
                     {...shellControl(() => onChatHere({ intention, folder }))}>Chat in this folder instead</button>
                 )}
               </p>
@@ -412,7 +412,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                 <span className="launcher__verb-hint" data-launcher-verb-hint="start">{startVerbHint(plan.kind === 'refused' ? plan.field : undefined, opensChat)}</span>
               </button>
               <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null} aria-describedby={askReason !== null ? 'launcher-summary' : undefined}
-                title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
+                title={askReason ?? 'A conversation with no folder. It is read-only, with nothing to write to. Your sentence goes in its composer.'}
                 {...shellControl(() => { if (askReason === null) onAsk?.(intention) })}>
                 {/* The hint is visible, not only on the title: beside Start work
                     and Create…, a bare "Ask" did not say it has no folder. */}
@@ -420,7 +420,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                 <span className="launcher__verb-hint">Start a conversation without a repository.</span>
               </button>
               <button type="button" className="launcher__verb launcher__create" data-onboarding-create
-                title="Add an object to the canvas — opens the create sheet (Task or Panel)"
+                title="Add an object to the canvas. Opens the create sheet (Task or Panel)"
                 {...shellControl(() => onOpenSheet())}>
                 <span className="launcher__verb-name">Create…</span>
                 {/* M395. The sheet this opens (SpawnSheet's Panel side) offers an
@@ -506,7 +506,7 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
           <span className="launcher__verb-hint">a file panel, editable</span>
         </button>
         {onBlankCanvas !== undefined && (
-          <button type="button" className="launcher__verb launcher__verb--door" data-launcher-blank title="Put this card away and start from the empty canvas — ⌘K has every verb" {...shellControl(onBlankCanvas)}>
+          <button type="button" className="launcher__verb launcher__verb--door" data-launcher-blank title="Put this card away and start from the empty canvas. ⌘K has every verb" {...shellControl(onBlankCanvas)}>
             <span className="launcher__verb-name">Blank canvas</span>
             <span className="launcher__verb-hint">put this card away; ⌘K has every verb</span>
           </button>

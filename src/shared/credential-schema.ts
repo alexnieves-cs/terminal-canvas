@@ -36,7 +36,7 @@ export interface CredentialService {
  */
 export const NOT_CONNECTED_CODE = 'not-connected'
 export function notConnectedReason(service: string): string {
-  return `not connected — add a ${service} token in ⌘K › Credentials`
+  return `not connected; add a ${service} token in ⌘K › Credentials`
 }
 
 export const SERVICES: readonly CredentialService[] = [

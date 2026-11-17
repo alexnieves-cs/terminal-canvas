@@ -127,7 +127,7 @@ export interface WorkNodeProps {
 
 export const REASON_MERGED_VIEW = 'leave merged view to act on the card'
 export const WORK_ITEM_GONE = 'this item is no longer on the board'
-export const REASON_NO_TEAMMATES = 'no teammates yet — ⌘K, then Manage teammates…'
+export const REASON_NO_TEAMMATES = 'no teammates yet. Press ⌘K, then Manage teammates…'
 
 const press = (fn: () => void) => (e: ReactMouseEvent): void => { e.stopPropagation(); e.preventDefault(); fn() }
 
@@ -250,7 +250,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                 const stale = now - item.updatedAt > REMOTE_COPY_STALE_MS
                 return (
                   <span className="work-node__remote" data-work-remote data-sync-stale={stale ? 'true' : 'false'}
-                    title={`${item.source === 'github' ? 'GitHub' : 'Jira'} said “${item.remoteState}” when this item was added — a copy, not live. Add it to the board again to refresh it.`}>
+                    title={`${item.source === 'github' ? 'GitHub' : 'Jira'} said “${item.remoteState}” when this item was added. This is a copy, not live. Add it to the board again to refresh it.`}>
                     {remote.word} on {item.source}{stale ? ' · copy may be stale' : ' · copy'}
                   </span>
                 )
@@ -355,7 +355,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   other — the lane's chat can be closed while the worktree it
                   wrote is still there to review, which is precisely why
                   `review` below does NOT share this reason. */}
-              {verb('resume', props.handoff?.action === 'answer' ? 'Answer' : 'Resume', item.panelId === undefined ? 'no lane yet — start work on this item first' : props.laneLabel === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : null, () => props.onResume(item.id),
+              {verb('resume', props.handoff?.action === 'answer' ? 'Answer' : 'Resume', item.panelId === undefined ? 'no lane yet; start work on this item first' : props.laneLabel === undefined ? 'the lane\'s conversation is closed; start work again to open a new one' : null, () => props.onResume(item.id),
                 props.handoff?.action === 'resume' || props.handoff?.action === 'answer' ? { 'data-work-next': props.handoff.action } : undefined)}
               {verb('open-pr', 'Open PR', props.prReason, () => props.onOpenPr(item.id))}
               {/* The label and the reason are the handoff's when one has been
@@ -365,7 +365,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   read keeps the button honest in the gap. */}
               {verb('review', props.handoff?.action === 'review' ? props.handoff.actionLabel : 'Review',
                 props.handoff === undefined
-                  ? (item.panelId === undefined ? 'no lane yet — start work on this item first' : null)
+                  ? (item.panelId === undefined ? 'no lane yet; start work on this item first' : null)
                   : props.handoff.action === 'review' ? null : props.handoff.detail,
                 () => props.onReview(item.id), props.handoff?.action === 'review' ? { 'data-work-next': 'review' } : undefined)}
               {/* M203 (D08). Show is a CAMERA move, so it is the one verb here
@@ -377,11 +377,11 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   critic). The other verbs here still use `press`; that is
                   older than D08 and recorded, not changed. */}
               <button type="button" className="pf__verb pf__verb--word" data-work-verb="show"
-                title="Frame this task — its conversation, lane, reviews and links; nothing moves" {...shellControl(() => props.onShow(panel.rect.id))}>Show</button>
+                title="Frame this task: its conversation, lane, reviews and links. Nothing moves" {...shellControl(() => props.onShow(panel.rect.id))}>Show</button>
               {/* M324. The task's focus view — a page, so like Show it moves no geometry and stays enabled in the merged view. */}
               {props.onFocusTask !== undefined && (
                 <button type="button" className="pf__verb pf__verb--word" data-work-verb="focus"
-                  title="Open this task beside its conversation — changes, checks, review and preview in one place" {...shellControl(() => props.onFocusTask?.(item.id))}>Focus</button>
+                  title="Open this task beside its conversation, with changes, checks, review and preview in one place" {...shellControl(() => props.onFocusTask?.(item.id))}>Focus</button>
               )}
               {/* M275. The four arrangements, under one verb: a card offers the
                   SHAPES rather than a second teammate list, because the
@@ -414,12 +414,12 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                         the two facts the card holds — a lane to fork from and a
                         check to decide — in the verb's own words. */}
                     {tournamentShown && props.onTournament !== undefined && (() => {
-                      const why = item.panelId === undefined ? 'no lane yet — start work on this item first'
-                        : (item.checks ?? []).length === 0 && (item.recipeUsed?.definition.checks ?? []).length === 0 ? 'this task has no check — add one; the check is what picks the winner' : null
+                      const why = item.panelId === undefined ? 'no lane yet; start work on this item first'
+                        : (item.checks ?? []).length === 0 && (item.recipeUsed?.definition.checks ?? []).length === 0 ? 'this task has no check. Add one, because the check is what picks the winner' : null
                       return (<>
                         <li role="none">
                           <MenuItem className="pf__verb pf__verb--word" data-work-tournament disabled={why !== null}
-                            title={why ?? 'the task on several agents at once, each in its own worktree — its check picks the winner'}
+                            title={why ?? 'the task on several agents at once, each in its own worktree. Its check picks the winner'}
                             onSelect={() => props.onTournament?.(item.id)}>Tournament</MenuItem>
                         </li>
                         {props.onTournamentField !== undefined && (

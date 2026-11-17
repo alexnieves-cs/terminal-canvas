@@ -155,7 +155,7 @@ export function TopBar({
         // Arrange and work", not "CanvasArrange"); the button is a flex
         // column, so it paints nothing.
         options={[
-          { id: 'canvas', label: <><span className="shell__center-name">Canvas</span>{' '}<span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas — arrange and work: your objects, where you edit and run them', className: 'shell__center-btn' },
+          { id: 'canvas', label: <><span className="shell__center-name">Canvas</span>{' '}<span className="shell__center-purpose">Arrange and work</span></>, title: 'Canvas: arrange and work. Your objects, where you edit and run them', className: 'shell__center-btn' },
           { id: 'sessions', label: <><span className="shell__center-name">Sessions{badge !== null && <span className="shell__nav-badge" data-sessions-badge>{badge}</span>}</span></>, title: 'Sessions', className: 'shell__center-btn' },
           { id: 'review', label: <><span className="shell__center-name">Review</span></>, title: 'Review', className: 'shell__center-btn' },
           // D2. Orchestrate is not a tab. The segment stays in this control so
@@ -165,7 +165,7 @@ export function TopBar({
           { id: 'orchestration', label: <><span className="shell__center-name">Orchestrate</span>{' '}<span className="shell__center-purpose">Monitor and review</span></>, title: 'Show Orchestrate', className: 'shell__center-btn', hidden: true },
           // M404 (C1). "People", not a second name for teammates. The code id
           // stays `team`. Conditional: only when there are people to see.
-          ...(showPeople ? [{ id: 'team' as const, label: <><span className="shell__center-name">People</span>{' '}<span className="shell__center-purpose">See who is working</span></>, title: 'People — see who is working: your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }] : [])
+          ...(showPeople ? [{ id: 'team' as const, label: <><span className="shell__center-name">People</span>{' '}<span className="shell__center-purpose">See who is working</span></>, title: 'People: see who is working. Your organization, what each person is on, and a read-only look at their canvas', className: 'shell__center-btn' }] : [])
         ]}
       />
 
@@ -179,7 +179,7 @@ export function TopBar({
         // called Task "the primary route" while this button landed on Panel.
         // ⌘⇧N stays the expert door to a raw panel, so the button no longer
         // shows it as its own shortcut.
-        title={preferred ? `Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N; ⌘⌥N starts ${preferred.name} at once` : 'Start a task — an agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N'}
+        title={preferred ? `Start a task. An agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N; ⌘⌥N starts ${preferred.name} at once` : 'Start a task. An agent works on a repository on its own branch. A raw panel is one switch away in the sheet, or ⌘⇧N'}
         tabIndex={-1}
         {...shellControl(onOpenSheet)}
       >
@@ -199,7 +199,7 @@ export function TopBar({
           // chevron — because nobody guessed a bare name was clickable. It is
           // the Workspaces door now that the dock's duplicate is gone (C2).
           : <button type="button" className="shell__crumb shell__crumb--switcher" data-crumb="workspace"
-              title="Switch workspace — or add, rename and see history in the Workspaces list" {...shellControl(onShowWorkspaces)}>
+              title="Switch workspace, or add, rename and see history in the Workspaces list" {...shellControl(onShowWorkspaces)}>
               <span className="shell__crumb-name">{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</span><ChevronDown />
             </button>}
         {taskName !== undefined && <><span className="shell__breadcrumb-separator" aria-hidden="true">/</span>

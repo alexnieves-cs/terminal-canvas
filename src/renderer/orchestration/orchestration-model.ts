@@ -871,7 +871,7 @@ export function orchActivityCoverage(scope: OrchActivityScope, liveMs: number = 
 }
 
 export function orchLogsCoverage(): string {
-  return 'Logs: recorded scrollback or last chat turn — not a live terminal.'
+  return 'Logs: recorded scrollback or last chat turn, not a live terminal.'
 }
 
 export function orchFilesCoverage(): string {

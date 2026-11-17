@@ -240,7 +240,7 @@ export interface RailRun {
 }
 
 export const REASON_RUN_OPEN = 'this run is still running'
-export const REASON_RUN_NO_TERMINAL_ROOT = 'no root of this run is a terminal — a chat is re-run by sending it a message'
+export const REASON_RUN_NO_TERMINAL_ROOT = 'no root of this run is a terminal, and a chat is re-run by sending it a message'
 
 function durationText(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))

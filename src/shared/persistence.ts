@@ -143,8 +143,8 @@ export function reopenLines(s: Pick<ReopenSummary, 'reconnected' | 'ended' | 'st
       group: 'ended',
       tone: 'problem',
       text: crash
-        ? `${names(s.ended)} ${verb} when the app closed unexpectedly — start again or leave stopped`
-        : `${names(s.ended)} ${verb} while the ${window ? 'window' : 'app'} was closed, though ${s.ended.length === 1 ? 'it was' : 'they were'} set to keep running — start again or leave stopped`,
+        ? `${names(s.ended)} ${verb} when the app closed unexpectedly. Start again or leave stopped`
+        : `${names(s.ended)} ${verb} while the ${window ? 'window' : 'app'} was closed, though ${s.ended.length === 1 ? 'it was' : 'they were'} set to keep running. Start again or leave stopped`,
       panels: [...s.ended]
     })
   }
@@ -160,14 +160,14 @@ export function reopenLines(s: Pick<ReopenSummary, 'reconnected' | 'ended' | 'st
     lines.push({
       group: 'crash',
       tone: 'info',
-      text: `Terminal Canvas closed unexpectedly last time — your canvas is back as it was last saved${kept}`,
+      text: `Terminal Canvas closed unexpectedly last time. Your canvas is back as it was last saved${kept}`,
       panels: [...s.reconnected]
     })
   } else if (s.reconnected.length > 0) {
     lines.push({
       group: 'reconnected',
       tone: 'info',
-      text: `${names(s.reconnected)} reconnected — ${s.reconnected.length === 1 ? 'it' : 'they'} kept running while the ${window ? 'window' : 'app'} was closed`,
+      text: `${names(s.reconnected)} reconnected; ${s.reconnected.length === 1 ? 'it' : 'they'} kept running while the ${window ? 'window' : 'app'} was closed`,
       panels: [...s.reconnected]
     })
   }
@@ -175,7 +175,7 @@ export function reopenLines(s: Pick<ReopenSummary, 'reconnected' | 'ended' | 'st
     lines.push({
       group: 'stopped',
       tone: 'info',
-      text: `${names(s.stopped)} stopped when ${crash ? 'the app closed unexpectedly' : window ? 'the window closed' : 'you quit'} — click ${s.stopped.length === 1 ? 'it' : 'one'} to start it again`,
+      text: `${names(s.stopped)} stopped when ${crash ? 'the app closed unexpectedly' : window ? 'the window closed' : 'you quit'}. Click ${s.stopped.length === 1 ? 'it' : 'one'} to start it again`,
       panels: [...s.stopped]
     })
   }
@@ -300,7 +300,7 @@ export function reopenTaskLines(tasks: readonly ReopenTask[]): ReopenLine[] {
   const needs = of('needs-you'), done = of('finished'), asleep = of('asleep')
   if (needs.length > 0) lines.push({ group: 'task', outcome: 'needs-you', tone: 'info', text: `${taskNames(needs)} ${needs.length === 1 ? 'needs' : 'need'} you${one(needs)}`, panels: needs.map(({ id, label }) => ({ id, label })) })
   if (done.length > 0) lines.push({ group: 'task', outcome: 'finished', tone: 'info', text: `${taskNames(done)} finished${one(done)}`, panels: done.map(({ id, label }) => ({ id, label })) })
-  if (asleep.length > 0) lines.push({ group: 'task', outcome: 'asleep', tone: 'info', text: `${taskNames(asleep)} ${asleep.length === 1 ? 'is' : 'are'} asleep — ${asleep.length === 1 ? 'it picks' : 'each picks'} up on your next message`, panels: asleep.map(({ id, label }) => ({ id, label })) })
+  if (asleep.length > 0) lines.push({ group: 'task', outcome: 'asleep', tone: 'info', text: `${taskNames(asleep)} ${asleep.length === 1 ? 'is' : 'are'} asleep, and ${asleep.length === 1 ? 'it picks' : 'each picks'} up on your next message`, panels: asleep.map(({ id, label }) => ({ id, label })) })
   return lines
 }
 
@@ -332,12 +332,12 @@ export function lifecycleFacts(input: LifecycleInput): LifecycleFacts {
   const tmux = input.backend === 'tmux'
   const closeWindow = tmux
     ? 'Closing the window keeps terminals running; reopening reconnects them.'
-    : 'Closing the window ends every terminal’s process — keeping them needs tmux.'
+    : 'Closing the window ends every terminal’s process. Keeping them needs tmux.'
   const chats = 'Chats stop and resume on your next message.'
   const quit = input.keepOnQuit && tmux
     ? `Quitting keeps terminals running, and the next launch reconnects them. ${chats}`
     : input.keepOnQuit
-      ? `Quitting ends every terminal — keeping them needs tmux. ${chats}`
+      ? `Quitting ends every terminal. Keeping them needs tmux. ${chats}`
       : `Quitting ends every terminal; they come back stopped, ready to start. ${chats}`
   return { closePanel, closeWindow, quit }
 }

@@ -164,7 +164,7 @@ export function standingOf(input: StandingInput): Standing {
     return {
       standing: 'ended',
       word: 'ended',
-      detail: `no session is running for this — ${how}${input.lastSeen === undefined ? '' : `; the record last saw it ${seenWords(input.lastSeen)}`}`,
+      detail: `no session is running for this: ${how}${input.lastSeen === undefined ? '' : `; the record last saw it ${seenWords(input.lastSeen)}`}`,
       ...(input.lastSeen === undefined ? {} : { lastSeen: input.lastSeen })
     }
   }

@@ -152,7 +152,7 @@ function RepoSection({ repo, agents, now, onChanged }: { repo: LearnRepo; agents
               )}
               <span className="learn-draft__verbs">
                 {x.state === 'draft' && canAccept(x, x.proof).ok && (
-                  <button type="button" className="pf__verb pf__verb--word" data-learn-verb="accept" title={`Write this rule into ${where(x)} in ${displayPath(repo.root).short} — the one press here that changes your repository`} onClick={() => accept(x)}>Accept</button>
+                  <button type="button" className="pf__verb pf__verb--word" data-learn-verb="accept" title={`Write this rule into ${where(x)} in ${displayPath(repo.root).short}. This is the one press here that changes your repository`} onClick={() => accept(x)}>Accept</button>
                 )}
                 <button type="button" className="pf__verb pf__verb--word" data-learn-verb="dismiss" disabled={x.state === 'proving'} title="Drop this draft: nothing was written anywhere" onClick={() => dismiss(x)}>Dismiss</button>
               </span>
@@ -176,7 +176,7 @@ function RepoSection({ repo, agents, now, onChanged }: { repo: LearnRepo; agents
                 <span className="learn-cluster__title">{plural(members.length, 'lesson')} about {c.paths.length === 1 ? c.paths[0] : plural(c.paths.length, 'file')}</span>
                 <button type="button" className="pf__verb pf__verb--word" data-learn-verb="draft" disabled={!agents || busy !== null}
                   aria-describedby={agents ? undefined : `learn-off-${repo.root}`}
-                  title={agents ? 'Ask an agent with no tools for one rule that would have prevented these — a draft you read, nothing is written' : 'Turn on “Lessons: let an agent draft and prove rules” in Settings first'}
+                  title={agents ? 'Ask an agent with no tools for one rule that would have prevented these. You get a draft to read, and nothing is written' : 'Turn on “Lessons: let an agent draft and prove rules” in Settings first'}
                   onClick={() => draft(c)}>{busy === c.id ? 'Drafting…' : 'Draft a rule'}</button>
               </span>
               <ul className="learn__list">

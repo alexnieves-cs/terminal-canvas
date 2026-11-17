@@ -84,12 +84,12 @@ export function SetupSheet({ model, onDone, onCancel }: { model: SetupSheetModel
       </div>
       <p className="sheet__hint" data-setup-state={model.read.kind}>
         {model.read.kind === 'draft'
-          ? 'Detected from the repository’s own files — nothing has run. Saving lets these commands run in every new lane before its agent starts.'
+          ? 'Detected from the repository’s own files. Nothing has run yet. Saving lets these commands run in every new lane before its agent starts.'
           : 'Saved. Every new lane of this repository is prepared with this before its agent starts; a failed step stops the start and shows its output.'}
       </p>
-      {area('Install', install, setInstall, 'one command per line — e.g. npm ci', 'data-setup-install', (el) => { first.current = el })}
-      {area('Services', services, setServices, 'name: command, one per line — e.g. web: npm run dev', 'data-setup-services')}
-      {area('Checks', checks, setChecks, 'what decides “done” — e.g. npm test', 'data-setup-checks')}
+      {area('Install', install, setInstall, 'one command per line, such as npm ci', 'data-setup-install', (el) => { first.current = el })}
+      {area('Services', services, setServices, 'name: command, one per line, such as web: npm run dev', 'data-setup-services')}
+      {area('Checks', checks, setChecks, 'what decides “done”, such as npm test', 'data-setup-checks')}
       <label className="sheet__field">
         <span className="sheet__label">Preview</span>
         <input className="sheet__input sheet__input--mono" data-setup-preview value={previewPath} spellCheck={false} disabled={svc.length === 0}
@@ -103,7 +103,7 @@ export function SetupSheet({ model, onDone, onCancel }: { model: SetupSheetModel
       <div className="sheet__field sheet__field--how">
         <span className="sheet__label">Each lane</span>
         <span className="sheet__defaults" data-setup-port-line>
-          {svc.length === 0 ? 'no services — no ports are allocated' : `gets its own ${draft.ports.span} ports from ${draft.ports.base + draft.ports.span} up (the main tree keeps ${draft.ports.base}); ${svc[0]!.name} is PORT, each service TC_PORT_<NAME>`}
+          {svc.length === 0 ? 'no services, so no ports are allocated' : `gets its own ${draft.ports.span} ports from ${draft.ports.base + draft.ports.span} up (the main tree keeps ${draft.ports.base}); ${svc[0]!.name} is PORT, each service TC_PORT_<NAME>`}
         </span>
       </div>
       <div className="sheet__foot">

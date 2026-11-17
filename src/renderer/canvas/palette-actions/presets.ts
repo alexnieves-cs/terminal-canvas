@@ -200,7 +200,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
                 // nothing reads as the row being broken. Input mode is the one
                 // surface the palette already has for a sentence the user must
                 // read; `submit` closes it.
-                setInputMode({ kind: 'confirm', label: `Not removed — ${result.reason}`, initial: '', submit: () => {} })
+                setInputMode({ kind: 'confirm', label: `Not removed: ${result.reason}`, initial: '', submit: () => {} })
                 palette.openPalette()
               }
             })
@@ -332,7 +332,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
                     const plan = lineupPlan(LINEUPS[(values.what as { id: Lineup['id'] }).id], { cwd: values.cwd, worktrees: values.worktree === true, maxConcurrent: 0, liveAgents: 0 })
                     const agentPreset = presetRows.find((p) => p.agent !== undefined && p.available)
                     // Refused BEFORE any seat is minted: a refusal mid-loop leaves half a lineup.
-                    if (agentPreset === undefined && plan.seats.some((s) => s.kind === 'agent')) return { kind: 'refused', reason: 'no agent CLI is on the PATH — install claude or codex, or check the environment report' }
+                    if (agentPreset === undefined && plan.seats.some((s) => s.kind === 'agent')) return { kind: 'refused', reason: 'no agent CLI is on the PATH. Install claude or codex, or check the environment report' }
                     for (const seat of plan.seats) {
                       if (seat.kind === 'browser') {
                         // M195 (D03). A lineup's preview seat is a preview of the
@@ -346,7 +346,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
                         continue
                       }
                       if (seat.kind === 'agent') {
-                        if (agentPreset === undefined) return { kind: 'refused', reason: 'no agent CLI is on the PATH — install claude or codex, or check the environment report' }
+                        if (agentPreset === undefined) return { kind: 'refused', reason: 'no agent CLI is on the PATH. Install claude or codex, or check the environment report' }
                         const r = await window.canvas.spawn.sheet({ presetId: agentPreset.id, cwd: values.cwd, title: seat.role, ...(seat.lane ? { worktree: true } : {}) })
                         if (r.kind === 'refused') return r
                         continue
@@ -622,7 +622,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     startAuto: (id, mode, task, opts) => {
       const begin = (t?: string): void => {
         void window.canvas.agentSession.autoStart({ id, mode, ...(t === undefined ? {} : { task: t }), ...(opts?.sandboxed === true ? { sandboxed: true } : {}) }).then((r) => {
-          if (r.kind === 'refused') { setInputMode({ kind: 'text', label: `auto refused — ${r.reason}`, initial: '', feedback: true, submit: () => {} }); palette.openPalette() }
+          if (r.kind === 'refused') { setInputMode({ kind: 'text', label: `auto refused: ${r.reason}`, initial: '', feedback: true, submit: () => {} }); palette.openPalette() }
         })
       }
       if (mode === 'custom' && task === undefined) {
@@ -725,7 +725,7 @@ export function presetsActions(ctx: ActionCtx): PresetsActions {
     beginBrowser: () => {
       const ask = (initial: string, feedback?: true): void => setInputMode({
         kind: 'text',
-        label: feedback === undefined ? 'Open a page — a URL, or a host like localhost:3000' : 'Try a URL or a host — http(s) pages only',
+        label: feedback === undefined ? 'Open a page: a URL, or a host like localhost:3000' : 'Try a URL or a host. Only http(s) pages open',
         initial,
         ...(feedback === undefined ? {} : { feedback }),
         submit: (value) => {

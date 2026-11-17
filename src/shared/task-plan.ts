@@ -102,7 +102,7 @@ export function implementVerifyPlan(input: { now: number; owner?: string; check?
       },
       {
         id: 'review', title: 'Review result', kind: 'review', role: 'you', dependsOn: ['verify'],
-        expected: 'The changes and the verification evidence, read — then accepted or sent back.'
+        expected: 'The changes and the verification evidence, read and then accepted or sent back.'
       }
     ]
   }
@@ -211,10 +211,10 @@ export function planProblems(plan: TaskPlan): string[] {
     done.add(id)
   }
   for (const s of plan.steps) walk(s.id, [s.id])
-  if (cyclic.size > 0) out.push(`${[...cyclic].map((id) => byId.get(id)?.title ?? id).join(', ')} wait on each other — none of them can ever be ready`)
+  if (cyclic.size > 0) out.push(`${[...cyclic].map((id) => byId.get(id)?.title ?? id).join(', ')} wait on each other, so none of them can ever be ready`)
   for (const s of plan.steps) {
-    if (s.kind === 'check' && s.command === undefined) out.push(`${s.title} has no command — nothing can verify it`)
-    if (s.kind === 'agent' && s.expected.trim() === '') out.push(`${s.title} says nothing about what it should produce — nobody can tell when it is done`)
+    if (s.kind === 'check' && s.command === undefined) out.push(`${s.title} has no command, so nothing can verify it`)
+    if (s.kind === 'agent' && s.expected.trim() === '') out.push(`${s.title} says nothing about what it should produce, so nobody can tell when it is done`)
   }
   return out
 }
@@ -276,7 +276,7 @@ export interface PlanStepView {
 
 const WORDS: Record<PlanStepState, string> = {
   waiting: 'Waiting', ready: 'Ready', assigned: 'Assigned', working: 'Working', 'needs-you': 'Needs you',
-  stopped: 'Stopped responding', finished: 'Finished — not verified', verified: 'Verified', failed: 'Failed', cancelled: 'Cancelled'
+  stopped: 'Stopped responding', finished: 'Finished, not verified', verified: 'Verified', failed: 'Failed', cancelled: 'Cancelled'
 }
 const TONES: Record<PlanStepState, PlanStepView['tone']> = {
   waiting: 'none', ready: 'kind', assigned: 'kind', working: 'working', 'needs-you': 'needs-you',
@@ -319,7 +319,7 @@ function make(id: string, state: PlanStepState, detail: string, actions: PlanAct
 
 function stepView(s: PlanStep, unmet: string[], facts: PlanFacts): PlanStepView {
   const since = s.startedAt ?? 0
-  if (s.cancelledAt !== undefined) return make(s.id, 'cancelled', 'Cancelled — nothing is running for this step.', ['retry'])
+  if (s.cancelledAt !== undefined) return make(s.id, 'cancelled', 'Cancelled. Nothing is running for this step.', ['retry'])
 
   if (s.kind === 'check') {
     // What it checks is not there yet: a run from before cannot verify it.
@@ -329,38 +329,38 @@ function stepView(s: PlanStep, unmet: string[], facts: PlanFacts): PlanStepView 
     const run = s.command === undefined || s.startedAt === undefined ? undefined : facts.runOf(s.command)
     if (run !== undefined && run.at >= since) {
       if (run.exitCode === 0) return make(s.id, 'verified', `\`${s.command}\` passed.`, ['reopen'])
-      return make(s.id, 'failed', `\`${s.command}\` ${run.exitCode === null ? 'ended without an exit code' : `exited ${run.exitCode}`} — nothing is verified until it passes.`, ['retry'])
+      return make(s.id, 'failed', `\`${s.command}\` ${run.exitCode === null ? 'ended without an exit code' : `exited ${run.exitCode}`}. Nothing is verified until it passes.`, ['retry'])
     }
-    if (s.command === undefined) return make(s.id, 'ready', 'Ready — set the command that proves this step.', [])
+    if (s.command === undefined) return make(s.id, 'ready', 'Ready. Set the command that proves this step.', [])
     return make(s.id, 'ready', `Ready to run \`${s.command}\`.`, ['run'])
   }
 
   if (s.kind === 'review') {
-    if (facts.review.accepted) return make(s.id, 'verified', 'Accepted — the lane was merged.', [])
+    if (facts.review.accepted) return make(s.id, 'verified', 'Accepted. The lane was merged.', [])
     if (facts.review.standing === 'current' && unmet.length === 0) return make(s.id, 'verified', 'You reviewed the current changes.', ['review'])
     if (unmet.length > 0) return make(s.id, 'waiting', `Waits for ${joinWords(unmet)}.`, [], unmet)
-    return make(s.id, 'ready', facts.review.standing === 'stale' ? 'The changes moved since your review — read them again.' : 'Ready for your review: the changes and the check evidence.', ['review'])
+    return make(s.id, 'ready', facts.review.standing === 'stale' ? 'The changes moved since your review. Read them again.' : 'Ready for your review: the changes and the check evidence.', ['review'])
   }
 
   // An agent step.
   if (s.verifiedAt !== undefined) return make(s.id, 'verified', 'Marked verified by you.', ['reopen'])
   if (s.owner === undefined) {
     if (unmet.length > 0) return make(s.id, 'waiting', `Waits for ${joinWords(unmet)}.`, [], unmet)
-    return make(s.id, 'ready', 'Ready — no agent has this step yet.', ['start', 'assign'])
+    return make(s.id, 'ready', 'Ready. No agent has this step yet.', ['start', 'assign'])
   }
   const a = facts.agentOf(s.owner)
-  if (a === undefined || !a.present) return make(s.id, 'stopped', 'Its agent\'s conversation was closed — the step stopped before it was verified.', ['retry', 'assign'])
+  if (a === undefined || !a.present) return make(s.id, 'stopped', 'Its agent\'s conversation was closed, and the step stopped before it was verified.', ['retry', 'assign'])
   if (a.waiting) return make(s.id, 'needs-you', `${a.title} is waiting on you.`, ['open', 'cancel'])
   if (a.live) return make(s.id, 'working', `${a.title} is working on it.`, ['open', 'cancel'])
   const t = a.lastTurn
   if (t !== undefined && t.at >= since) {
     if (t.kind === 'ok') return make(s.id, 'finished', a.lastWords !== undefined && a.lastWords !== '' ? `${a.title} finished its turn: “${oneLine(a.lastWords)}”` : `${a.title} finished its turn.`, ['verify', 'open'])
     if (t.kind === 'interrupted') return make(s.id, 'stopped', `${a.title} was interrupted before finishing.`, ['retry', 'assign'])
-    return make(s.id, 'stopped', `${a.title} stopped responding — its turn ${t.kind === 'error' ? 'failed' : 'was cut off'}${t.reason !== undefined && t.reason !== '' ? `: ${oneLine(t.reason, 90)}` : ''}.`, ['retry', 'assign'])
+    return make(s.id, 'stopped', `${a.title} stopped responding; its turn ${t.kind === 'error' ? 'failed' : 'was cut off'}${t.reason !== undefined && t.reason !== '' ? `: ${oneLine(t.reason, 90)}` : ''}.`, ['retry', 'assign'])
   }
-  if (a.ended) return make(s.id, 'stopped', `${a.title}'s session ended — it stopped responding before finishing.`, ['retry', 'assign'])
+  if (a.ended) return make(s.id, 'stopped', `${a.title}'s session ended, and it stopped responding before finishing.`, ['retry', 'assign'])
   if (unmet.length > 0) return make(s.id, 'waiting', `Waits for ${joinWords(unmet)} — ${a.title} is assigned.`, [], unmet)
-  return make(s.id, 'assigned', `Assigned to ${a.title} — its brief is waiting in the conversation to be sent.`, ['open', 'assign'])
+  return make(s.id, 'assigned', `Assigned to ${a.title}. Its brief is waiting in the conversation to be sent.`, ['open', 'assign'])
 }
 
 function joinWords(xs: readonly string[]): string {

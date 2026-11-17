@@ -136,7 +136,7 @@ async function boot(): Promise<void> {
     // An empty set means "everything restores dormant" — the M4b behaviour,
     // which is the safe direction to fail in: it spawns nothing.
     console.warn('[boot] could not list live sessions; restoring every panel dormant', error)
-    noteBootIssue('This app could not ask which sessions were still running, so every terminal was restored stopped — some may still be running; starting one reconnects it.')
+    noteBootIssue('This app could not ask which sessions were still running, so every terminal was restored stopped. Some may still be running; starting one reconnects it.')
   }
 
   // Every panel id in every workspace, not just the active one.

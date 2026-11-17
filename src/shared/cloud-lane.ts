@@ -78,7 +78,7 @@ export const PROVIDERS: readonly CloudProvider[] = [
     assignee: 'copilot-swe-agent[bot]',
     assigneeMatch: 'copilot',
     needs: 'Copilot coding agent enabled for this repository',
-    stall: 'no pull request after two hours — Copilot may not have started; check the issue for its reaction',
+    stall: 'no pull request after two hours. Copilot may not have started; check the issue for its reaction',
     headPrefix: 'copilot/'
   },
   {
@@ -87,7 +87,7 @@ export const PROVIDERS: readonly CloudProvider[] = [
     dispatch: 'comment',
     mention: '@claude',
     needs: 'the Claude GitHub app and its workflow installed in this repository',
-    stall: 'no pull request after two hours — Claude may have pushed a branch and left a "Create PR" link in the issue; open the issue',
+    stall: 'no pull request after two hours. Claude may have pushed a branch and left a "Create PR" link in the issue; open the issue',
     headPrefix: 'claude/'
   }
 ]
@@ -201,7 +201,7 @@ export function cloudLaneState(lane: Pick<CloudLane, 'dispatchedAt' | 'provider'
   if (pr !== null && pr.state === 'closed') return { state: 'closed', reason: `#${pr.number} closed without merging` }
   if (pr === null) {
     if (issue.state === 'closed') return { state: 'closed', reason: `issue #${issue.number} closed with no pull request` }
-    if (lane.handoff === 'failed') return { state: 'needs-you', reason: `the agent was never handed issue #${issue.number} — hand it over on GitHub` }
+    if (lane.handoff === 'failed') return { state: 'needs-you', reason: `the agent was never handed issue #${issue.number}; hand it over on GitHub` }
     if (now - lane.dispatchedAt > NO_PR_AFTER_MS) return { state: 'needs-you', reason: providerById(lane.provider)?.stall ?? 'no pull request after two hours' }
     return { state: 'dispatched', reason: `waiting for a pull request on issue #${issue.number}` }
   }
@@ -209,27 +209,27 @@ export function cloudLaneState(lane: Pick<CloudLane, 'dispatchedAt' | 'provider'
   // the PR is the agent's: from the lane's own repository (a fork can write
   // "Fixes #12" too) and on the provider's branch.
   if (pr.headRepo !== undefined && lane.repo !== undefined && pr.headRepo !== lane.repo) {
-    return { state: 'needs-you', reason: `#${pr.number} comes from ${pr.headRepo}, not ${lane.repo} — it is not the agent's; check who opened it` }
+    return { state: 'needs-you', reason: `#${pr.number} comes from ${pr.headRepo}, not ${lane.repo}, so it is not the agent's. Check who opened it` }
   }
   const row = providerById(lane.provider)
   if (row !== undefined && !pr.head.startsWith(row.headPrefix)) {
-    return { state: 'needs-you', reason: `#${pr.number} is on ${pr.head === '' ? 'an unnamed branch' : `branch ${pr.head}`}, not a ${row.headPrefix} branch ${row.label} opens — check who opened it before trusting its checks` }
+    return { state: 'needs-you', reason: `#${pr.number} is on ${pr.head === '' ? 'an unnamed branch' : `branch ${pr.head}`}, not a ${row.headPrefix} branch ${row.label} opens. Check who opened it before trusting its checks` }
   }
   if (pr.draft) {
-    if (now - pr.createdAt > DRAFT_QUIET_MS) return { state: 'needs-you', reason: `#${pr.number} is still a draft after two hours — mark it ready if the agent is done` }
-    return { state: 'working', reason: `#${pr.number} is a draft — the agent is still working` }
+    if (now - pr.createdAt > DRAFT_QUIET_MS) return { state: 'needs-you', reason: `#${pr.number} is still a draft after two hours; mark it ready if the agent is done` }
+    return { state: 'working', reason: `#${pr.number} is a draft, and the agent is still working` }
   }
   const asked = changesRequested(facts.reviews)
   if (asked.length > 0) return { state: 'working', reason: `changes requested on #${pr.number} by ${asked.join(', ')}` }
   const checks = latestByName(facts.checks)
-  if (checks.length === 0) return { state: 'needs-you', reason: `#${pr.number} has no checks — nothing but the agent says it works` }
+  if (checks.length === 0) return { state: 'needs-you', reason: `#${pr.number} has no checks, so nothing but the agent says it works` }
   const approve = checks.filter((c) => c.status === 'completed' && c.conclusion === 'action_required')
   const failed = checks.filter((c) => c.status === 'completed' && c.conclusion !== 'action_required' && !PASSING.has(c.conclusion ?? ''))
   if (failed.length > 0) return { state: 'failed', reason: `${failed.map((c) => c.name).join(', ')} failed on #${pr.number}` }
   if (approve.length > 0) return { state: 'needs-you', reason: `${approve.map((c) => c.name).join(', ')} on #${pr.number} wait for a person to approve the workflow run` }
   const running = checks.filter((c) => c.status !== 'completed')
   if (running.length > 0) return { state: 'checks-running', reason: `${running.length} of ${checks.length} checks running on #${pr.number}` }
-  if (facts.checksIncomplete === true) return { state: 'checks-running', reason: `#${pr.number} has more checks than were read — open it to see them all` }
+  if (facts.checksIncomplete === true) return { state: 'checks-running', reason: `#${pr.number} has more checks than were read; open it to see them all` }
   return { state: 'ready', reason: `every check passed on #${pr.number}` }
 }
 
@@ -437,8 +437,8 @@ export function cloudDispatchFor(
   existing: readonly Pick<CloudLane, 'workItemId' | 'state'>[]
 ): { provider: CloudProviderId; title: string; task: string; workItemId: string; repo?: string; issue?: number; cwd?: string } | { refused: string } {
   const row = providerById(provider)
-  if (row === undefined) return { refused: `${JSON.stringify(provider)} is not a cloud agent — ${PROVIDERS.map((p) => p.id).join(' or ')}` }
-  if (existing.some((l) => l.workItemId === item.id && !isSettled(l.state))) return { refused: 'this task already has a cloud lane in flight — wait for it to settle, or forget it first' }
+  if (row === undefined) return { refused: `${JSON.stringify(provider)} is not a cloud agent. Try ${PROVIDERS.map((p) => p.id).join(' or ')}` }
+  if (existing.some((l) => l.workItemId === item.id && !isSettled(l.state))) return { refused: 'this task already has a cloud lane in flight; wait for it to settle, or forget it first' }
   const parts = [item.brief, item.description].filter((s): s is string => typeof s === 'string' && s.trim() !== '')
   const criteria = (item.criteria ?? []).filter((c) => c.trim() !== '')
   const task = [parts.length === 0 ? item.title : parts.join('\n\n'), ...(criteria.length === 0 ? [] : ['Done when:', ...criteria.map((c) => `- ${c}`)])].join('\n')
@@ -446,11 +446,11 @@ export function cloudDispatchFor(
   if (item.source === 'github' && item.key !== undefined) {
     const m = /^([^/\s#]+\/[^/\s#]+)#(\d+)$/.exec(item.key)
     if (m !== null) {
-      if (item.url !== undefined && /\/pull\/\d+/.test(item.url)) return { refused: `${item.key} is a pull request — a cloud agent is handed an issue` }
+      if (item.url !== undefined && /\/pull\/\d+/.test(item.url)) return { refused: `${item.key} is a pull request, but a cloud agent is handed an issue` }
       return { ...base, repo: m[1] as string, issue: Number(m[2]) }
     }
   }
-  if (laneCwd === undefined) return { refused: 'this task has no repository yet — start it in a repository first, or add it from a GitHub issue' }
+  if (laneCwd === undefined) return { refused: 'this task has no repository yet. Start it in a repository first, or add it from a GitHub issue' }
   return { ...base, cwd: laneCwd }
 }
 

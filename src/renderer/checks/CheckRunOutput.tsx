@@ -48,7 +48,7 @@ export function formatDuration(ms: number): string {
 }
 
 export function endedWords(exitCode: number | null, signal: string | null): string {
-  if (signal === 'removed') return 'removed while running — no exit'
+  if (signal === 'removed') return 'removed while running, with no exit'
   if (signal !== null) return `stopped by ${signal}`
   if (exitCode === null) return 'ended with no exit code recorded'
   return `exit ${exitCode}`
@@ -70,10 +70,10 @@ export function CheckRunOutput({ outputId, subject, fallback }: {
     if (el !== null && record !== null) el.scrollTop = el.scrollHeight
   }, [record])
   if (read === null) {
-    return <p className="check-run__none" data-check-run="none">{fallback ?? 'This run has no output record — it predates output capture, or it ran inside an agent\'s own process.'}</p>
+    return <p className="check-run__none" data-check-run="none">{fallback ?? 'This run has no output record. It predates output capture, or it ran inside an agent\'s own process.'}</p>
   }
   if (read.kind === 'loading') return <p className="check-run__none" data-check-run="loading">Reading the run's output…</p>
-  if (read.kind === 'missing') return <p className="check-run__none" data-check-run="missing">This run's output is no longer kept — only the most recent runs are.</p>
+  if (read.kind === 'missing') return <p className="check-run__none" data-check-run="missing">This run's output is no longer kept. Only the most recent runs are.</p>
   if (read.kind === 'unreadable') return <p className="check-run__none" data-check-run="unreadable">The run's output could not be read: {read.why}</p>
   const r = read.record
   const text = outward(checkOutputDisplay(r), subject).text

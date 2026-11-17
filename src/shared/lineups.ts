@@ -94,6 +94,6 @@ export function lineupPlan(lineup: Lineup, input: { cwd: string; worktrees: bool
   const waiting = Math.max(0, input.queued ?? 0)
   const room = input.maxConcurrent <= 0 ? Number.POSITIVE_INFINITY : Math.max(0, input.maxConcurrent - input.liveAgents - waiting)
   const queued = Number.isFinite(room) ? Math.max(0, agents - room) : 0
-  const ceilingLine = queued === 0 ? '' : `${queued} of these ${agents} agents will queue behind the ceiling of ${input.maxConcurrent} (${input.liveAgents} live now${waiting > 0 ? `, ${waiting} already waiting` : ''}) — raise agents.maxConcurrent, or launch fewer`
+  const ceilingLine = queued === 0 ? '' : `${queued} of these ${agents} agents will queue behind the ceiling of ${input.maxConcurrent} (${input.liveAgents} live now${waiting > 0 ? `, ${waiting} already waiting` : ''}). Raise agents.maxConcurrent, or launch fewer`
   return { seats, sessions: seats.length, agents, queued, ceilingLine }
 }

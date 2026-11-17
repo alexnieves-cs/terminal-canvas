@@ -224,7 +224,7 @@ export function Minimap({ rects, rows, viewport, goTo, marks, selected, shapeIds
       data-grabbing={grabbing ? '' : undefined}
       role="img"
       aria-label={`Overview: ${rects.length} panel${rects.length === 1 ? '' : 's'}; click to move the camera, or drag the view rectangle to pan`}
-      title="Overview — click to move the camera, or drag the view rectangle to pan"
+      title="Overview. Click to move the camera, or drag the view rectangle to pan"
       style={{ width: MINIMAP_W, height: MINIMAP_H }}
       onMouseDown={onMouseDown}
     >

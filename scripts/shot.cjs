@@ -1314,7 +1314,7 @@ const SCENES = [
       sh.state.roster = { ...sh.state.roster, connection: 'disconnected', unsynced: 3, peers: sh.state.roster.peers.map((p) => ({ ...p, live: false })) }
       k.wc.send(sh.events.PRESENCE_REMOTE, sh.state.roster)
       for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-sync-chip="disconnected"]')`)); i++) await sleep(100)
-      if (!(await k.js(`(document.querySelector('[data-sync-chip]') || {}).textContent === 'Offline — 3 changes waiting to sync'`))) throw new Error('shared-offline scene: the sync chip did not say the three changes are waiting')
+      if (!(await k.js(`(document.querySelector('[data-sync-chip]') || {}).textContent === 'Offline, 3 changes waiting to sync'`))) throw new Error('shared-offline scene: the sync chip did not say the three changes are waiting')
       await sleep(300)
       await k.shot('shared-offline')
       await k.js(`window.canvas.settings.set('labs.accounts', false)`)
@@ -1354,7 +1354,7 @@ const SCENES = [
       // overflow: hidden and painted nowhere, so each one is hit-tested at its
       // centre, never judged by its rect alone.
       const chip = await k.js(`document.querySelector('.panel[data-panel-id="chat"] [data-chat-auto]')?.getAttribute('title') ?? ''`)
-      if (!/stuck — cap reached/.test(chip)) throw new Error(`inspector-caps scene: the auto chip reads ${JSON.stringify(chip)}`)
+      if (!/stuck: cap reached/.test(chip)) throw new Error(`inspector-caps scene: the auto chip reads ${JSON.stringify(chip)}`)
       const outside = await k.js(`(() => { const panel = document.querySelector('.panel[data-panel-id="chat"]'); const box = panel.getBoundingClientRect(); const out = []
         for (const c of panel.querySelectorAll('.pf__chrome button, .pf__chrome .pf__word')) {
           const r = c.getBoundingClientRect(); if (r.width === 0) continue
@@ -2116,7 +2116,7 @@ app.whenReady().then(async () => {
       // plugin fixture below already follows.
       repositories: async (req) => (req.teammateId === 'ada'
         ? { kind: 'repos', repos: [{ path: REPO, repo: 'acme/api' }, { path: join(FIX, 'notes'), repo: null }] }
-        : { kind: 'no-places', reason: 'bo has no places — add a folder in the Agent profiles before it can work anywhere' }) },
+        : { kind: 'no-places', reason: 'bo has no places. Add a folder in Agent profiles before it can work anywhere' }) },
     // M127. No scene spawns the real CLI, so this is the ANSWER that CLI
     // would have given for the fixture plugin planted under the fenced home —
     // the shape `listPlugins` returns, never the walk itself, which is still

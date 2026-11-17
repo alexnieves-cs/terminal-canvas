@@ -262,7 +262,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                   <span className="rail-row__label" title={new Date(snap.at).toLocaleString()}>{ago(snap.at)} · {snap.workspaces} workspace{snap.workspaces === 1 ? '' : 's'} · {snap.panels} panel{snap.panels === 1 ? '' : 's'}</span>
                   <button type="button" className="rail-row__action rail-snapshot__restore" data-rail-snapshot-restore
                     disabled={props.merged === true}
-                    title={props.merged === true ? 'the merged view is read-only — leave it to restore' : 'Restore this save as a new workspace beside the current one'}
+                    title={props.merged === true ? 'the merged view is read-only; leave it to restore' : 'Restore this save as a new workspace beside the current one'}
                     {...shellControl(() => props.onRestoreSnapshot?.(snap.at))}>Restore</button>
                 </li>
               ))}

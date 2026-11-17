@@ -205,9 +205,9 @@ export function useChatSwapVerbs(deps: UseChatSwapVerbsDeps) {
             .then((res) => {
               if (res.kind === 'created') { setInputMode(null); openFilePanel(res.path, worldCentre(), { prose: true }); return }
               const why = res.kind === 'exists' ? 'there is already a note with that name' : res.detail
-              prompt(named, `Couldn\u2019t create that note \u2014 ${why}`, true)
+              prompt(named, `Couldn\u2019t create that note: ${why}`, true)
             })
-            .catch((error: unknown) => { prompt(named, `Couldn\u2019t create that note \u2014 ${String(error)}`, true) })
+            .catch((error: unknown) => { prompt(named, `Couldn\u2019t create that note: ${String(error)}`, true) })
         }
       })
       palette.openPalette()

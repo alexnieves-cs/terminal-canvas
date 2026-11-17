@@ -54,7 +54,7 @@ export function useActivityFeed(deps: { panels: readonly Panel[] }): void {
     const offTurn = onChatTurnEnd((id) => {
       const text = outward(lastAssistantText(id), `panel ${id}`).text.replace(/\s+/g, ' ').trim()
       const line = text.length > TURN_LINE_MAX ? `${text.slice(0, TURN_LINE_MAX - 1)}…` : text
-      pushOrchActivity({ at: Date.now(), kind: 'agent', panelId: id, ...kindOf(id), title: titleOf(id), detail: line === '' ? 'finished a turn' : `finished a turn — ${line}`, tone: 'idle' })
+      pushOrchActivity({ at: Date.now(), kind: 'agent', panelId: id, ...kindOf(id), title: titleOf(id), detail: line === '' ? 'finished a turn' : `finished a turn: ${line}`, tone: 'idle' })
     })
     // M318. A check run ENDING is activity too, and a failed one is the
     // feed's other intervention (its tone is `exited`, like a clean exit, so

@@ -165,8 +165,8 @@ export function showTaskTarget(panelId: string, panels: readonly MemberPanel[], 
     if (membership === undefined) return { kind: 'refused', reason: `${panelId} is a card whose item is no longer on the board` }
   } else {
     const owners = memberships.filter((m) => m.members.some((x) => x.panelId === panelId))
-    if (owners.length === 0) return { kind: 'refused', reason: `${panelId} is not part of any task on this canvas — show a work card, or a panel tied to one` }
-    if (owners.length > 1) return { kind: 'refused', reason: `${panelId} belongs to ${owners.length} tasks — ${owners.map((o) => name(o.itemId)).join(' and ')}; show one from its card` }
+    if (owners.length === 0) return { kind: 'refused', reason: `${panelId} is not part of any task on this canvas. Show a work card, or a panel tied to one` }
+    if (owners.length > 1) return { kind: 'refused', reason: `${panelId} belongs to ${owners.length} tasks, ${owners.map((o) => name(o.itemId)).join(' and ')}; show one from its card` }
     membership = owners[0]
   }
   const ids = new Set(membership!.members.map((m) => m.panelId))
@@ -216,7 +216,7 @@ export function arrangePlan(input: ArrangeInput): ArrangePlan {
   const followers = input.followers.filter((f) => members.has(f.id) && byId.has(f.id) && members.has(f.leaderId) && byId.has(f.leaderId))
   const followerIds = new Set(followers.map((f) => f.id))
   const movable = present.filter((id) => !followerIds.has(id) && !isFixed(id))
-  if (movable.length === 0) return { kind: 'refused', reason: 'every panel of this task is locked, maximised or in a folded group — unlock or unfold one to arrange it' }
+  if (movable.length === 0) return { kind: 'refused', reason: 'every panel of this task is locked, maximised or in a folded group; unlock or unfold one to arrange it' }
   const movableSet = new Set(movable)
 
   // One box per movable member, grown to hold the followers that ride it.
@@ -254,7 +254,7 @@ export function arrangePlan(input: ArrangeInput): ArrangePlan {
 /** The one sentence a surface shows when part of a task is gone; '' when nothing is. */
 export function missingSentence(missing: readonly MissingMember[]): string {
   const parts = missing.map((m) => (m.reason === 'conversation' ? 'its conversation is closed' : 'the panel that opened its lane is gone'))
-  return parts.length === 0 ? '' : `${parts.join(', and ')} — the rest is shown`
+  return parts.length === 0 ? '' : `${parts.join(', and ')}. The rest is shown`
 }
 
 /**
@@ -265,7 +265,7 @@ export function missingSentence(missing: readonly MissingMember[]): string {
  * resolves it. With neither there is no task context, and the refusal is a
  * NAMED reason the HUD's disabled button carries — never a hidden control.
  */
-export const FIT_TASK_NO_CONTEXT = 'no task is active — select a panel of a task, or Show related on one'
+export const FIT_TASK_NO_CONTEXT = 'no task is active; select a panel of a task, or Show related on one'
 export function fitTaskTarget(input: {
   lensItemId: string | null
   panelId?: string

@@ -173,7 +173,7 @@ function revisionStatus(tested: ReviewIdentity | undefined, identities: Readonly
   if (tested === undefined) return { status: 'unknown', why: 'no revision was recorded with it' }
   const now = identities?.get(tested.base)
   if (now === undefined) return { status: 'unknown', why: 'the lane\'s current revision was not read' }
-  if (now === null) return { status: 'unknown', why: 'the lane is gone — its revision cannot be compared' }
+  if (now === null) return { status: 'unknown', why: 'the lane is gone, so its revision cannot be compared' }
   return sameReviewIdentity(tested, now) ? { status: 'current', why: '' } : { status: 'stale', why: 'the lane has changed since' }
 }
 
@@ -202,8 +202,8 @@ export function collectDeliverables(input: CollectInput): Deliverable[] {
       if (newer !== undefined) { status = 'superseded'; why = `a later review (${new Date(newer).toISOString().slice(0, 16).replace('T', ' ')}) covers this file again` }
       else if (probe === undefined) { status = 'unknown'; why = 'the file was not probed' }
       else if (!probe.exists) { status = 'missing'; why = 'the file is no longer in the lane' }
-      else if (recorded === undefined) { status = 'unknown'; why = 'no content digest was recorded when it was reviewed — the file is there, whether it changed is not known' }
-      else if (probe.digest !== recorded) { status = 'modified'; why = 'the file changed after it was reviewed — the reviewed content is not what is there now' }
+      else if (recorded === undefined) { status = 'unknown'; why = 'no content digest was recorded when it was reviewed. The file is there, whether it changed is not known' }
+      else if (probe.digest !== recorded) { status = 'modified'; why = 'the file changed after it was reviewed, so the reviewed content is not what is there now' }
       else { status = 'current'; why = '' }
       if (newer === undefined) seenPath.set(path, r.at)
       out.push({
@@ -294,7 +294,7 @@ export function collectDeliverables(input: CollectInput): Deliverable[] {
     const lane = rc.lanes.find((l) => l.itemId === item.id)
     if (lane === undefined) continue
     out.push({
-      id: `receipt:${rc.id}`, kind: 'receipt', title: `Integrated — ${lane.outcome}${lane.sha === undefined ? '' : ` at ${lane.sha.slice(0, 7)}`}`,
+      id: `receipt:${rc.id}`, kind: 'receipt', title: `Integrated: ${lane.outcome}${lane.sha === undefined ? '' : ` at ${lane.sha.slice(0, 7)}`}`,
       subject: rc.into, ...(lane.sha === undefined ? {} : { sha: lane.sha }), reference: 'record', producedBy: { closed: false }, at: rc.at,
       status: lane.outcome === 'merged' ? 'current' : 'unknown', why: lane.outcome === 'merged' ? '' : lane.detail ?? `the lane was ${lane.outcome}`
     })
@@ -306,15 +306,15 @@ export function collectDeliverables(input: CollectInput): Deliverable[] {
     const panelId = item.panelId ?? dispatch?.panelId
     const producer = producerOf(panelId, dispatch?.producer, panels)
     out.push({
-      id: 'conversation', kind: 'conversation', title: `The conversation — ${producerWord(producer)}`, subject: panelId ?? '',
+      id: 'conversation', kind: 'conversation', title: `The conversation: ${producerWord(producer)}`, subject: panelId ?? '',
       reference: 'live', producedBy: producer, at: dispatch?.at ?? item.createdAt,
-      status: producer.closed ? 'missing' : 'current', why: producer.closed ? 'the chat was closed and its transcript with it — the rows above are what remains' : ''
+      status: producer.closed ? 'missing' : 'current', why: producer.closed ? 'the chat was closed and its transcript with it. The rows above are what remains' : ''
     })
   }
 
   // What the person said they expected back, and whether anything answers it.
   for (const d of item.deliverables ?? []) {
-    out.push({ id: `expected:${d}`, kind: 'expected', title: d, subject: d, reference: 'record', producedBy: { closed: false }, at: item.createdAt, status: 'pending', why: 'expected — confirm it against the evidence above' })
+    out.push({ id: `expected:${d}`, kind: 'expected', title: d, subject: d, reference: 'record', producedBy: { closed: false }, at: item.createdAt, status: 'pending', why: 'expected; confirm it against the evidence above' })
   }
   return out.sort((a, b) => (a.kind === 'expected' ? 1 : 0) - (b.kind === 'expected' ? 1 : 0) || b.at - a.at)
 }

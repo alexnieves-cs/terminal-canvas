@@ -1309,8 +1309,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       await click('[data-workflow-verb="reload"]')
       const afterReload = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="wfs"]'); const g = document.querySelector('[data-workflow-block="n2"]'); return p && p.getAttribute('data-workflow-dirty') === 'false' && g ? { dirty: p.getAttribute('data-workflow-dirty') } : false })()`), 3000)
       ok(id, atRest && atRest.disabled === true && atRest.dirty === 'false' &&
-        /nothing to save — the diagram matches the template/.test(String(atRest.reason)) &&
-        /nothing to save — the diagram matches the template/.test(String(atRest.lines)) &&
+        /nothing to save; the diagram matches the template/.test(String(atRest.reason)) &&
+        /nothing to save; the diagram matches the template/.test(String(atRest.lines)) &&
         edited && edited.kind === 'ran' && whenDirty && whenDirty.disabled === false && whenDirty.dirty === 'true' &&
         pressed === true && afterSave && afterSave.revision === 1 && n2 && n2.dx === 500 && n2.dy === 40 &&
         staleStrip && /revision/.test(staleStrip.text) && staleStrip.reload && staleStrip.copy &&
@@ -1656,7 +1656,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           armed && armed.status === 'not-started' && /a change in src/.test(armed.when ?? '') && hasSession === false &&
             passed && /ran with 0/.test(passed.tail) && passed.word === 'idle' && /last run passed/.test(passed.last ?? '') &&
             railWord && /watcher/.test(railWord.label ?? '') && railWord.tail === 'idle' &&
-            failed && /last run failed — exit 2/.test(failed.last ?? '') && failed.tone === 'exited' &&
+            failed && /last run failed with exit 2/.test(failed.last ?? '') && failed.tone === 'exited' &&
             rows.length >= ledgerBefore + 2 && rows.every((r) => !('output' in r) && !('tail' in r)) &&
             rows.some((r) => r.exitCode === 0) && rows.some((r) => r.exitCode === 2) &&
             killsAfterNode === killsBefore && killsAfterTerminal > killsAfterNode,
@@ -3077,7 +3077,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         ok(IDS[0], rowV !== null && rowV.disabled !== 'true' && /verb/.test(mode.placeholder || '') &&
             /zz9/.test(refusedText) && /name a panel/.test(refusedText) && refused.value === 'close zz9' &&
             locked === true && /ran lock vbA/.test(reportText) && /1 step/.test(reportText) &&
-            /close vbA/.test(confirmText) && /run it\?/.test(confirmText) && stillThere === true,
+            /close vbA/.test(confirmText) && /run it\?/i.test(confirmText) && stillThere === true,
           JSON.stringify({ rowV, mode, refused, locked, report, confirm, stillThere }))
       } catch (vErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(vErr && vErr.message || vErr))
@@ -4986,7 +4986,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const remove = (r) => (r ? r.verbs.find((v) => v.verb === 'remove-lane') : undefined)
         ok(IDS[0],
           before !== false && verbsOf(before) === 'close-task,remove-lane' &&
-            remove(before).disabled === true && remove(before).title === 'a panel is still running in it — close that panel first' &&
+            remove(before).disabled === true && remove(before).title === 'a panel is still running in it; close that panel first' &&
             before.verbs[0].disabled === false &&
             before.rail === 'merged into main as ' + sha.slice(0, 7) && before.outcome === true &&
             before.closeLabel === 'Close conversation…' && before.closePrimary === false &&

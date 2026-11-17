@@ -160,7 +160,7 @@ export function graphProblems (error: z.ZodError): string[] {
 export function parseWorkflowGraphs (raw: unknown, warnings: string[]): PersistedTemplate[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) {
-    warnings.push('the file\'s workflows were not a list — none were read')
+    warnings.push('the file\'s workflows were not a list, so none were read')
     return []
   }
   const seen = new Set<string>()

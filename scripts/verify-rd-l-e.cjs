@@ -50,9 +50,9 @@ const S = bundle('src/shared/shortcuts.ts', join(outDir, 'rd-l-e-shortcuts.cjs')
 const SHORTCUTS = Array.isArray(S.SHORTCUTS) ? S.SHORTCUTS : []
 const byId = (id) => SHORTCUTS.find((row) => row.id === id)
 
-const HEADER = 'Canvas shortcuts always use ⌘ — every bare key belongs to the terminal you\'re typing in.'
+const HEADER = 'Canvas shortcuts always use ⌘, because every bare key belongs to the terminal you\'re typing in.'
 const BANNER = '⌘K is also used by claude to clear the screen. The canvas takes it unless a panel is in focus lock (⌘⇧L).'
-const RECORDING = 'Recording — press the new shortcut, or Esc to cancel.'
+const RECORDING = 'Recording. Press the new shortcut, or Esc to cancel.'
 
 {
   const tidy = typeof O.effectiveShortcuts === 'function' ? O.effectiveShortcuts([]) : []

@@ -8,7 +8,7 @@
  * Escape only cancels when it arrives alone.
  */
 
-export const RECORDING_HINT = 'Recording — press the new shortcut, or Esc to cancel.'
+export const RECORDING_HINT = 'Recording. Press the new shortcut, or Esc to cancel.'
 
 export interface RecordKey {
   key: string

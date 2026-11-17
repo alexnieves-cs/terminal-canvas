@@ -257,7 +257,7 @@ export const SWARM_PRESETS: Readonly<Record<SwarmPresetId, SwarmPreset>> = {
     // implementer's brief ends its turn on purpose, which is what makes this
     // edge fire at a meaningful moment rather than at a pause.
     edges: [
-      { from: 'build', to: 'verify', trigger: 'idle', label: 'built — test it', automate: true },
+      { from: 'build', to: 'verify', trigger: 'idle', label: 'built, test it', automate: true },
       { from: 'verify', to: 'supervisor', trigger: 'idle', label: 'result', automate: true },
       supervises('build')
     ],
@@ -281,7 +281,7 @@ export const SWARM_PRESETS: Readonly<Record<SwarmPresetId, SwarmPreset>> = {
     // `exit-fail` and nothing else. A passing run must not wake an agent: a
     // handoff on `always` would spend a turn saying "it passed", every time.
     edges: [
-      { from: 'runner', to: 'triage', trigger: 'exit-fail', label: 'failed — triage it', automate: true },
+      { from: 'runner', to: 'triage', trigger: 'exit-fail', label: 'failed, triage it', automate: true },
       { from: 'triage', to: 'supervisor', trigger: 'idle', label: 'triage', automate: true },
       supervises('triage')
     ],
@@ -389,7 +389,7 @@ export function swarmPlan(preset: SwarmPreset, input: { maxConcurrent: number; l
   const queued = Number.isFinite(room) ? Math.max(0, agents - room) : 0
   const ceilingLine = queued === 0
     ? ''
-    : `${queued} of these ${agents} agents will queue behind the ceiling of ${input.maxConcurrent} (${input.liveAgents} live now${waiting > 0 ? `, ${waiting} already waiting` : ''}) — raise agents.maxConcurrent, or choose a smaller arrangement`
+    : `${queued} of these ${agents} agents will queue behind the ceiling of ${input.maxConcurrent} (${input.liveAgents} live now${waiting > 0 ? `, ${waiting} already waiting` : ''}). Raise agents.maxConcurrent, or choose a smaller arrangement`
   const parts = [
     `${agents} conversation${agents === 1 ? '' : 's'}`,
     ...(terminals === 0 ? [] : [`${terminals} terminal${terminals === 1 ? '' : 's'}`]),
@@ -429,18 +429,18 @@ export function swarmRefusal(preset: SwarmPreset, ctx: SwarmRefusalContext): str
   if (ctx.merged === true) return 'the merged view is read-only'
   // M190's rule, fail-safe: an arrangement somebody else wrote starts agents,
   // so it is inert until a person has looked at the seats and the commands.
-  if (preset.reviewed === false) return `${preset.label} arrived from outside and nobody has read it yet — open it and mark it read before it may start agents`
-  if (!ctx.agentAvailable) return 'no agent CLI is on the PATH — install claude or codex, or check the environment report'
-  if (ctx.teammate !== undefined && ctx.teammate.places.length === 0) return `${ctx.teammate.name} has no places — add a folder in Agent profiles`
+  if (preset.reviewed === false) return `${preset.label} arrived from outside and nobody has read it yet. Open it and mark it read before it may start agents`
+  if (!ctx.agentAvailable) return 'no agent CLI is on the PATH. Install claude or codex, or check the environment report'
+  if (ctx.teammate !== undefined && ctx.teammate.places.length === 0) return `${ctx.teammate.name} has no places; add a folder in Agent profiles`
   const state = ctx.item?.state ?? 'todo'
   if (!preset.startsFrom.includes(state)) {
     const from = preset.startsFrom.map((s) => STATE_WORDS[s]).join(' or ')
-    return `a ${preset.label} arrangement starts from a task that is ${from}; this one is ${STATE_WORDS[state]}${state === 'todo' ? ' — start work on it first, then review it' : ''}`
+    return `a ${preset.label} arrangement starts from a task that is ${from}; this one is ${STATE_WORDS[state]}${state === 'todo' ? '; start work on it first, then review it' : ''}`
   }
   return null
 }
 
 /** A seat this arrangement cannot mint, named by seat rather than by panel — a refusal a person can map back to the preview. */
 export function swarmSeatRefusal(seat: SwarmSeat, reason: string): string {
-  return `${seat.title} (${seat.role}) was refused — ${reason}`
+  return `${seat.title} (${seat.role}) was refused: ${reason}`
 }

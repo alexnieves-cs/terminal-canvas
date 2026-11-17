@@ -201,13 +201,13 @@ export function parseAgentCaps(raw: unknown): AgentCaps | undefined {
 export type CapChange = { kind: 'set'; caps: AgentCaps | undefined; note: string } | { kind: 'refused'; reason: string }
 
 /** M352. Why a door may not loosen a cap: said by every refusal that is about WHO asked. */
-export const CAP_DOOR_REASON = 'raising or removing a cap is a person\'s decision — set it in the Inspector\'s Work tab or type cap-agent in the palette; an agent or a workflow may only lower one'
+export const CAP_DOOR_REASON = 'raising or removing a cap is a person\'s decision. Set it in the Inspector\'s Work tab or type cap-agent in the palette; an agent or a workflow may only lower one'
 
 const CAP_USD_MAX = 1000
 const CAP_CONTEXT_K_MAX = 2000
 
 function capWords(caps: AgentCaps | undefined): string {
-  if (caps === undefined) return 'its own caps cleared — the Settings caps apply'
+  if (caps === undefined) return 'its own caps cleared, so the Settings caps apply'
   const parts = [
     ...(caps.usd === undefined ? [] : [caps.usd === 0 ? 'no spend cap' : `spend cap $${caps.usd.toFixed(2)}`]),
     ...(caps.contextK === undefined ? [] : [caps.contextK === 0 ? 'no context cap' : `context cap ${caps.contextK}k`])
@@ -231,7 +231,7 @@ function capWords(caps: AgentCaps | undefined): string {
  */
 export function planCapChange(own: AgentCaps | undefined, value: string, origin: 'person' | 'door', current: NodeCaps): CapChange {
   const tokens = value.trim().toLowerCase().split(',').map((t) => t.trim()).filter((t) => t !== '')
-  if (tokens.length === 0) return { kind: 'refused', reason: 'say a cap — 5usd for spend, 200k for context, both as 5usd,200k, none, or default' }
+  if (tokens.length === 0) return { kind: 'refused', reason: 'say a cap: 5usd for spend, 200k for context, both as 5usd,200k, none, or default' }
   if (tokens.length === 1 && (tokens[0] === 'none' || tokens[0] === 'default')) {
     if (origin === 'door') return { kind: 'refused', reason: CAP_DOOR_REASON }
     const caps = tokens[0] === 'none' ? { usd: 0, contextK: 0 } : undefined
@@ -257,7 +257,7 @@ export function planCapChange(own: AgentCaps | undefined, value: string, origin:
       const n = Number(ctx[1])
       if (n > CAP_CONTEXT_K_MAX) return { kind: 'refused', reason: `a context cap is at most ${CAP_CONTEXT_K_MAX}k` }
       patch.contextK = n
-    } else return { kind: 'refused', reason: `${t} is not a cap — 5usd for spend, 200k for context, none, or default` }
+    } else return { kind: 'refused', reason: `${t} is not a cap. Try 5usd for spend, 200k for context, none, or default` }
   }
   if (origin === 'door') {
     if (patch.usd !== undefined && (patch.usd === 0 || (current.usd > 0 && patch.usd > current.usd))) return { kind: 'refused', reason: CAP_DOOR_REASON }
@@ -302,8 +302,8 @@ export function capSentence(hold: CapHold): string {
   // M352. An agent's OWN cap is raised on the agent, not in Settings.
   const fix = hold.own === true ? 'raise its own cap in the Inspector\'s Work tab (or cap-agent in the palette)' : hold.unit === 'usd' ? 'raise agents.nodeCapUsd in Settings' : 'raise agents.nodeCapContextK in Settings'
   return hold.unit === 'usd'
-    ? `this agent reached its $${hold.limit.toFixed(2)} spend cap ($${hold.spent.toFixed(2)} reported) — ${fix}, then send again`
-    : `this agent's context reached its ${Math.round(hold.limit / 1000)}k-token cap (${Math.round(hold.spent / 1000)}k) — ${fix}, or start a fresh conversation`
+    ? `this agent reached its $${hold.limit.toFixed(2)} spend cap ($${hold.spent.toFixed(2)} reported); ${fix}, then send again`
+    : `this agent's context reached its ${Math.round(hold.limit / 1000)}k-token cap (${Math.round(hold.spent / 1000)}k); ${fix}, or start a fresh conversation`
 }
 
 /**
@@ -452,9 +452,9 @@ export function sendRefusalSentence(answer: SendAnswer | undefined): string | nu
   if (answer === undefined) return null
   if (typeof answer === 'object' && answer !== null && 'refused' in answer) return answer.refused
   switch (answer) {
-    case 'refused-budget': return 'the budget ceiling was reached — raise agents.budgetUsd or agents.budgetWindowPercent in Settings, then send again'
+    case 'refused-budget': return 'the budget ceiling was reached; raise agents.budgetUsd or agents.budgetWindowPercent in Settings, then send again'
     // M350. Main answers with capSentence's figures (agent-handlers.ts answerIn); this is the bare word's fallback.
-    case 'refused-cap': return 'this agent reached its own cap — raise agents.nodeCapUsd or agents.nodeCapContextK in Settings, then send again'
+    case 'refused-cap': return 'this agent reached its own cap; raise agents.nodeCapUsd or agents.nodeCapContextK in Settings, then send again'
     case 'refused-backend': return 'this engine cannot take the message'
     case 'refused-images': return 'this engine cannot take images'
     case 'refused-sandbox': return 'this engine has no read-only mode, and the conversation has no folder'

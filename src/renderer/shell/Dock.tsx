@@ -344,7 +344,7 @@ function DockImpl({
                               {others.length > 0 && (
                                 <div className="inbox__group-verbs">
                                   <button type="button" className="approval__verb" data-inbox-allow-all={item.key}
-                                    title={`Allow this one ${a.toolName} call for each of the ${item.members.length} agents asking — each asks again next time`}
+                                    title={`Allow this one ${a.toolName} call for each of the ${item.members.length} agents asking. Each asks again next time`}
                                     {...shellControl(() => { for (const m of item.members) if (m.requestId !== undefined) onAnswer(m.panelId, m.requestId, true) })}>
                                     Allow all {item.members.length} once
                                   </button>
@@ -403,7 +403,7 @@ function DockImpl({
                           </>
                         ) : (
                           <button type="button" className="rail-row__verb" data-inbox-snooze-open={item.key}
-                            title="Hide this decision for a while — it stays waiting, and comes back on its own"
+                            title="Hide this decision for a while. It stays waiting, and comes back on its own"
                             {...shellControl(() => setSnoozeOpen(item.key))}>Snooze</button>
                         )}
                       </div>
@@ -428,7 +428,7 @@ function DockImpl({
             {...shellControl(() => { const d = g.decisions.find((x) => x.evidence === g.next.evidence) ?? g.decisions[0]; if (d !== undefined) openEvidence(d) })}>{g.next.label}</button>
           <span className="queue__after" data-queue-after>{g.after}</span>
           {g.itemId !== null && onFocusTask !== undefined && (
-            <button type="button" className="rail-row__verb queue__focus" data-queue-focus={g.itemId} title="Open this task beside its conversation — answer, read the evidence and send a correction in one place"
+            <button type="button" className="rail-row__verb queue__focus" data-queue-focus={g.itemId} title="Open this task beside its conversation to answer, read the evidence and send a correction in one place"
               {...shellControl(() => { if (g.itemId !== null) onFocusTask?.(g.itemId) })}>Focus task</button>
           )}
         </div>
@@ -461,14 +461,14 @@ function DockImpl({
       <li key={d.key} className="rail-row rail-attention queue__row" data-queue-kind={d.kind} data-queue-key={d.key} data-queue-cursor={d.key === cursor ? '' : undefined}>
         <div className="queue__row-main">
           <span className="rail-row__dot status-dot" data-tone={d.kind === 'review' ? 'idle' : 'needs-you'} aria-hidden="true" />
-          <span className="queue__row-text">{d.kind === 'check' ? 'Check failed — ' : d.kind === 'review' ? 'Review — ' : d.kind === 'lost' ? 'Before the restart — ' : ''}{d.text}</span>
+          <span className="queue__row-text">{d.kind === 'check' ? 'Check failed: ' : d.kind === 'review' ? 'Review: ' : d.kind === 'lost' ? 'Before the restart: ' : ''}{d.text}</span>
         </div>
         <p className="queue__row-affects" data-queue-row-affects>{d.affects}</p>
         <div className="queue__row-verbs">
           <button type="button" className="rail-row__verb" data-queue-evidence={d.evidence.kind}
             {...shellControl(() => openEvidence(d))}>{d.evidence.kind === 'output' ? (openOutput === d.key ? 'Hide output' : 'Output') : d.evidence.kind === 'review' ? 'Review' : 'Go to'}</button>
           {d.kind === 'lost' && (
-            <button type="button" className="rail-row__verb" data-queue-dismiss={d.key} title="Put this away — nothing was allowed or answered on your behalf"
+            <button type="button" className="rail-row__verb" data-queue-dismiss={d.key} title="Put this away. Nothing was allowed or answered on your behalf"
               {...shellControl(() => dismissLost(d.key))}>Dismiss</button>
           )}
         </div>
@@ -609,10 +609,10 @@ function DockImpl({
                         </div>
                         <div className="inbox__group-verbs team-ask__verbs">
                           <button type="button" className="approval__verb" data-team-ask-answer="allow"
-                            title={`Allow this one ${row.tool} call for ${w.who} — it asks again next time`}
+                            title={`Allow this one ${row.tool} call for ${w.who}. It asks again next time`}
                             {...shellControl(() => answer('allow'))}>Allow once</button>
                           <button type="button" className="approval__verb approval__verb--deny" data-team-ask-answer="deny"
-                            title="Deny it — one deny decides, whoever else allowed"
+                            title="Deny it. One deny decides, whoever else allowed"
                             {...shellControl(() => answer('deny'))}>Deny</button>
                         </div>
                       </li>

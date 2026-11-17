@@ -128,7 +128,7 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
   }, [importMermaid, mergedRef])
 
   const exportFlowchart = useCallback(async (format: string, ids?: readonly string[]): Promise<VerbResult> => {
-    if (format !== 'mermaid' && format !== 'svg') return { kind: 'refused', reason: `${format} is not an export format — mermaid or svg` }
+    if (format !== 'mermaid' && format !== 'svg') return { kind: 'refused', reason: `${format} is not an export format. Try mermaid or svg` }
     const want = new Set(ids !== undefined && ids.length > 0 ? ids : [...(selectedIdsRef.current ?? [])])
     const panels = panelsRef.current ?? []
     // A selection of shapes exports those; no shape selected exports every shape on the canvas.
@@ -156,7 +156,7 @@ export function useFlowchartIO(deps: FlowchartIODeps): FlowchartIO {
   const layout = useCallback((direction: string, ids?: readonly string[]): VerbResult => {
     if (mergedRef.current === true) return { kind: 'refused', reason: 'leave merged view to arrange' }
     const dir = DIRECTION_WORDS[direction.toLowerCase()]
-    if (dir === undefined) return { kind: 'refused', reason: `${direction} is not a direction — down, right, up or left` }
+    if (dir === undefined) return { kind: 'refused', reason: `${direction} is not a direction. Try down, right, up or left` }
     const panels = panelsRef.current ?? []
     const picked = new Set(ids !== undefined && ids.length > 0 ? ids : [...(selectedIdsRef.current ?? [])])
     // One shape selected means ITS CHART: every shape it reaches by connectors.

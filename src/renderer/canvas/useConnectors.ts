@@ -133,11 +133,11 @@ export function useConnectors(deps: ConnectorsDeps): Connectors {
     if (mergedRef.current === true) return { kind: 'refused', reason: 'leave merged view to change a connector' }
     const found = findConnector(panelsRef.current ?? [], id)
     if (found === null) return { kind: 'refused', reason: `no connector is called ${id}` }
-    if (p.route !== undefined && !isRoute(p.route)) return { kind: 'refused', reason: `${p.route} is not a route — ${ROUTES.join(', ')}` }
-    if (p.ends !== undefined && !isEnds(p.ends)) return { kind: 'refused', reason: `${p.ends} is not an arrow choice — ${ENDS.join(', ')}` }
-    if (p.stroke !== undefined && !isShapeStroke(p.stroke)) return { kind: 'refused', reason: `${p.stroke} is not a line — ${SHAPE_STROKES.join(', ')}` }
-    if (p.from !== undefined && p.from !== null && !isPort(p.from)) return { kind: 'refused', reason: `${p.from} is not a side — n, e, s or w` }
-    if (p.toPort !== undefined && p.toPort !== null && !isPort(p.toPort)) return { kind: 'refused', reason: `${p.toPort} is not a side — n, e, s or w` }
+    if (p.route !== undefined && !isRoute(p.route)) return { kind: 'refused', reason: `${p.route} is not a route. Try ${ROUTES.join(', ')}` }
+    if (p.ends !== undefined && !isEnds(p.ends)) return { kind: 'refused', reason: `${p.ends} is not an arrow choice. Try ${ENDS.join(', ')}` }
+    if (p.stroke !== undefined && !isShapeStroke(p.stroke)) return { kind: 'refused', reason: `${p.stroke} is not a line. Try ${SHAPE_STROKES.join(', ')}` }
+    if (p.from !== undefined && p.from !== null && !isPort(p.from)) return { kind: 'refused', reason: `${p.from} is not a side. Try n, e, s or w` }
+    if (p.toPort !== undefined && p.toPort !== null && !isPort(p.toPort)) return { kind: 'refused', reason: `${p.toPort} is not a side. Try n, e, s or w` }
     // The DEFAULT is absent: orthogonal, an arrow at the end, the line colour,
     // solid, no label, auto ports — a value equal to it clears the field.
     const change: Partial<Omit<Connector, 'id'>> = {}

@@ -220,7 +220,7 @@ export function bindCheckFreshness(
     if (now === null) return { ...c, note: 'freshness not read yet' }
     if (now === undefined) return { ...c, outcome: 'unknown', note: 'the changes could not be re-read, so whether this result is about them is unknown' }
     if (sameReviewIdentity(now, c.tested)) return { ...c, outcome: c.observed }
-    return { ...c, outcome: 'stale', note: `tested an earlier version of the changes (exit ${c.exitCode === null || c.exitCode === undefined ? '?' : String(c.exitCode)}) — the changes have moved since` }
+    return { ...c, outcome: 'stale', note: `tested an earlier version of the changes (exit ${c.exitCode === null || c.exitCode === undefined ? '?' : String(c.exitCode)}), and the changes have moved since` }
   })
 }
 
@@ -248,7 +248,7 @@ export function claimsFromTranscript(turns: readonly TranscriptTurn[]): CheckCla
     command: c.command,
     claimed: c.outcome === 'passed' ? 'ok' : c.outcome === 'failed' ? 'error' : 'unanswered',
     at: c.at,
-    source: 'the agent asked for this and its CLI reported the result — a claim, not a check this app ran'
+    source: 'the agent asked for this and its CLI reported the result. It is a claim, not a check this app ran'
   }))
 }
 
@@ -267,7 +267,7 @@ export function checkEvidence(checks: readonly CheckRecord[], claims: readonly C
   const unavailable: string[] = []
   if (!sources.ledgerRead) unavailable.push('this canvas could not read its own record of what it ran')
   else if (sources.ledgerPanels === 0) unavailable.push('no session on this canvas could have recorded a command for this subject, so there is nowhere to read checks from')
-  else unavailable.push('no checks have run here — this canvas recorded no command and no watcher run for this subject')
+  else unavailable.push('no checks have run here. This canvas recorded no command and no watcher run for this subject')
   if (!sources.transcriptRead) unavailable.push('the conversation is closed, so the commands it asked for were not looked for')
   return { ...out, unavailable }
 }

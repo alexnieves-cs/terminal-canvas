@@ -59,7 +59,7 @@ function folderName(path: string): string {
 }
 
 function permissionLine(grants: readonly { name: string; places: readonly string[] }[] | undefined): string {
-  if (grants === undefined || grants.length === 0) return 'usable by no agent profile yet — grant it in Agent profiles'
+  if (grants === undefined || grants.length === 0) return 'usable by no agent profile yet; grant it in Agent profiles'
   return `usable by ${grants.map((g) => `${g.name} (${g.places.length === 0 ? 'no workspace granted' : g.places.map(folderName).join(', ')})`).join('; ')}`
 }
 
@@ -164,7 +164,7 @@ function IntegrationCard({ row, now, grants, panelLabel, onConnect, onVerify }: 
         <p className="integration__error" role="alert" data-integration-sentence>
           <span className="integration__word" data-tone={tone}>{row.word}</span>
           {row.sentence.startsWith(row.word) ? row.sentence.slice(row.word.length) : ` — ${row.sentence}`}
-          {' '}— Reconnect to add a new one; nothing that calls {row.label} will work until then.
+          {'. '}Reconnect to add a new one; nothing that calls {row.label} will work until then.
         </p>
       ) : (
         <p className="integration__sentence" data-integration-sentence>
@@ -179,7 +179,7 @@ function IntegrationCard({ row, now, grants, panelLabel, onConnect, onVerify }: 
       <details className="integration__details">
         <summary className="integration__details-summary">Activity{row.rows.length > 0 ? ` (${row.rows.length})` : ''}</summary>
         {row.rows.length === 0 ? (
-          <p className="integration__empty" data-integration-audit-arm="empty">no calls yet — an agent reaches {row.label} with <code className="integration__code">tc api {row.id} &lt;path&gt;</code></p>
+          <p className="integration__empty" data-integration-audit-arm="empty">no calls yet. An agent reaches {row.label} with <code className="integration__code">tc api {row.id} &lt;path&gt;</code></p>
         ) : (
           <>
             <ul className="integration__activity" aria-label={`${row.label} activity`}>

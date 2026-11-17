@@ -17,7 +17,7 @@ export const HINTS: ReadonlyArray<Hint> = [
   { id: 'new-panel', text: '⌘N starts a task; ⌘⌥N starts an agent where the camera is.', where: 'rail' },
   // The launcher's "Keep agents running between sessions" row states the
   // benefit; this is its "How" disclosure, so the mechanism is named here.
-  { id: 'tmux', text: 'Sessions stay alive across a reload or relaunch when tmux is installed — without it, each one ends with the app. Install tmux (for example, brew install tmux), then relaunch.', where: 'launcher' },
+  { id: 'tmux', text: 'Sessions stay alive across a reload or relaunch when tmux is installed. Without it, each one ends with the app. Install tmux (for example, brew install tmux), then relaunch.', where: 'launcher' },
   // M205 critic 2.4: the starter canvas lives inside the closed "More ways to
   // start" disclosure on purpose (D09's header — a tour is not the primary),
   // but that leaves it with no door a first-time person would ever open. One
@@ -90,9 +90,9 @@ export function firstTaskHint(status: FirstTaskStatus | undefined, turns: number
   // A pending permission request stops the agent mid-turn: the status still
   // reads `streaming`, so "working on it" would tell a person to wait for an
   // agent that is waiting for THEM. It outranks every other sentence.
-  if (needsInput) return 'Your agent needs your input — answer it in the conversation.'
+  if (needsInput) return 'Your agent needs your input. Answer it in the conversation.'
   if (status === 'streaming') return 'Your agent is working on it. Anything you type now is a follow-up.'
-  if (turns === 0 && !sent) return 'Send your first message — your sentence is already in the composer.'
+  if (turns === 0 && !sent) return 'Send your first message. Your sentence is already in the composer.'
   return 'Your agent answered. Read it in the conversation, or type a follow-up.'
 }
 
@@ -174,15 +174,15 @@ export function flagshipGuide(f: FlagshipGuideFacts): FlagshipGuide | null {
   let sentence: string
   let action: string | undefined
   if (f.merged === true) {
-    return { steps: order.map((step) => ({ step, label: FLAGSHIP_LABELS[step], state: 'done' as const })), sentence: 'Accepted — the task is merged into your main branch.' }
+    return { steps: order.map((step) => ({ step, label: FLAGSHIP_LABELS[step], state: 'done' as const })), sentence: 'Accepted. The task is merged into your main branch.' }
   }
   if (f.status === undefined || f.status === 'not-started' || f.status === 'starting') { current = 'start'; sentence = first }
   else if (!answered) { current = 'work'; sentence = first }
-  else if (!f.hasChanges) { current = 'work'; sentence = 'Your agent answered, and its lane holds no changes yet — reply in the conversation to keep it going.' }
-  else if (f.standing !== 'current') { current = 'review'; sentence = f.standing === 'stale' ? 'The changes moved since you reviewed — look again.' : 'Your agent finished a turn. Review what it changed — comment on any line and send the comments back.'; action = 'Review changes' }
-  else if (!f.checksPassed) { current = 'checks'; sentence = f.github ? 'Reviewed. Now run the lane\'s checks — each run keeps its own output.' : 'Reviewed. Run the lane\'s checks — or accept it as it is; the review says it is not verified.'; action = 'Run checks' }
-  else if (f.github && !f.pr) { current = 'pr'; sentence = 'Reviewed and checked. Open the pull request — its body carries the outcome and the checks.'; action = 'Open pull request' }
-  else if (!f.github) { current = 'accept'; sentence = 'Reviewed and checked. Accept it to merge the branch into your main branch — you see the plan first.'; action = 'Accept…' }
+  else if (!f.hasChanges) { current = 'work'; sentence = 'Your agent answered, and its lane holds no changes yet. Reply in the conversation to keep it going.' }
+  else if (f.standing !== 'current') { current = 'review'; sentence = f.standing === 'stale' ? 'The changes moved since you reviewed. Look again.' : 'Your agent finished a turn. Review what it changed. Comment on any line and send the comments back.'; action = 'Review changes' }
+  else if (!f.checksPassed) { current = 'checks'; sentence = f.github ? 'Reviewed. Now run the lane\'s checks. Each run keeps its own output.' : 'Reviewed. Run the lane\'s checks, or accept it as it is; the review says it is not verified.'; action = 'Run checks' }
+  else if (f.github && !f.pr) { current = 'pr'; sentence = 'Reviewed and checked. Open the pull request. Its body carries the outcome and the checks.'; action = 'Open pull request' }
+  else if (!f.github) { current = 'accept'; sentence = 'Reviewed and checked. Accept it to merge the branch into your main branch. You see the plan first.'; action = 'Accept…' }
   else { return { steps: order.map((step) => ({ step, label: FLAGSHIP_LABELS[step], state: 'done' as const })), sentence: 'The whole flow, done: reviewed, checked and a pull request open.' } }
   const at = order.indexOf(current)
   return {

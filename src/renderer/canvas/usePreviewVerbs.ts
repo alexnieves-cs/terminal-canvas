@@ -65,7 +65,7 @@ export function usePreviewVerbs(deps: UsePreviewVerbsDeps) {
   // M195 (D03). One subscription for every preview on the canvas: a file
   // change reloads the pane BOUND to the folder it happened in, and no other.
   usePreviewReload({ onScreenPanelsRef: displayPanelsRef })
-  const REASON_NO_PREVIEW_SUBJECT = 'select the terminal your project runs in — discovery reads that panel\'s own directory and processes'
+  const REASON_NO_PREVIEW_SUBJECT = 'select the terminal your project runs in, because discovery reads that panel\'s own directory and processes'
   const discoverProject = useCallback(async (): Promise<PreviewDiscovery | { kind: 'refused'; reason: string }> => {
     const subject = previewSubject()
     if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
@@ -107,12 +107,12 @@ export function usePreviewVerbs(deps: UsePreviewVerbsDeps) {
     if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
     const binding = previewBindingFor(subject)
     if (binding === undefined) {
-      return { kind: 'refused', reason: `that panel's folder is not an absolute path (${subject.cwd === '' ? 'it has none' : subject.cwd}) — there is nothing to bind this preview to` }
+      return { kind: 'refused', reason: `that panel's folder is not an absolute path (${subject.cwd === '' ? 'it has none' : subject.cwd}), so there is nothing to bind this preview to` }
     }
     // The filesystem root is refused BY NAME rather than accepted: a pane bound
     // to `/` reloads for every change anywhere, which is the behaviour this
     // milestone exists to end, arrived at by a different road.
-    if (binding.root === '/') return { kind: 'refused', reason: 'that panel sits at the filesystem root, so binding to it would reload this preview for every change on the machine — point the panel at a project first' }
+    if (binding.root === '/') return { kind: 'refused', reason: 'that panel sits at the filesystem root, so binding to it would reload this preview for every change on the machine. Point the panel at a project first' }
     setPanels((current) => {
       const next = current.map((p) => (p.rect.id === pane.rect.id && isBrowserPanel(p) ? { ...p, preview: binding } : p))
       commitHistory(next)
@@ -198,7 +198,7 @@ export function usePreviewVerbs(deps: UsePreviewVerbsDeps) {
    * one render later.
    */
   const setPreviewWidth = useCallback((device: string, paneId?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
-    if (!isDeviceWidthId(device)) return { kind: 'refused', reason: `${device} is not a device width — ${DEVICE_WIDTHS.map((d) => d.id).join(', ')}` }
+    if (!isDeviceWidthId(device)) return { kind: 'refused', reason: `${device} is not a device width. Try ${DEVICE_WIDTHS.map((d) => d.id).join(', ')}` }
     const named = paneId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === paneId)
     const pane = named !== undefined && isBrowserPanel(named) ? named : previewPane()
     if (pane === undefined) return { kind: 'refused', reason: 'select a preview pane first' }
@@ -221,7 +221,7 @@ export function usePreviewVerbs(deps: UsePreviewVerbsDeps) {
     const pane = previewPane()
     if (pane === undefined) return { kind: 'refused', reason: 'select a preview pane first' }
     const guestId = browserGuestId(pane.rect.id)
-    if (guestId === undefined) return { kind: 'refused', reason: 'no page is open in this pane — open one, then capture it' }
+    if (guestId === undefined) return { kind: 'refused', reason: 'no page is open in this pane; open one, then capture it' }
     const shot = await window.canvas.preview.capture({ webContentsId: guestId })
     if (shot.kind === 'refused') return { kind: 'refused', reason: shot.reason }
     // A capture is an ORDINARY image object, not a new kind: it moves, groups,
@@ -263,7 +263,7 @@ export function usePreviewVerbs(deps: UsePreviewVerbsDeps) {
     const found = await window.canvas.preview.discover({ pids: subject.pids, cwd: subject.cwd })
     const chosen = script === undefined ? found.scripts[0] : found.scripts.find((s) => s.name === script)
     if (chosen === undefined) {
-      return { kind: 'refused', reason: found.scripts.length === 0 ? found.note : `${script} is not one of this project's dev scripts — ${found.scripts.map((s) => s.name).join(', ')}` }
+      return { kind: 'refused', reason: found.scripts.length === 0 ? found.note : `${script} is not one of this project's dev scripts. Try ${found.scripts.map((s) => s.name).join(', ')}` }
     }
     // Through the ORDINARY spawn door: the dev server is a panel a person can
     // see, read and stop, never a hidden child of the preview. Discovery

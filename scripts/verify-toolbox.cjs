@@ -1136,7 +1136,7 @@ const write = (rel, text) => {
     ok('capability.1 an active entry by the name (a namespaced command, a leading / or @, any case) HAS it; a disabled or waiting one is INACTIVE, never has; a whole read without it LACKS it and counts the plugins not read; a read cut at a cap, a failed or an unread one is UNKNOWN; hooks have no names; a panel with no directory answers nothing',
       has.kind === 'has' && has.matches[0].name === 'git:review' && off.kind === 'inactive' && off.matches[0].active.kind === 'disabled' &&
         mcp.kind === 'inactive' && mcp.matches[0].kind === 'mcp' && lacks.kind === 'lacks' && lacks.pluginsUnread === 2 &&
-        lacksClean.kind === 'lacks' && lacksClean.pluginsUnread === 0 && cut.kind === 'unknown' && /cut at its cap — 3 entries/.test(cut.why) &&
+        lacksClean.kind === 'lacks' && lacksClean.pluginsUnread === 0 && cut.kind === 'unknown' && /cut at its cap, so 3 entries/.test(cut.why) &&
         hook.kind === 'lacks' && C('x', undefined).kind === 'unknown' && C('x', { kind: 'unavailable', reason: 'no answer' }).why === 'no answer' &&
         C('x', { kind: 'no-cwd' }) === null,
       JSON.stringify({ has, off, mcp, lacks, cut, hook }))
@@ -1145,7 +1145,7 @@ const write = (rel, text) => {
     ]
     ok('capability.2 each answer is one line: what it has and where, what is off and why, "no <name>" with the plugins that may still provide it, and "unknown — <why>"',
       words[0] === 'has command git:review · project' && words[1] === 'skill deploy · project — disabled' &&
-        words[2] === 'no review — 2 plugins not read may provide it' && words[3] === 'no review' && /^unknown — the toolbox was cut/.test(words[4]) &&
+        words[2] === 'no review — 2 plugins not read may provide it' && words[3] === 'no review' && /^unknown: the toolbox was cut/.test(words[4]) &&
         T.CAPABILITY_ORDER.has < T.CAPABILITY_ORDER.inactive && T.CAPABILITY_ORDER.unknown < T.CAPABILITY_ORDER.lacks,
       JSON.stringify(words))
   }
@@ -1214,7 +1214,7 @@ const write = (rel, text) => {
     ok('toolbox.mode.3 "default" is kept as its own value and an unrecognised mode in a higher file wins its place (no fall-through to the user file\'s auto): the line says default mode for one and nothing for the other, the fit reads null and not-read; the none-set line names a managed policy',
       dflt.defaultModeOther === 'default' && future.defaultModeOther === 'unrecognised' && num.defaultModeOther === 'unrecognised' && !('defaultModeOther' in none) && !('defaultModeOther' in known) &&
         overUser.mode === 'unrecognised' && T.permissionModeLine('Claude Code', overUser) === null && T.fitPermissionMode(overUser) === undefined &&
-        explicit.mode === 'default' && /asks before .* — default mode, set in this repository's \.claude\/settings\.json$/.test(T.permissionModeLine('Claude Code', { ...explicit, scope: 'project' })) && T.fitPermissionMode(explicit) === null &&
+        explicit.mode === 'default' && /asks before .* \(default mode, set in this repository's \.claude\/settings\.json\)$/.test(T.permissionModeLine('Claude Code', { ...explicit, scope: 'project' })) && T.fitPermissionMode(explicit) === null &&
         T.fitPermissionMode(userOnly) === 'auto' && T.fitPermissionMode(null) === null &&
         /unless a managed policy says otherwise/.test(T.permissionModeLine('Claude Code', null)),
       JSON.stringify({ dflt, future, num, overUser, explicit, none: T.permissionModeLine('Claude Code', null) }))

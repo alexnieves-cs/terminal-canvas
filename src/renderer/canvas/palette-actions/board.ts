@@ -39,7 +39,7 @@ async function readOpenIssues(): Promise<{ kind: 'items'; items: IssueChoice[] }
   const items: IssueChoice[] = gh?.kind === 'items' ? gh.items.map((i) => ({ source: 'github' as const, key: i.id, title: i.title, url: i.url, description: i.description })) : []
   if (items.length > 0) return { kind: 'items', items }
   const why = gh !== null && gh.kind !== 'items' ? gh.reason : 'no open issues were found'
-  return { kind: 'none', reason: `no issues — ${why}` }
+  return { kind: 'none', reason: `no issues: ${why}` }
 }
 
 export type BoardActions = Pick<PaletteActions,
@@ -94,7 +94,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     reviewTask: (panelId) => {
       const panel = panelsRef.current.find((p) => p.rect.id === panelId)
       if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
-      if (!isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card — a task review needs one` }
+      if (!isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card, and a task review needs one` }
       return boardVerbsRef.current?.review?.(panel.work.itemId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' }
     },
     // M203 (D08). Canvas owns every fact membership reads (the runs, the live
@@ -112,11 +112,11 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     runTonight: async (op) => {
       const door = window.canvas?.tonight
       if (door === undefined) return { kind: 'refused', reason: 'tonight is not available in this window' }
-      if (op === 'stop') return (await door.stop()) ? { kind: 'ran', note: 'tonight\'s batch stopped — the Mac may sleep again' } : { kind: 'refused', reason: 'no batch is running tonight' }
+      if (op === 'stop') return (await door.stop()) ? { kind: 'ran', note: 'tonight\'s batch stopped, so the Mac may sleep again' } : { kind: 'refused', reason: 'no batch is running tonight' }
       // M553. `sandboxed` runs every task in its own VM with prompts off; main refuses it by name while the setting is off.
-      if (op !== undefined && op !== '' && op !== 'sandboxed') return { kind: 'refused', reason: `tonight takes no argument, \`sandboxed\` or \`stop\` — not ${op}` }
+      if (op !== undefined && op !== '' && op !== 'sandboxed') return { kind: 'refused', reason: `tonight takes no argument, \`sandboxed\` or \`stop\`, not ${op}` }
       const { tasks, skipped } = tonightBatchFrom(workItemsRef.current ?? [], (id) => panelsRef.current.some((p) => p.rect.id === id && isChatPanel(p)), { sandboxed: op === 'sandboxed' })
-      if (tasks.length === 0) return { kind: 'refused', reason: skipped.length === 0 ? 'no open tasks on the board to run tonight' : `nothing to run tonight — ${skipped.slice(0, 3).map((s) => `${s.title}: ${s.reason}`).join('; ')}` }
+      if (tasks.length === 0) return { kind: 'refused', reason: skipped.length === 0 ? 'no open tasks on the board to run tonight' : `nothing to run tonight: ${skipped.slice(0, 3).map((s) => `${s.title}: ${s.reason}`).join('; ')}` }
       const r = await door.start({ tasks })
       if (r.kind === 'refused') return r
       return { kind: 'ran', note: tonightWords({ kind: 'started', tasks: tasks.length, checked: tasks.filter((t) => t.check !== undefined).length, skipped: skipped.length, sandboxed: tasks.filter((t) => t.sandboxed === true).length }) }
@@ -129,7 +129,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     beginTournamentField: (name) => {
       setInputMode({
         kind: 'text',
-        label: 'Tournament — which agents race? Two to six, such as claude:opus claude:sonnet codex',
+        label: 'Tournament. Which agents race? Two to six, such as claude:opus claude:sonnet codex',
         verb: 'start',
         initial: 'claude:opus claude:sonnet',
         submit: (value) => {
@@ -148,7 +148,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       if (door === undefined) return { kind: 'refused', reason: 'cloud lanes are not available in this window' }
       const panel = panelsRef.current.find((p) => p.rect.id === panelId)
       if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
-      if (!isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card — a cloud lane is sent from one` }
+      if (!isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card. A cloud lane is sent from one` }
       const item = (workItemsRef.current ?? []).find((i) => i.id === panel.work.itemId)
       if (item === undefined) return { kind: 'refused', reason: 'this card\'s task is no longer on the board' }
       const lane = item.panelId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === item.panelId)
@@ -170,9 +170,9 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       const door = window.canvas?.cloud
       if (door === undefined) return { kind: 'refused', reason: 'cloud lanes are not available in this window' }
       const panel = panelsRef.current.find((p) => p.rect.id === panelId)
-      if (panel === undefined || !isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card — a cloud lane is merged from one` }
+      if (panel === undefined || !isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card. A cloud lane is merged from one` }
       const lane = laneForItem(cloudLanesNow(), panel.work.itemId)
-      if (lane === undefined) return { kind: 'refused', reason: 'this task has no cloud lane — send it to a cloud agent first' }
+      if (lane === undefined) return { kind: 'refused', reason: 'this task has no cloud lane; send it to a cloud agent first' }
       if (lane.state !== 'ready') return { kind: 'refused', reason: `the cloud lane is ${cloudLaneWord(lane.state).word}${lane.reason === '' ? '' : ` — ${lane.reason}`}` }
       const r = await door.merge(lane.id)
       if (r.kind === 'merged') return { kind: 'ran', note: `#${r.pr} merged into ${lane.repo} as ${r.sha.slice(0, 7)}` }
@@ -409,7 +409,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
       const own = panel as { chat?: { cwd?: string }; spec?: { cwd?: string }; watch?: { cwd?: string }; source?: { path?: string } } | undefined
       const dir = cwd ?? own?.chat?.cwd ?? own?.watch?.cwd ?? (own?.source?.path?.replace(/\/[^/]*$/, '') || undefined) ?? own?.spec?.cwd
       if (dir === undefined || dir === '') {
-        setInputMode({ kind: 'text', label: 'Repository setup — the folder of the repository', verb: 'open', initial: '', submit: (value) => { if (value.trim() !== '') self.beginRepoSetup(value.trim()) } })
+        setInputMode({ kind: 'text', label: 'Repository setup: the folder of the repository', verb: 'open', initial: '', submit: (value) => { if (value.trim() !== '') self.beginRepoSetup(value.trim()) } })
         palette.openPalette()
         return
       }
@@ -447,7 +447,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
         setInputMode({ kind: 'text', label, feedback: true, verb: 'close', initial: '', submit: () => setInputMode(null) })
         palette.openPalette()
       }
-      if (t === undefined) { say('Select a file, a conversation or a terminal first — Open in editor opens what it works on'); return }
+      if (t === undefined) { say('Select a file, a conversation or a terminal first. Open in editor opens what it works on'); return }
       void window.canvas.editor.open(t).then((r) => {
         if (r.kind === 'refused') say(r.reason)
         else if (r.note !== undefined) say(r.note)
@@ -456,7 +456,7 @@ export function boardActions(ctx: ActionCtx): BoardActions {
     beginNewWorkItem: () => {
       setInputMode({
         kind: 'text',
-        label: 'Add a task to the board — its title',
+        label: 'Add a task to the board: its title',
         initial: '',
         submit: (value) => {
           const refusal = workItemRefusal(value)

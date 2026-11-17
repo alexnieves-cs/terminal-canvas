@@ -59,7 +59,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
       const openEdit = (initial: string, refused?: string): void => {
         setInputMode({
           kind: 'number',
-          label: refused ? `${label} (ms) — ${refused}` : `${label} (ms)…`,
+          label: refused ? `${label} (ms): ${refused}` : `${label} (ms)…`,
           initial,
           // Set ONLY on the refusal reopen. The ordinary label above is a
           // placeholder-worthy hint ("here's the current value"); this one is
@@ -123,7 +123,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
       const initial = typeof current?.value === 'string' ? current.value : ''
       setInputMode({
         kind: 'text',
-        label: 'Notes folder — a folder; `none` clears it',
+        label: 'Notes folder: a folder; `none` clears it',
         initial,
         submit: (value) => {
           // Blank is CANCEL, as on every other text line in this app; `none`
@@ -142,7 +142,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
     beginEditTextSetting: (id, label, current) => {
       setInputMode({
         kind: 'text',
-        label: `${label} — a folder; \`none\` clears it`,
+        label: `${label}: a folder; \`none\` clears it`,
         initial: current,
         submit: (value) => {
           // Blank is CANCEL, as on every other text line in this app; `none`
@@ -174,7 +174,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
         setInputMode({
           kind: 'secret',
           label: refused
-            ? `${label} token — ${refused}`
+            ? `${label} token: ${refused}`
             : (findService(service)?.help ?? `Paste the ${label} token…`),
           initial: '',
           ...(refused ? { feedback: true as const } : {}),
@@ -233,7 +233,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
         if (!res.ok) {
           setInputMode({
             kind: 'confirm',
-            label: `${label} verification failed — ${res.reason}`,
+            label: `${label} verification failed: ${res.reason}`,
             initial: '',
             feedback: true,
             submit: () => {}
@@ -292,7 +292,7 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
         const sentence = updateSentence(getUpdateState())
         if (result.kind === 'newer') {
           const url = result.url
-          setInputMode({ kind: 'confirm', label: `${sentence} — Open release`, initial: '', feedback: true, submit: () => { void window.canvas.links.open({ panelId: '', target: url }); setInputMode(null) } })
+          setInputMode({ kind: 'confirm', label: `${sentence}. Open release`, initial: '', feedback: true, submit: () => { void window.canvas.links.open({ panelId: '', target: url }); setInputMode(null) } })
         } else {
           setInputMode({ kind: 'confirm', label: sentence, initial: '', feedback: true, submit: () => setInputMode(null) })
         }

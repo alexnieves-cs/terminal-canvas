@@ -126,7 +126,7 @@ function RailPanelRowImpl({
           className="rail-row__start"
           disabled={merged}
           title={merged ? 'leave merged view to start' : `Start ${row.label}`}
-          aria-label={merged ? `Start ${row.label} — leave merged view to start` : `Start ${row.label}`}
+          aria-label={merged ? `Start ${row.label}. Leave the merged view to start it` : `Start ${row.label}`}
           {...shellControl(() => onStart(row.id))}
         >
           start

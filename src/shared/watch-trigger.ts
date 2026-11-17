@@ -86,7 +86,7 @@ export function triggerWord(trigger: WatchTrigger, label?: string): string {
 export function describeTrigger(trigger: WatchTrigger, label?: string): string {
   switch (trigger.kind) {
     case 'path': return `${triggerWord(trigger)} — ${trigger.path}`
-    case 'git-ref': return `${triggerWord(trigger)} — HEAD under ${trigger.root}`
+    case 'git-ref': return `${triggerWord(trigger)}: HEAD under ${trigger.root}`
     case 'timer': return triggerWord(trigger)
     case 'panel': return triggerWord(trigger, label)
   }

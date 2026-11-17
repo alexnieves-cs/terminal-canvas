@@ -41,7 +41,7 @@ function conflictMessage(
   // user to press Save again, which is exactly the write that would delete
   // the lines past the cap.
   if (result?.kind === 'text' && result.truncatedLines > 0) {
-    return `This file grew past the ${FILE_MAX_LINES.toLocaleString()} line viewing limit, so it can no longer be edited here — saving would drop the ${result.truncatedLines.toLocaleString()} lines this panel cannot show.`
+    return `This file grew past the ${FILE_MAX_LINES.toLocaleString()} line viewing limit, so it can no longer be edited here. Saving would drop the ${result.truncatedLines.toLocaleString()} lines this panel cannot show.`
   }
   switch (result?.kind) {
     case 'missing':
@@ -115,7 +115,7 @@ function renderProseWithLinks(
         className={`file-node__wikilink${target === null ? ' file-node__wikilink--unresolved' : ''}`}
         data-wikilink={link.name}
         data-wikilink-resolved={target === null ? 'false' : 'true'}
-        title={target === null ? `no note called ${link.name} — click to create it` : target}
+        title={target === null ? `no note called ${link.name}. Click to create it` : target}
         onMouseDown={(event) => { event.stopPropagation() }}
         onClick={(event) => {
           event.stopPropagation()
@@ -559,7 +559,7 @@ function FileNodeImpl({
     // what was typed, and saving (then closing the draft) would unmount it and
     // lose that typing with the refusal never seen.
     const flushed = mode === 'rich' && richRef.current !== null ? richRef.current.flush() : { kind: 'ok' as const, text: draft }
-    if (flushed.kind === 'refused') { setSaveState('failed'); setSaveError(`Not saved — ${flushed.reason}. The block is open as source; keep or change it, then save.`); return }
+    if (flushed.kind === 'refused') { setSaveState('failed'); setSaveError(`Not saved: ${flushed.reason}. The block is open as source; keep or change it, then save.`); return }
     const content = flushed.text
     // THE GATE, ENFORCED WHERE THE WRITE IS ISSUED. `model.editable` was
     // checked only where edit mode is ENTERED, which is a different claim: a
@@ -710,7 +710,7 @@ function FileNodeImpl({
         {/* M250. What an import could not carry — the contextual layer, never
             the rest layer, and absent (not "nothing dropped") when clean. */}
         {panel.source.imported !== undefined && panel.source.imported.dropped !== '' && (
-          <span className="file-node__dropped" data-file-node-dropped title={`${panel.source.imported.dropped} — from ${panel.source.imported.from}`}>{panel.source.imported.dropped}</span>
+          <span className="file-node__dropped" data-file-node-dropped title={`${panel.source.imported.dropped} from ${panel.source.imported.from}`}>{panel.source.imported.dropped}</span>
         )}
         {dirty && (
           // Visible unsaved-work marker. An editor that gives no sign of a
@@ -747,7 +747,7 @@ function FileNodeImpl({
           // a control that disappears is indistinguishable from a feature that
           // was never built, and a user who wants to edit a 40,000-line log is
           // precisely the person who will go looking for this button.
-          title={gate ?? (model.editable ? (editing ? 'Editing — save or discard to finish' : 'Edit this file') : model.editableNote)}
+          title={gate ?? (model.editable ? (editing ? 'Editing. Save or discard to finish' : 'Edit this file') : model.editableNote)}
           onMouseDown={(event) => {
             // shellControl's rule, which every control in this app obeys:
             // preventDefault keeps DOM focus off the button, stopPropagation
@@ -858,7 +858,7 @@ function FileNodeImpl({
               type="button"
               data-file-node-import-reviewed
               disabled={readOnly || onImportReviewed === undefined}
-              title={readOnly ? 'leave merged view to mark this read' : 'Mark this imported note as read — editing and agents can use it after this'}
+              title={readOnly ? 'leave merged view to mark this read' : 'Mark this imported note as read. Editing and agents can use it after this'}
               onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); if (!readOnly) onImportReviewed?.(id) }}
             >I&apos;ve read it</button>
           </div>
@@ -926,7 +926,7 @@ function FileNodeImpl({
                     type="button"
                     aria-pressed={mode === m}
                     data-file-node-mode={m}
-                    title={m === 'source' ? 'Edit the Markdown itself' : 'Edit block by block — anything the editor cannot represent stays as source'}
+                    title={m === 'source' ? 'Edit the Markdown itself' : 'Edit block by block. Anything the editor cannot represent stays as source'}
                     onMouseDown={(event) => {
                       event.stopPropagation()
                       event.preventDefault()

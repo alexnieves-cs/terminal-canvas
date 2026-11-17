@@ -67,7 +67,7 @@ export function buildIntegrationRows(
     if (meta.rejectedAt !== undefined) {
       // The sentence's fix and the verb beneath it are ONE door: `Reconnect…`
       // opens the Credentials scope, so the sentence does not name a second.
-      return { id: svc.id, label: svc.label, state: 'rejected', who: meta.label, word: 'token rejected', sentence: `token rejected — add a new ${svc.id} token`, verb: 'reconnect', rows, verifiedAt: meta.verifiedAt, addedAt: meta.addedAt, lastUsedAt }
+      return { id: svc.id, label: svc.label, state: 'rejected', who: meta.label, word: 'token rejected', sentence: `token rejected; add a new ${svc.id} token`, verb: 'reconnect', rows, verifiedAt: meta.verifiedAt, addedAt: meta.addedAt, lastUsedAt }
     }
     if (meta.verifiedAt === undefined) {
       return { id: svc.id, label: svc.label, state: 'stored', who: meta.label, word: 'not verified', sentence: 'token added, not verified yet', verb: 'verify', rows, addedAt: meta.addedAt, lastUsedAt }
@@ -90,7 +90,7 @@ export function buildIntegrationRows(
  */
 export function describeCall(service: string, row: AuditRowLike): string {
   const base = describeCallBase(service, row)
-  const fail = row.status !== 0 ? '' : ` — refused${row.reason === undefined || row.reason === 'refused' ? '' : ` (${row.reason})`}`
+  const fail = row.status !== 0 ? '' : `, refused${row.reason === undefined || row.reason === 'refused' ? '' : ` (${row.reason})`}`
   return `${row.status === 0 ? `tried to ${base}` : `${past(base)}`}${fail}`
 }
 

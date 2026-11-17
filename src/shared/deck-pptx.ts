@@ -105,8 +105,8 @@ const plural = (n: number, one: string, many: string): string => `${n} ${n === 1
 /** The sentence a person reads after an export: count, scrub count, and what was left out BY NAME. */
 export function deckExportSentence(result: DeckExportResult): string {
   switch (result.kind) {
-    case 'cancelled': return 'Export cancelled — nothing was written.'
-    case 'empty': return 'This deck has no slides yet — write a heading or a list, then export.'
+    case 'cancelled': return 'Export cancelled. Nothing was written.'
+    case 'empty': return 'This deck has no slides yet. Write a heading or a list, then export.'
     case 'failed': return `The deck could not be exported: ${result.reason}`
     case 'written': {
       const parts = [

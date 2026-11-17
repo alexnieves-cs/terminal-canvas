@@ -93,17 +93,17 @@ export function useHandoff(deps: HandoffDeps): void {
       const key = `${sourceId}:${targetId}`
       const setResult = (k: string, sentence: string): void => {
         deps.setResult(k, sentence)
-        if (k === key) for (const id of others) deps.setResult(`${id}:${targetId}`, `joined — ${sentence}`)
+        if (k === key) for (const id of others) deps.setResult(`${id}:${targetId}`, `joined: ${sentence}`)
       }
       const target = panelsRef.current.find((p) => p.rect.id === targetId)
-      if (!target) { setResult(key, 'skipped — target is gone'); return }
+      if (!target) { setResult(key, 'skipped: target is gone'); return }
       // M78. A chat target receives through the runtime's send, which spawns
       // an asleep chat itself — so a chat target never queues.
       if (isChatPanel(target)) {
         void window.canvas.agentSession.send(targetId, payload, []).then((answer) => {
-          const sentence = typeof answer === 'object' && answer !== null && 'refused' in answer ? `skipped — ${answer.refused}`
-            : answer === 'queued' ? `queued — the chat is still answering; ${lines} lines go after its turn`
-              : answer === 'no-session' ? 'skipped — the chat has no session' : `handed off ${lines} lines ${detail}`
+          const sentence = typeof answer === 'object' && answer !== null && 'refused' in answer ? `skipped: ${answer.refused}`
+            : answer === 'queued' ? `queued: the chat is still answering; ${lines} lines go after its turn`
+              : answer === 'no-session' ? 'skipped: the chat has no session' : `handed off ${lines} lines ${detail}`
           setResult(key, sentence)
           record(sentence.startsWith('skipped') ? { kind: 'skipped', panelId: targetId, sentence, at: Date.now() } : { kind: 'delivered', panelId: targetId, sentence, at: Date.now() })
         })
@@ -115,13 +115,13 @@ export function useHandoff(deps: HandoffDeps): void {
       // decides anything. No live guest is a named skip, never a silent one.
       if (isBrowserPanel(target)) {
         const reloaded = reloadBrowser(targetId)
-        const sentence = reloaded ? 'reloaded the page' : `skipped — ${REASON_NO_LIVE_PAGE}`
+        const sentence = reloaded ? 'reloaded the page' : `skipped: ${REASON_NO_LIVE_PAGE}`
         setResult(key, sentence)
         record(reloaded ? { kind: 'delivered', panelId: targetId, sentence, at: Date.now() } : { kind: 'skipped', panelId: targetId, sentence, at: Date.now() })
         return
       }
       if (!isTerminalPanel(target)) {
-        setResult(key, 'skipped — target is not a terminal or a chat')
+        setResult(key, 'skipped: target is not a terminal or a chat')
         return
       }
       const session = registry.get(targetId)
@@ -144,11 +144,11 @@ export function useHandoff(deps: HandoffDeps): void {
       const timer = setTimeout(() => {
         if (queue.get(targetId)?.at === at) {
           queue.delete(targetId)
-          setResult(`${sourceId}:${targetId}`, 'skipped — target did not start within 5 min')
+          setResult(`${sourceId}:${targetId}`, 'skipped: target did not start within 5 min')
         }
       }, HANDOFF_QUEUE_MS)
       queue.set(targetId, { sourceId, payload, lines, trigger, detail, at, timer })
-      setResult(key, 'queued — target starts when it comes on screen')
+      setResult(key, 'queued: target starts when it comes on screen')
     }
     /**
      * M78. The join: one arrival per source, the target started ONCE when
@@ -197,7 +197,7 @@ export function useHandoff(deps: HandoffDeps): void {
         // M78. The ONE table decides; a failed condition is recorded by name.
         if (!handoffFires(rule.trigger, event)) {
           if (event.kind === 'exit' && (rule.trigger === 'exit-ok' || rule.trigger === 'exit-fail')) {
-            const sentence = `skipped — exit ${event.code ?? 'by signal'} is not ${rule.trigger === 'exit-ok' ? 'exit 0' : 'a failing exit'}`
+            const sentence = `skipped: exit ${event.code ?? 'by signal'} is not ${rule.trigger === 'exit-ok' ? 'exit 0' : 'a failing exit'}`
             setResult(key, sentence)
             record({ kind: 'skipped', panelId: link.to, sentence, at: Date.now() })
           }
@@ -216,7 +216,7 @@ export function useHandoff(deps: HandoffDeps): void {
           // M96. A handoff is one agent's context reaching another: through the
           // outward gate, like every other reader of pane text.
           const text = outward(lastAssistantText(sourceId), `panel ${sourceId}`).text
-          if (text === '') { setResult(key, 'skipped — the chat has no answer to hand off'); continue }
+          if (text === '') { setResult(key, 'skipped: the chat has no answer to hand off'); continue }
           const lines = text.split('\n')
           dispatch(link.to, sourceId, trigger, wrap(railLabel(source, undefined), trigger, lines.slice(-HANDOFF_MAX_LINES)), Math.min(lines.length, HANDOFF_MAX_LINES), detail)
           continue
@@ -225,8 +225,8 @@ export function useHandoff(deps: HandoffDeps): void {
           const tail = rawTail.length === 0 ? rawTail : outward(rawTail.join('\n'), `panel ${sourceId}`).text.split('\n')
           if (tail.length === 0) {
             setResult(key, scrollbackEnabled()
-              ? 'skipped — no output recorded'
-              : 'skipped — no output recorded (scrollback is off)')
+              ? 'skipped: no output recorded'
+              : 'skipped: no output recorded (scrollback is off)')
             return
           }
           dispatch(link.to, sourceId, trigger, wrap(railLabel(source, undefined), trigger, tail), tail.length, detail)

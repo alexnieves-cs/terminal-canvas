@@ -2655,8 +2655,8 @@ const WS = [
     threw === null && door && door.group === 'canvas' && door.disabledReason === undefined && calls.length === 1 && calls[0][0] === 'checkForUpdates' &&
       notChecked && /not checked/.test(notChecked.title) && notChecked.scope === 'environment' &&
       newer && /3\.1\.0 is out/.test(newer.title) && /releases\/tag\/v3\.1\.0/.test(newer.subtitle) &&
-      current && /up to date — 3\.0\.0/.test(current.title) &&
-      failed && /could not check — GitHub answered 403/.test(failed.title),
+      current && /up to date, 3\.0\.0/.test(current.title) &&
+      failed && /could not check: GitHub answered 403/.test(failed.title),
     JSON.stringify({ threw, door: door && [door.group, door.disabledReason], calls, titles: [notChecked, newer, current, failed].map((r) => r && r.title) }))
 }
 
@@ -3009,7 +3009,7 @@ const WS = [
   if (deny) deny.run()
   const none = P.buildCommands(ctx({})).filter((r) => r.id.startsWith('team.'))
   ok('team.rows.1 a team ask is two rows — "Allow once — Ada\'s agent · api agent" and "Deny — …" with its whole line — each answering that ask; none without team asks',
-    allow && allow.title === "Allow once — Ada's agent · api agent" && allow.subtitle === 'Bash — npm test' && deny && deny.title.startsWith('Deny — ') &&
+    allow && allow.title === "Allow once: Ada's agent · api agent" && allow.subtitle === 'Bash — npm test' && deny && deny.title.startsWith('Deny: ') &&
       c.actions.calls.some((x) => x[0] === 'answerTeamAsk' && x[1] === 'w1' && x[2] === 'hosta1_q1' && x[3] === true) &&
       c.actions.calls.some((x) => x[0] === 'answerTeamAsk' && x[3] === false) && none.length === 0,
     JSON.stringify({ allow: allow && allow.title, deny: deny && deny.title, calls: c.actions.calls }))

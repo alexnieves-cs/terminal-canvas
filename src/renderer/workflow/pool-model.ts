@@ -49,9 +49,9 @@ export function reducePool(state: PoolBlockState, event: PoolEvent): PoolBlockSt
 
 /** The stopped row's sentence: `stopped — by hand`, `stopped — every item done`, `stopped — budget`. */
 export function poolStoppedWord(why: 'empty' | 'budget' | 'by-hand'): string {
-  if (why === 'empty') return 'done — every item finished'
-  if (why === 'budget') return 'stopped — the budget ceiling was crossed; raise agents.budgetUsd or agents.budgetWindowPercent to continue'
-  return 'stopped — by hand'
+  if (why === 'empty') return 'done, every item finished'
+  if (why === 'budget') return 'stopped: the budget ceiling was crossed; raise agents.budgetUsd or agents.budgetWindowPercent to continue'
+  return 'stopped by hand'
 }
 
 export const REASON_NO_POOL_LIVE = 'no pool is running'

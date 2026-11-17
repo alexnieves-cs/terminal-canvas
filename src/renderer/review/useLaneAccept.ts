@@ -32,7 +32,7 @@ export function useLaneAccept(task: ReviewTaskContext | undefined, readOnly: boo
   return {
     blocked: readOnly ? 'leave merged view to act on this review'
       : task.handoff.state === 'accepted' ? task.handoff.detail
-      : task.handoff.standing !== 'current' ? 'mark the current changes reviewed first — Accept merges what you read'
+      : task.handoff.standing !== 'current' ? 'mark the current changes reviewed first, because Accept merges what you read'
       : null,
     armed: plan === null ? null : laneMergePlanSentence(plan),
     busy,
@@ -42,7 +42,7 @@ export function useLaneAccept(task: ReviewTaskContext | undefined, readOnly: boo
       setOutcome(null)
       void window.canvas.lane.merge({ lane: task.lanePath, title: task.title, dryRun: true })
         .then((r) => { setBusy(false); if (r.kind === 'ready') setPlan(r); else setOutcome(laneMergeOutcome(r)) },
-          (e: unknown) => { setBusy(false); setOutcome(`could not read the lane — ${String(e)}`) })
+          (e: unknown) => { setBusy(false); setOutcome(`could not read the lane: ${String(e)}`) })
     },
     onConfirm: () => {
       if (plan === null) return
@@ -57,7 +57,7 @@ export function useLaneAccept(task: ReviewTaskContext | undefined, readOnly: boo
           if (r.kind === 'merged') task.onAccepted?.(task.itemId, r)
           onMerged()
           task.onRefresh()
-        }, (e: unknown) => { setBusy(false); setPlan(null); setOutcome(`nothing was merged — ${String(e)}`) })
+        }, (e: unknown) => { setBusy(false); setPlan(null); setOutcome(`nothing was merged: ${String(e)}`) })
     },
     onCancel: () => setPlan(null)
   }

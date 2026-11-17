@@ -146,7 +146,7 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
             ))}
           </ul>
           {props.skipped > 0 && (
-            <p className="pf__more" data-vault-skipped>{props.skipped} note{props.skipped === 1 ? '' : 's'} were not read — the notes folder is over the cap</p>
+            <p className="pf__more" data-vault-skipped>{props.skipped} note{props.skipped === 1 ? '' : 's'} were not read, because the notes folder is over the cap</p>
           )}
           {/* M150. TAGS, under the notes: one row per tag with its count. No
               section at all when the vault has none — absence, never a
@@ -166,7 +166,7 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
                 ))}
               </ul>
               {tagList.length > TAG_ROWS_MAX && (
-                <p className="pf__more" data-vault-tags-more>{tagList.length - TAG_ROWS_MAX} more tags — the pane lists the {TAG_ROWS_MAX} most used</p>
+                <p className="pf__more" data-vault-tags-more>{tagList.length - TAG_ROWS_MAX} more tags. The pane lists the {TAG_ROWS_MAX} most used</p>
               )}
             </>
           )}

@@ -149,7 +149,7 @@ export function ReopenNotice({ model, onStart, onGo }: {
                       start all
                     </button>
                   )}
-                <button type="button" className="rail-row__verb" data-reopen-leave title="Leave these stopped — this line goes away" {...shellControl(() => model.leave(l.panels.map((p) => p.id)))}>
+                <button type="button" className="rail-row__verb" data-reopen-leave title="Leave these stopped and dismiss this line" {...shellControl(() => model.leave(l.panels.map((p) => p.id)))}>
                   leave stopped
                 </button>
               </span>

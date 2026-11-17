@@ -71,7 +71,7 @@ export function capabilityOf(query: string, result: ToolInventoryResult | undefi
   // A cut inventory cannot say "lacks": the name may be among what was dropped.
   const o = inv.overflow
   const cut = o.skills + o.commands + o.agents + o.mcp + o.total
-  if (cut > 0) return { kind: 'unknown', why: `the toolbox was cut at its cap — ${cut} ${cut === 1 ? 'entry' : 'entries'} not read` }
+  if (cut > 0) return { kind: 'unknown', why: `the toolbox was cut at its cap, so ${cut} ${cut === 1 ? 'entry' : 'entries'} not read` }
   return { kind: 'lacks', pluginsUnread: inv.pluginsEnabled.length }
 }
 
@@ -94,7 +94,7 @@ export function capabilityWords(query: string, answer: CapabilityAnswer): string
     case 'has': return `has ${first(answer)}`
     case 'inactive': return `${first(answer)} — ${ACTIVE_WORDS[answer.matches[0].active.kind]}`
     case 'lacks': return answer.pluginsUnread === 0 ? `no ${q}` : `no ${q} — ${answer.pluginsUnread} plugin${answer.pluginsUnread === 1 ? '' : 's'} not read may provide it`
-    case 'unknown': return `unknown — ${answer.why}`
+    case 'unknown': return `unknown: ${answer.why}`
   }
 }
 

@@ -573,7 +573,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
         </div>
       ) : (
       <button type="button" className="command-pill__rest" data-pill-rest="" data-pill-state={note !== null && !expanded ? 'result' : rest.kind}
-        aria-expanded={expanded} aria-label={note !== null && !expanded ? note : rest.text === '' ? 'Canvas actions' : `Canvas actions — ${rest.text}`}
+        aria-expanded={expanded} aria-label={note !== null && !expanded ? note : rest.text === '' ? 'Canvas actions' : `Canvas actions: ${rest.text}`}
         {...shellControl(() => { if (expanded) collapse(true); else { focusOnOpenRef.current = false; setNote(null); setExpanded(true) } })}>
         {/* A completed send briefly REPLACES the pill's own content with its
             outcome, in place, rather than opening a second, detached surface

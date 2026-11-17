@@ -359,10 +359,10 @@ export function prRefusal(
 ): string | null {
   const sync = prRefusalSync(item, connected, mate)
   if (sync !== null) return sync
-  if (lane === undefined) return 'the lane could not be read — is the worktree still there?'
+  if (lane === undefined) return 'the lane could not be read. Is the worktree still there?'
   if (lane.kind === 'git-missing') return 'git was not found on the login PATH'
-  if (lane.kind === 'unreadable') return `the lane could not be read — ${lane.detail}`
-  if (lane.ahead === 0) return `nothing to open a PR for — the lane has no commits past ${lane.base}`
+  if (lane.kind === 'unreadable') return `the lane could not be read: ${lane.detail}`
+  if (lane.ahead === 0) return `nothing to open a PR for, because the lane has no commits past ${lane.base}`
   return null
 }
 
@@ -376,21 +376,21 @@ export function prRefusalSync(
   connected: boolean,
   mate: { name: string; services: readonly string[] } | undefined
 ): string | null {
-  if (item.source !== 'github' || item.key === undefined || repoOfKey(item.key) === null) return `a PR needs a GitHub repository — this item is ${item.source}`
-  if (item.worktreeId === undefined || item.panelId === undefined) return 'no lane yet — dispatch the item first'
-  if (!connected) return 'not connected — add a github token in ⌘K, then Credentials'
-  if (mate === undefined) return 'the agent profile this item was dispatched to is gone — open Agent profiles'
-  if (!mate.services.includes('github')) return `${mate.name} may not spend github — grant it in Agent profiles`
+  if (item.source !== 'github' || item.key === undefined || repoOfKey(item.key) === null) return `a PR needs a GitHub repository, and this item is ${item.source}`
+  if (item.worktreeId === undefined || item.panelId === undefined) return 'no lane yet; dispatch the item first'
+  if (!connected) return 'not connected; add a github token in ⌘K, then Credentials'
+  if (mate === undefined) return 'the agent profile this item was dispatched to is gone; open Agent profiles'
+  if (!mate.services.includes('github')) return `${mate.name} may not spend github; grant it in Agent profiles`
   return null
 }
 
 /** M114. Why a teammate cannot be dispatched to, before main is asked; null when it can. The repository arm is main's (it reads the origin). */
 export function teammateRefusal(mate: { name: string; places: readonly string[] }): string | null {
-  return mate.places.length === 0 ? `${mate.name} has no places — add a folder in Agent profiles` : null
+  return mate.places.length === 0 ? `${mate.name} has no places; add a folder in Agent profiles` : null
 }
 
 /** The typed door's one refusal. */
 export function workItemRefusal(title: string): string | null {
   // M315. In the person's words: "work item" is this module's name for a task.
-  return title.trim() === '' ? 'give the task a title — say in a line what needs doing' : null
+  return title.trim() === '' ? 'give the task a title. Say in a line what needs doing' : null
 }

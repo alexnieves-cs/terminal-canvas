@@ -49,13 +49,13 @@ export function browserHost(url: string): string {
 export function browserRefusal(url: string): string {
   const scheme = (/^\s*([a-z][a-z0-9+.-]*):/i.exec(url)?.[1] ?? '').toLowerCase()
   switch (scheme) {
-    case 'file': return 'a file: page is your own disk — this pane reads http(s) pages only'
-    case 'data': return 'a data: page has no host to name — this pane reads http(s) pages only'
-    case 'about': return `an about: page (${url.trim()}) is the browser's own, not a page — this pane reads http(s) pages only`
-    case 'chrome': return 'a chrome: page is the browser\'s own, not a page — this pane reads http(s) pages only'
-    case 'javascript': return 'a javascript: url runs script rather than opening a page — refused'
-    case '': return url.trim() === '' ? 'no page is open' : `${url.trim()} is not a URL — this pane reads http(s) pages only`
-    default: return `a ${scheme}: page is not one this pane opens — http(s) pages only`
+    case 'file': return 'a file: page is your own disk, and this pane reads http(s) pages only'
+    case 'data': return 'a data: page has no host to name, and this pane reads http(s) pages only'
+    case 'about': return `an about: page (${url.trim()}) is the browser's own, not a page, and this pane reads http(s) pages only`
+    case 'chrome': return 'a chrome: page is the browser\'s own, not a page, and this pane reads http(s) pages only'
+    case 'javascript': return 'a javascript: url runs script rather than opening a page, so it is refused'
+    case '': return url.trim() === '' ? 'no page is open' : `${url.trim()} is not a URL, and this pane reads http(s) pages only`
+    default: return `a ${scheme}: page is not one this pane opens. It reads http(s) pages only`
   }
 }
 

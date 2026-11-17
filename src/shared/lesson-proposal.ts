@@ -180,13 +180,13 @@ const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim()
  * the reason it is not one.
  */
 export function parseProposalReply(raw: unknown): { kind: 'draft'; draft: RuleDraft } | { kind: 'refused'; reason: string } {
-  if (typeof raw !== 'string' || raw.trim() === '') return { kind: 'refused', reason: 'the agent answered nothing — try again' }
+  if (typeof raw !== 'string' || raw.trim() === '') return { kind: 'refused', reason: 'the agent answered nothing; try again' }
   let envelope: unknown
   try { envelope = JSON.parse(raw) } catch { envelope = undefined }
   if (!isRecord(envelope) || envelope.type !== 'result') return { kind: 'refused', reason: 'the agent\'s answer was not a result' }
   if (envelope.is_error === true) return { kind: 'refused', reason: `the agent could not answer: ${typeof envelope.result === 'string' ? envelope.result.slice(0, 200) : 'an error with no message'}` }
   const o = envelope.structured_output
-  if (!isRecord(o)) return { kind: 'refused', reason: 'the agent answered without a rule — try again' }
+  if (!isRecord(o)) return { kind: 'refused', reason: 'the agent answered without a rule; try again' }
   return checkDraft(o)
 }
 
@@ -197,12 +197,12 @@ export function parseProposalReply(raw: unknown): { kind: 'draft'; draft: RuleDr
  * draft and the press that writes it into CLAUDE.md.
  */
 export function checkDraft(o: Record<string, unknown>): { kind: 'draft'; draft: RuleDraft } | { kind: 'refused'; reason: string } {
-  if ([o.text, o.name, o.description, o.why].some((v) => typeof v === 'string' && hasInvisible(v))) return { kind: 'refused', reason: 'the agent\'s rule holds characters a person cannot see — it was not kept' }
+  if ([o.text, o.name, o.description, o.why].some((v) => typeof v === 'string' && hasInvisible(v))) return { kind: 'refused', reason: 'the agent\'s rule holds characters a person cannot see, so it was not kept' }
   const why = typeof o.why === 'string' ? oneLine(o.why).slice(0, PROPOSAL_WHY_MAX) : ''
   if (o.kind === 'claude-md') {
     const text = typeof o.text === 'string' ? oneLine(o.text).replace(/^[-*•]\s+/, '') : ''
     if (text === '') return { kind: 'refused', reason: 'the agent\'s rule is empty' }
-    if (text.length > PROPOSAL_LINE_MAX) return { kind: 'refused', reason: `the agent's rule is ${text.length} characters — a CLAUDE.md line is at most ${PROPOSAL_LINE_MAX}` }
+    if (text.length > PROPOSAL_LINE_MAX) return { kind: 'refused', reason: `the agent's rule is ${text.length} characters, and a CLAUDE.md line is at most ${PROPOSAL_LINE_MAX}` }
     // A line that would open or close the app's managed block (M576) is not a
     // rule, and neither is one that would change the file's structure: an
     // HTML comment can hide the block's close marker, a heading or a quote
@@ -218,7 +218,7 @@ export function checkDraft(o: Record<string, unknown>): { kind: 'draft'; draft: 
     if (description === '') return { kind: 'refused', reason: 'the agent\'s skill has no description, so nothing would ever load it' }
     const text = typeof o.text === 'string' ? o.text.trim() : ''
     if (text === '') return { kind: 'refused', reason: 'the agent\'s skill is empty' }
-    if (text.length > PROPOSAL_SKILL_MAX) return { kind: 'refused', reason: `the agent's skill is ${text.length} characters — at most ${PROPOSAL_SKILL_MAX}` }
+    if (text.length > PROPOSAL_SKILL_MAX) return { kind: 'refused', reason: `the agent's skill is ${text.length} characters, but the most is ${PROPOSAL_SKILL_MAX}` }
     return { kind: 'draft', draft: { kind: 'skill', name, description, text, why } }
   }
   return { kind: 'refused', reason: 'the agent\'s answer is neither a CLAUDE.md line nor a skill' }

@@ -47,7 +47,7 @@ export function listAnswered(exitCode: number | null, stderr: string): boolean {
 
 export function hostBanner(pausedCount: number): string {
   const noun = pausedCount === 1 ? 'session is' : 'sessions are'
-  return `Session host stopped responding. tmux server on this Mac didn't answer for 20s. ${pausedCount} ${noun} paused, not lost — their output is buffered.`
+  return `Session host stopped responding. tmux server on this Mac didn't answer for 20s. ${pausedCount} ${noun} paused, not lost. Their output is buffered.`
 }
 
 export function retryLabel(retryAt: number | null, now: number): string | null {

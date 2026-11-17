@@ -49,11 +49,11 @@ export function createDeckSession(initial: DeckView, io: DeckIO) {
   }
   const write = async (disk: TextDisk, text: string): Promise<boolean> => {
     const result = await io.write(text, disk.mtimeMs)
-    if (result.kind !== 'written') { publish({ disk: await io.read() }); return error(result.kind === 'stale' ? `${io.name} changed on disk — reload before saving` : result.detail) }
+    if (result.kind !== 'written') { publish({ disk: await io.read() }); return error(result.kind === 'stale' ? `${io.name} changed on disk; reload before saving` : result.detail) }
     publish({ disk: { ...disk, content: text, mtimeMs: result.mtimeMs, bytes: result.bytes } })
     return true
   }
-  const unreadable = (): false => error(`${io.name} is missing, unreadable or too long to edit whole — refresh first`)
+  const unreadable = (): false => error(`${io.name} is missing, unreadable or too long to edit whole; refresh first`)
   /** A door's proposal against the file as it is now: a new draft, or none if it changes nothing. */
   const stage = (disk: TextDisk, proposal: string, by?: string): boolean => {
     adopt(withDraft(slideDraft(disk.content, proposal, by)))
@@ -73,7 +73,7 @@ export function createDeckSession(initial: DeckView, io: DeckIO) {
     save: (text: string, base: string) => guarded(async () => {
       const disk = await readUsable()
       if (!disk) return unreadable()
-      if (disk.content !== base) return error(`${io.name} changed on disk while you were editing — copy your text, reload, and save again`)
+      if (disk.content !== base) return error(`${io.name} changed on disk while you were editing. Copy your text, reload, and save again`)
       return write(disk, text)
     }),
     /** Replace slide `n` (one-based). */
@@ -82,7 +82,7 @@ export function createDeckSession(initial: DeckView, io: DeckIO) {
       if (!disk) return unreadable()
       const from = working(disk, origin)
       const doc = splitDeck(from)
-      if (!Number.isSafeInteger(n) || n < 1 || n > doc.slides.length) return error(`slide ${n} is not in this deck — it has ${doc.slides.length}`)
+      if (!Number.isSafeInteger(n) || n < 1 || n > doc.slides.length) return error(`slide ${n} is not in this deck, which has ${doc.slides.length}`)
       const sources = doc.slides.map((s) => s.source)
       const old = sources[n - 1]
       // Keep the separator on its own line: a replacement without a trailing

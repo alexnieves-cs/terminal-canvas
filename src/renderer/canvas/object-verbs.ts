@@ -71,10 +71,10 @@ export function panelVerbs(f: PanelVerbFacts): PanelVerb[] {
   const rows: PanelVerb[] = []
   const t = f.task
   if (t !== undefined && t.kind === 'one') {
-    if (f.taskFocus) rows.push({ id: 'task.focus', section: 'task', label: 'Focus this task', title: 'Open this task beside its conversation — changes, checks, review and preview in one place', attr: ['data-panel-menu-task-verb', 'focus'] })
-    rows.push({ id: 'task.show', section: 'task', label: 'Show this task', title: 'Frame this task — nothing moves', attr: ['data-panel-menu-task-verb', 'show'] })
-    rows.push({ id: 'task.related', section: 'task', label: t.related ? 'Stop showing related' : 'Show related', title: t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves', attr: ['data-panel-menu-task-verb', 'related'] })
-    rows.push({ id: 'task.arrange', section: 'task', label: 'Arrange this task', title: f.readOnly ? READ_ONLY : 'Compact this task\'s panels in reading order, clear of everything else — one undo', ...(f.readOnly ? { disabled: READ_ONLY } : {}), attr: ['data-panel-menu-task-verb', 'arrange'] })
+    if (f.taskFocus) rows.push({ id: 'task.focus', section: 'task', label: 'Focus this task', title: 'Open this task beside its conversation, with changes, checks, review and preview in one place', attr: ['data-panel-menu-task-verb', 'focus'] })
+    rows.push({ id: 'task.show', section: 'task', label: 'Show this task', title: 'Frame this task. Nothing moves', attr: ['data-panel-menu-task-verb', 'show'] })
+    rows.push({ id: 'task.related', section: 'task', label: t.related ? 'Stop showing related' : 'Show related', title: t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest. Nothing moves', attr: ['data-panel-menu-task-verb', 'related'] })
+    rows.push({ id: 'task.arrange', section: 'task', label: 'Arrange this task', title: f.readOnly ? READ_ONLY : 'Compact this task\'s panels in reading order, clear of everything else. One undo puts it back', ...(f.readOnly ? { disabled: READ_ONLY } : {}), attr: ['data-panel-menu-task-verb', 'arrange'] })
     // M454. The task's way into the room: the terrace centre, this panel picked first.
     rows.push({ id: 'task.world', section: 'task', label: 'View in World', title: 'Open the World on this task, with this panel picked', attr: ['data-panel-menu-world', 'task'] })
   }
@@ -201,7 +201,7 @@ export function selectionVerbs(f: SelectionFacts): SelectionVerb[] {
     { key: 'arrange', label: 'Arrange task', ...(single ? {} : { reason: 'select one panel of a task' }) },
     { key: 'related', label: 'Related', ...(single ? {} : { reason: 'select one panel of a task' }) },
     { key: 'group', label: 'Group', ...(n >= 2 ? {} : { reason: REASON_GROUP_NEEDS_TWO }) },
-    { key: 'close', label: 'Close', ...(single ? {} : { reason: 'select one panel to close — the pill never closes several at once' }) }
+    { key: 'close', label: 'Close', ...(single ? {} : { reason: 'select one panel to close. The pill never closes several at once' }) }
   ]
 }
 

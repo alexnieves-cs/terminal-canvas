@@ -57,12 +57,12 @@ export function taskChain(input: {
   const checks = of('watcher')
   return [
     input.item.source === 'typed'
-      ? { step: 'issue', label: 'typed task — no issue', panelIds: [], present: false }
+      ? { step: 'issue', label: 'typed task, no issue', panelIds: [], present: false }
       : { step: 'issue', label: input.item.key ?? 'issue', panelIds: [], ...(input.item.url === undefined ? {} : { url: input.item.url }), present: input.item.url !== undefined },
-    { step: 'conversation', label: chat.length > 0 ? 'conversation' : 'no conversation — start work', panelIds: chat, present: chat.length > 0 },
+    { step: 'conversation', label: chat.length > 0 ? 'conversation' : 'no conversation; start work', panelIds: chat, present: chat.length > 0 },
     { step: 'preview', label: previews.length > 0 ? `preview${previews.length > 1 ? ` ×${previews.length}` : ''}` : 'no preview', panelIds: previews, present: previews.length > 0 },
     { step: 'review', label: reviews.length > 0 ? 'review' : 'not reviewed on the canvas', panelIds: reviews, present: reviews.length > 0 },
-    { step: 'checks', label: checks.length > 0 ? `checks${checks.length > 1 ? ` ×${checks.length}` : ''}` : 'no checks — run them from the review', panelIds: checks, present: checks.length > 0 },
+    { step: 'checks', label: checks.length > 0 ? `checks${checks.length > 1 ? ` ×${checks.length}` : ''}` : 'no checks; run them from the review', panelIds: checks, present: checks.length > 0 },
     input.item.pr !== undefined
       ? { step: 'pr', label: `PR #${input.item.pr.number}`, panelIds: [], url: input.item.pr.url, present: true }
       : { step: 'pr', label: input.item.source === 'github' ? 'no pull request yet' : 'no pull request (not a GitHub task)', panelIds: [], present: false }
@@ -112,7 +112,7 @@ export function buildInspectorContext(input: InspectorContextInput): InspectorCo
     // M367. A held agent is answered by a cap, never by a reply.
     nextAction = 'allow it more from Needs you, or raise its cap on the Work tab'
   } else if (agentState === 'wants-you') {
-    nextAction = 'the agent is waiting — open it and answer'
+    nextAction = 'the agent is waiting; open it and answer'
   } else if (handoff !== undefined && handoff.actionLabel.trim() !== '') {
     nextAction = handoff.actionLabel
   } else if (isWorkPanel(panel as Panel) && workItem !== undefined) {

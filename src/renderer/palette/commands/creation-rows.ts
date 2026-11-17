@@ -28,6 +28,6 @@ export function creationCommands(ctx: { actions: Pick<PaletteActions, 'createObj
 
 /** M409. What tells a creation row from its near-twin, when search shows both. */
 const REST_NOTE: Readonly<Record<string, string>> = {
-  note: 'at once, named by the time — New note… asks for the filename',
+  note: 'at once, named by the time. New note… asks for the filename',
   terminal: 'a shell in the selected panel\'s folder, else home'
 }

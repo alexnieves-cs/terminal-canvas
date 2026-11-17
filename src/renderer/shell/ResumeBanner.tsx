@@ -49,7 +49,7 @@ export function ResumeBanner({
     const detail = [
       summary.purpose,
       summary.lastOutcome === undefined ? undefined : `Last outcome: ${summary.lastOutcome}`,
-      summary.blocker === undefined ? undefined : `open blocker — ${summary.blocker}`,
+      summary.blocker === undefined ? undefined : `open blocker: ${summary.blocker}`,
       summary.nextAction
     ].filter((line): line is string => line !== undefined).join('\n')
     return (
@@ -57,7 +57,7 @@ export function ResumeBanner({
         <span className="resume-banner__kicker">Resume</span>
         <span className="resume-strip__title">{summary.title}</span>
         {summary.blocker !== undefined
-          ? <span className="resume-strip__line resume-strip__line--blocker" data-resume-blocker>open blocker — {summary.blocker}</span>
+          ? <span className="resume-strip__line resume-strip__line--blocker" data-resume-blocker>open blocker: {summary.blocker}</span>
           : <span className="resume-strip__line" data-resume-next>{summary.nextAction}</span>}
         {verbs}
       </div>
@@ -75,7 +75,7 @@ export function ResumeBanner({
           <p className="resume-banner__line" data-resume-outcome>Last outcome: {summary.lastOutcome}</p>
         )}
         {summary.blocker !== undefined && (
-          <p className="resume-banner__line" data-resume-blocker>open blocker — {summary.blocker}</p>
+          <p className="resume-banner__line" data-resume-blocker>open blocker: {summary.blocker}</p>
         )}
         <p className="resume-banner__next" data-resume-next>{summary.nextAction}</p>
       </div>

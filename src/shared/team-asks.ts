@@ -35,7 +35,7 @@ export function askDecision(need: 1 | 2, answers: Readonly<Record<string, AskAns
 export function askProgressWords(need: 1 | 2, answers: Readonly<Record<string, AskAnswer>>): string {
   const allows = Object.values(answers).filter((a) => a === 'allow').length
   if (need === 1) return allows === 0 ? 'waiting for one person' : 'allowed'
-  return `${Math.min(allows, 2)} of 2 allowed — spend past the team's line needs two people`
+  return `${Math.min(allows, 2)} of 2 allowed. Spend past the team's line needs two people`
 }
 
 /**
@@ -125,7 +125,7 @@ export function teamAskWords(row: TeamAskRow): { who: string; action: string; pr
   const owner = row.ownerName ?? 'A teammate'
   const progress = row.need === 1
     ? 'one person\'s allow decides it'
-    : `${Math.min(row.allows, 2)} of 2 allowed — spend past the team's line needs two people`
+    : `${Math.min(row.allows, 2)} of 2 allowed. Spend past the team's line needs two people`
   return {
     who: `${owner}'s agent${row.panelTitle === '' ? '' : ` · ${row.panelTitle}`}`,
     action: `${row.tool} — ${row.summary}`,

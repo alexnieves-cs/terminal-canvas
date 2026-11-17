@@ -125,7 +125,7 @@ export function finishRun(run: PersistedRun, at: number, costUsd: number | undef
  * panels that are not. A run with one busy panel stays open.
  */
 export function sealAbandoned(runs: readonly PersistedRun[], at: number, idle?: (panelId: string) => boolean): PersistedRun[] {
-  const reason = idle === undefined ? ABANDONED_BY_RELAUNCH : 'abandoned — its panels were idle'
+  const reason = idle === undefined ? ABANDONED_BY_RELAUNCH : 'abandoned: its panels were idle'
   return runs.map((run) => {
     if (run.endedAt !== undefined) return run
     if (idle !== undefined && !run.panelIds.every((id) => idle(id))) return run
@@ -138,7 +138,7 @@ export function sealAbandoned(runs: readonly PersistedRun[], at: number, idle?: 
 }
 
 /** M316. The outcome `sealAbandoned` writes on a step the relaunch cut off — the recovery surface keys on it. */
-export const ABANDONED_BY_RELAUNCH = 'abandoned — the app relaunched'
+export const ABANDONED_BY_RELAUNCH = 'abandoned: the app relaunched'
 
 /**
  * M316. A run the relaunch cut off, told as a job: which steps finished,
@@ -163,7 +163,7 @@ export function interruptedRunAccount(run: PersistedRun, labelOf: (panelId: stri
   const touched = new Set(run.entries.map((e) => e.panelId))
   const notStarted = run.panelIds.filter((id) => !touched.has(id))
   const names = midStep.map(labelOf)
-  const line = `${run.name}: ${finished.length} of ${run.panelIds.length} step${run.panelIds.length === 1 ? '' : 's'} finished — ${names.length === 1 ? names[0] : `${names.length} steps`} ${names.length === 1 ? 'was' : 'were'} mid-step when the app closed${notStarted.length > 0 ? `, ${notStarted.length} not started` : ''}`
+  const line = `${run.name}: ${finished.length} of ${run.panelIds.length} step${run.panelIds.length === 1 ? '' : 's'} finished: ${names.length === 1 ? names[0] : `${names.length} steps`} ${names.length === 1 ? 'was' : 'were'} mid-step when the app closed${notStarted.length > 0 ? `, ${notStarted.length} not started` : ''}`
   return { id: run.id, name: run.name, finished, midStep, notStarted, line }
 }
 

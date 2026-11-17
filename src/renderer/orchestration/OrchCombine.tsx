@@ -247,7 +247,7 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
     if (onSend === undefined || targetChat === undefined || brief === '' || target === null) return
     setSendNote('Sending…')
     void onSend(targetChat, brief).then((why) => {
-      if (why !== null) { setSendNote(`Not sent — ${why}`); return }
+      if (why !== null) { setSendNote(`Not sent: ${why}`); return }
       setSendNote(`Sent to ${labelOf(target)}. When it has answered, press “Combine and check again”.`)
       setBriefOpen(false)
       void recordOrchEvent({
@@ -257,7 +257,7 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
         ...(targetTask === undefined ? {} : { itemId: targetTask.id }),
         ...(attribution === null ? {} : { paths: attribution.paths })
       })
-    }, (e: unknown) => setSendNote(`Not sent — ${e instanceof Error ? e.message : String(e)}`))
+    }, (e: unknown) => setSendNote(`Not sent: ${e instanceof Error ? e.message : String(e)}`))
   }
 
   // ── The gate, and integrate ────────────────────────────────────────────────
@@ -324,12 +324,12 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
 
           {contended.length > 0 && (
             <div className="orch__combine-block" data-orch-combine-contention={contended.length}>
-              <span className="orch__label orch__label--warn">Shared checkout — contention now</span>
+              <span className="orch__label orch__label--warn">Shared checkout, contended now</span>
               {contended.map((s) => {
                 const r = s.result as Extract<typeof s.result, { kind: 'shared' }>
                 return (
                   <p key={s.path} className="orch__review-words" data-tone="needs-you">
-                    {r.panelCount} sessions are writing <code>{displayPath(s.path).short}</code> — one checkout, so each sees the other's half-finished edits and no diff can be attributed. Give each its own lane (Start work makes one) before combining; {r.files.length} {r.files.length === 1 ? 'file is' : 'files are'} changed there.
+                    {r.panelCount} sessions are writing <code>{displayPath(s.path).short}</code>. It is one checkout, so each sees the other's half-finished edits and no diff can be attributed. Give each its own lane (Start work makes one) before combining; {r.files.length} {r.files.length === 1 ? 'file is' : 'files are'} changed there.
                   </p>
                 )
               })}
@@ -338,7 +338,7 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
 
           {plan.overlaps.length > 0 && (
             <div className="orch__combine-block" data-orch-combine-overlaps={plan.overlaps.length}>
-              <span className="orch__label">Changed in more than one lane — separate checkouts, they meet at integration</span>
+              <span className="orch__label">Changed in more than one lane. These are separate checkouts, and they meet at integration</span>
               <ul className="orch__review-files" aria-label="Overlapping files">
                 {plan.overlaps.map((o) => (
                   <li key={o.path} data-orch-combine-overlap={o.path}>
@@ -362,7 +362,7 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
 
           {plan.order.length > 0 && (
             <div className="orch__combine-block" data-orch-combine-order={plan.order.length}>
-              <span className="orch__label">Proposed integration order{plan.cycle.length > 0 ? ' — the hand-off links form a loop' : ''}</span>
+              <span className="orch__label">Proposed integration order{plan.cycle.length > 0 ? ': the hand-off links form a loop' : ''}</span>
               {laneEdges.length > 0 && (
                 <p className="orch__caption" data-orch-combine-deps={laneEdges.length}>
                   Depends on: {laneEdges.map((e) => `${labelOf(e.to)} waits on ${labelOf(e.from)}`).join(' · ')}
@@ -387,7 +387,7 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
               <span className="orch__label">The combined result</span>
               <div className="orch__combine-verbs">
                 <button type="button" className="orch__mini" data-orch-combine-go disabled={busy}
-                  title="Apply every lane, in the order above, into one scratch checkout beside the lanes — no lane and no branch is touched"
+                  title="Apply every lane, in the order above, into one scratch checkout beside the lanes. No lane and no branch is touched"
                   {...shellControl(() => combine())}>{busy ? 'Combining…' : run === null ? 'Combine in a scratch checkout' : 'Combine again'}</button>
                 {run !== null && checkDraft.trim() !== '' && (
                   <button type="button" className="orch__mini" data-orch-combine-recheck disabled={busy || check?.status === 'running'}
@@ -415,8 +415,8 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
                     <>
                       <p className="orch__review-words" data-tone={checkPassed && !stale ? 'idle' : 'needs-you'} data-orch-combine-check-word={check.status}>
                         {checkPassed
-                          ? `Passed on the combined tree (${combined.applied.length} lanes on ${combined.base.slice(0, 7)})${stale ? ' — but a lane has changed since, so this no longer speaks for them' : ' — these lanes are safe to integrate in this order'}.`
-                          : `Failed on the combined tree${check.exitCode === null || check.exitCode === undefined ? '' : ` (exit ${check.exitCode})`} — the lanes may each pass alone; this failure is what they do together.`}
+                          ? `Passed on the combined tree (${combined.applied.length} lanes on ${combined.base.slice(0, 7)})${stale ? ', but a lane has changed since, so this no longer speaks for them' : ', so these lanes are safe to integrate in this order'}.`
+                          : `Failed on the combined tree${check.exitCode === null || check.exitCode === undefined ? '' : ` (exit ${check.exitCode})`}. The lanes may each pass alone; this failure is what they do together.`}
                       </p>
                       <CheckRunOutput outputId={check.outputId} subject="the combined tree" fallback="This run has no output record." />
                     </>
@@ -458,7 +458,7 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
                     </select>
                   </label>
                   {targetChat === undefined
-                    ? <span className="orch__caption" data-orch-combine-send-none>{labelOf(target ?? '')} has no conversation here to send to — open its lane and fix it there.</span>
+                    ? <span className="orch__caption" data-orch-combine-send-none>{labelOf(target ?? '')} has no conversation here to send to. Open its lane and fix it there.</span>
                     : <button type="button" className="orch__mini" data-orch-combine-brief={briefOpen ? 'open' : 'closed'} {...shellControl(() => setBriefOpen(!briefOpen))}>{briefOpen ? 'Hide the message' : 'Show the message…'}</button>}
                 </div>
               )}
@@ -495,7 +495,7 @@ export function OrchCombine({ root, edges, refresh, onOpenPath, workItems = [], 
 
           {receipts.length > 0 && (
             <div className="orch__combine-block" data-orch-combine-receipts={receipts.length}>
-              <span className="orch__label">Receipts — what landed, and what witnessed it</span>
+              <span className="orch__label">Receipts: what landed, and what witnessed it</span>
               <ul className="orch__review-files">
                 {receipts.slice(0, 8).map((r) => (
                   <li key={r.id}>
@@ -540,7 +540,7 @@ function ReceiptCard({ receipt, onClose }: { receipt: IntegrationReceipt; onClos
       {witness !== undefined && (
         <p className="orch__caption" data-orch-combine-receipt-witness>
           Witnessed by <code>{witness.command}</code> — {witness.exitCode === 0 ? 'passed' : `exit ${witness.exitCode ?? '?'}`} on {witness.where} ({receipt.base.slice(0, 7)} + {receipt.lanes.length} lanes, tree {receipt.tree.checked.slice(0, 7)}).{' '}
-          {receipt.tree.identical ? `The landed tree is the same tree (${receipt.tree.landed.slice(0, 7)}).` : `The landed tree is ${receipt.tree.landed.slice(0, 7) || 'unknown'} — not the checked one; run the checks on ${receipt.into}.`}
+          {receipt.tree.identical ? `The landed tree is the same tree (${receipt.tree.landed.slice(0, 7)}).` : `The landed tree is ${receipt.tree.landed.slice(0, 7) || 'unknown'}, not the checked one, so run the checks on ${receipt.into}.`}
           {' '}<button type="button" className="orch__mini" {...shellControl(() => setShowOutput(!showOutput))}>{showOutput ? 'Hide output' : 'Its output'}</button>
         </p>
       )}

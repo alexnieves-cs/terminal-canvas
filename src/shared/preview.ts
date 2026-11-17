@@ -159,21 +159,21 @@ export function discoveryOf(input: {
   const project = input.project
   const named = project === undefined ? input.where : `${project} (${input.where})`
   const note = kind === 'not-asked'
-    ? `nothing of ${named} is running, so there was nothing to ask — select the terminal your project runs in${scripts.length > 0 ? `, or start ${scripts.map((s) => s.name).join(' or ')}` : ''}`
+    ? `nothing of ${named} is running, so there was nothing to ask. Select the terminal your project runs in${scripts.length > 0 ? `, or start ${scripts.map((s) => s.name).join(' or ')}` : ''}`
     : kind === 'one'
-    ? `${named} is listening on ${input.ports[0]?.port} — open it to see the page`
+    ? `${named} is listening on ${input.ports[0]?.port}; open it to see the page`
     : kind === 'many'
-      ? `${named} has ${candidates.length} processes listening — pick the one you meant`
+      ? `${named} has ${candidates.length} processes listening; pick the one you meant`
       : scripts.length > 0
-        ? `nothing of ${named} is listening yet — ${scripts.map((s) => s.name).join(' or ')} would start it`
-        : `nothing of ${named} is listening, and its package.json names no dev script — open the address by hand`
+        ? `nothing of ${named} is listening yet, but ${scripts.map((s) => s.name).join(' or ')} would start it`
+        : `nothing of ${named} is listening, and its package.json names no dev script, so open the address by hand`
   return { kind, ...(project === undefined ? {} : { project }), candidates, scripts, note }
 }
 
 /** Why a capture cannot be taken, in a sentence that names the next useful step. */
 export function captureRefusal(reason: 'no-guest' | 'not-web' | 'empty', detail?: string): string {
-  if (reason === 'no-guest') return 'no page is open in this pane — open one, then capture it'
-  if (reason === 'empty') return 'the page answered no pixels — it may still be loading; try again once it has painted'
+  if (reason === 'no-guest') return 'no page is open in this pane; open one, then capture it'
+  if (reason === 'empty') return 'the page answered no pixels. It may still be loading; try again once it has painted'
   return detail === undefined ? 'only an http(s) page can be captured' : detail
 }
 
@@ -323,8 +323,8 @@ export function previewReloadDecision(input: {
  * thing that makes the preview follow their work.
  */
 export function previewSourceLine(binding: PreviewBinding | undefined, sourceLabel: string | undefined): string {
-  if (binding === undefined) return 'not bound to a folder — nothing reloads this pane; bind it to the work it previews and its own changes will'
-  if (sourceLabel !== undefined) return `${binding.root} — from ${sourceLabel}`
-  if (binding.sourcePanelId === undefined) return `${binding.root} — bound to the folder, with no source panel to name`
-  return `${binding.root} — the panel it was opened from is closed, and the folder is still bound`
+  if (binding === undefined) return 'not bound to a folder, so nothing reloads this pane; bind it to the work it previews and its own changes will'
+  if (sourceLabel !== undefined) return `${binding.root}, from ${sourceLabel}`
+  if (binding.sourcePanelId === undefined) return `${binding.root}, bound to the folder, with no source panel to name`
+  return `${binding.root}. The panel it was opened from is closed, and the folder is still bound`
 }

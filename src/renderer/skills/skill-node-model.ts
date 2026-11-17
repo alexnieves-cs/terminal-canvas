@@ -67,7 +67,7 @@ function resourceLines(resources: SkillResources | undefined): SkillSection {
   if (resources.kind === 'none') return { id: 'resources', heading, state: 'none', lines: ['this skill ships no bundled files'] }
   // `unknown` carries the reader's own why: a `0` here would be the
   // confident wrong answer `SkillResources` exists to refuse.
-  if (resources.kind === 'unknown') return { id: 'resources', heading, state: 'unknown', lines: [`the folder could not be listed — ${resources.why}`] }
+  if (resources.kind === 'unknown') return { id: 'resources', heading, state: 'unknown', lines: [`the folder could not be listed: ${resources.why}`] }
   return { id: 'resources', heading, state: 'some', lines: [`${resources.n} bundled file${resources.n === 1 ? '' : 's'}`] }
 }
 
@@ -79,7 +79,7 @@ export function skillNodeSections(input: SkillNodeInput): SkillSection[] {
   if (entry === undefined) {
     out.push({ id: 'frontmatter', heading: 'Frontmatter', state: 'unknown', lines: [input.entryWhy] })
   } else if (entry.description === '') {
-    out.push({ id: 'frontmatter', heading: 'Frontmatter', state: 'none', lines: [`${entry.name} — the file declares no description`] })
+    out.push({ id: 'frontmatter', heading: 'Frontmatter', state: 'none', lines: [`${entry.name}: the file declares no description`] })
   } else {
     out.push({
       id: 'frontmatter',
@@ -119,7 +119,7 @@ export function skillNodeSections(input: SkillNodeInput): SkillSection[] {
       state: 'some',
       lines: [
         `${name} is also defined in ${entry.alsoDefinedIn.map((s) => SCOPE_WORD[s]).join(', ')}.`,
-        'This app does not say which file the CLI reaches for — it reports the link.'
+        'This app does not say which file the CLI reaches for. It reports the link.'
       ]
     })
   }
@@ -177,7 +177,7 @@ export function deleteConfirmText(name: string, resources: SkillResources | unde
   const tail =
     resources === undefined ? ''
       : resources.kind === 'some' ? ` and its ${resources.n} resource${resources.n === 1 ? '' : 's'}`
-        : resources.kind === 'unknown' ? ' — its resources folder could not be read' : ''
+        : resources.kind === 'unknown' ? '; its resources folder could not be read' : ''
   return `Move ${name}${tail} to the Trash? The Finder is the way back.`
 }
 

@@ -73,7 +73,7 @@ function changedLine(c: CompletionInput['changes']): string {
 }
 
 function checksLine(checks: CompletionInput['checks']): string {
-  if (checks === null) return 'Checks not read — open the Checks tab'
+  if (checks === null) return 'Checks not read. Open the Checks tab'
   if (checks.length === 0) return 'No check has run'
   const passed = checks.filter((c) => c.outcome === 'passed').length
   const failed = checks.filter((c) => c.outcome === 'failed').length
@@ -100,7 +100,7 @@ export function completionOf(v: CompletionInput): Completion | null {
   const noFreshCheck = v.checks !== null && !v.checks.some((c) => c.outcome === 'passed' || c.outcome === 'failed')
 
   if (v.board === 'done') {
-    return { outcome: 'done', word: 'Done', meaning: 'Marked done on the board — the task is closed.', changed, checks, unresolved, next: { action: 'none', label: 'Nothing is waiting on this task' } }
+    return { outcome: 'done', word: 'Done', meaning: 'Marked done on the board. The task is closed.', changed, checks, unresolved, next: { action: 'none', label: 'Nothing is waiting on this task' } }
   }
   if (v.reviewedNow) {
     const verified = v.verification?.stage === 'verified'
@@ -125,15 +125,15 @@ export function completionOf(v: CompletionInput): Completion | null {
     return {
       outcome: 'ended', word: 'Run ended',
       meaning: hasChanges ? 'Every session has exited. The run is over; nobody has reviewed what it left.'
-        : v.changes === undefined ? 'Every session has exited. The run is over — that says nothing yet about the work.'
+        : v.changes === undefined ? 'Every session has exited. The run is over, but that says nothing yet about the work.'
           : 'Every session has exited, and the lane holds no changes.',
       changed, checks, unresolved, next
     }
   }
   return {
     outcome: 'idle', word: 'Idle',
-    meaning: hasChanges ? 'The agent stopped and is waiting. Its changes are unreviewed — idle is not finished.'
-      : v.changes === undefined ? 'The agent is waiting for its next message. Idle is not finished — its run is still open.'
+    meaning: hasChanges ? 'The agent stopped and is waiting. Its changes are unreviewed, and idle is not finished.'
+      : v.changes === undefined ? 'The agent is waiting for its next message. Idle is not finished; its run is still open.'
         : 'The agent is waiting for its next message. Nothing has changed yet.',
     changed, checks, unresolved, next
   }

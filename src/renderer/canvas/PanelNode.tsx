@@ -350,7 +350,7 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
         // source conversation — never a reopen: a closed chat is
         // said to be closed, and the entry keeps its ids regardless.
         onShowSource={(conversationId) => {
-          if (!panelsRef.current.some((p) => p.rect.id === conversationId)) return 'the conversation this was accepted from is closed — the decision keeps its source, but the transcript is not open on this canvas'
+          if (!panelsRef.current.some((p) => p.rect.id === conversationId)) return 'the conversation this was accepted from is closed. The decision keeps its source, but the transcript is not open on this canvas'
           selectOnly(conversationId)
           onFocusPanel(conversationId)
           return null
@@ -452,7 +452,7 @@ export function renderPanelNode(panel: Panel, ctx: PanelNodeContext): JSX.Elemen
       onResume={(itemId) => {
         const it = workItemsRef.current.find((i) => i.id === itemId)
         if (it?.panelId === undefined) return
-        if (!panelsRef.current.some((p) => p.rect.id === it.panelId)) { patchWorkItem(itemId, { note: 'the lane chat is closed — its worktree is still there to review' }); return }
+        if (!panelsRef.current.some((p) => p.rect.id === it.panelId)) { patchWorkItem(itemId, { note: 'the lane chat is closed, but its worktree is still there to review' }); return }
         selectOnly(it.panelId)
         onFocusPanel(it.panelId)
       }}

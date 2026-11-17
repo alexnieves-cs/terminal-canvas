@@ -87,7 +87,7 @@ function recordProposalAnswer(itemId: string, c: ReviewComment, keep: boolean): 
  * false claim it exists to refuse. The one door that produces such a check is
  * the Run checks form below (M401 follow-up: a second door here duplicated it).
  */
-export const VERIFIED_MEANS = 'Only a check this canvas runs counts — the agent\'s own runs don\'t.'
+export const VERIFIED_MEANS = 'Only a check this canvas runs counts. The agent\'s own runs don\'t.'
 
 export function TaskVerdict(p: Pick<TaskReviewPanelProps, 'agentWorking' | 'standing' | 'checks' | 'comments' | 'criteria' | 'criteriaMet'>): JSX.Element {
   const verification = verificationOf({
@@ -175,7 +175,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
       if (refusal !== null) { setSendNote(refusal); return }
       const now = Date.now()
       p.onComments?.(p.itemId, (p.comments ?? []).map((c) => (ids.has(c.id) ? { ...c, sentAt: now } : c)))
-      setSendNote('sent — the comments stay open until you resolve them')
+      setSendNote('Sent. The comments stay open until you resolve them')
       setPreviewOpen(false)
     })
   }
@@ -190,7 +190,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
     void p.onSaveRecipe(p.itemId, name, passedChecks).then((refusal) => {
       if (refusal !== null) { setRecipeNote(refusal); return }
       setRecipeName(null)
-      setRecipeNote(`saved — “${name}” is in New task's Recipe list`)
+      setRecipeNote(`Saved. “${name}” is in New task's Recipe list`)
     })
   }
 
@@ -201,7 +201,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
     void p.onRunChecks(p.itemId, command).then((refusal) => {
       if (refusal !== null) { setCheckNote(refusal); return }
       setCheckDraft(null)
-      setCheckNote(`running \`${command}\` in a watcher beside the lane — its result lands above with its own output`)
+      setCheckNote(`running \`${command}\` in a watcher beside the lane. Its result lands above with its own output`)
     })
   }
 
@@ -259,7 +259,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
         {p.checks === null ? (
           <p className="pf__note" data-task-checks="reading">reading the lane's checks…</p>
         ) : p.checks.length === 0 ? (
-          <p className="pf__note" data-task-checks="none">none yet — run the lane's tests from a watcher or a terminal in the lane, and they appear here with their output</p>
+          <p className="pf__note" data-task-checks="none">none yet. Run the lane's tests from a watcher or a terminal in the lane, and they appear here with their output</p>
         ) : (
           <ul className="task-review__checks" data-task-checks={String(p.checks.length)}>
             {ordered.slice(0, 8).map((c) => (
@@ -272,7 +272,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
                 </button>
                 {openCheck === c.key && (
                   <CheckRunOutput outputId={c.outputId} subject={`panel ${c.panelId}`}
-                    fallback="This run has no output record — it ran before output capture was added." />
+                    fallback="This run has no output record. It ran before output capture was added." />
                 )}
               </li>
             ))}
@@ -284,7 +284,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
         <div className="task-review__block task-review__run" data-task-run-checks>
           {checkDraft === null ? (
             <button type="button" className="pf__verb pf__verb--word" data-task-run-open
-              title="Run this lane's checks in a watcher in the lane — each run keeps its own output"
+              title="Run this lane's checks in a watcher in the lane. Each run keeps its own output"
               onMouseDown={p.press(() => {
                 setCheckNote(null)
                 setCheckDraft('')
@@ -312,7 +312,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
       <div className="task-review__block">
         <span className="task-review__label">Comments · {open.length} open{proposed.length > 0 ? `, ${proposed.length} proposed` : ''}{resolvedCount > 0 ? `, ${resolvedCount} resolved` : ''}</span>
         {(p.comments ?? []).length === 0 ? (
-          <p className="pf__note" data-task-comments="none">none — press + beside a line in the diff above to comment on it</p>
+          <p className="pf__note" data-task-comments="none">none yet. Press + beside a line in the diff above to comment on it</p>
         ) : (
           <ul className="task-review__comments">
             {(p.comments ?? []).map((c) => c.proposedBy !== undefined ? (
@@ -359,12 +359,12 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
         <span className="task-review__label">Follow-up for the agent</span>
         {followUp === '' ? (
           <p className="pf__note" data-task-followup="empty">{open.length > unsent.length
-            ? `nothing new to send — ${open.length - unsent.length} comment${open.length - unsent.length === 1 ? '' : 's'} already sent; resolve ${open.length - unsent.length === 1 ? 'it' : 'them'} once the change is right`
-            : 'nothing to send — no open comments and no failing checks'}</p>
+            ? `nothing new to send: ${open.length - unsent.length} comment${open.length - unsent.length === 1 ? '' : 's'} already sent; resolve ${open.length - unsent.length === 1 ? 'it' : 'them'} once the change is right`
+            : 'nothing to send, with no open comments and no failing checks'}</p>
         ) : (
           <>
             <p className="pf__note" data-task-followup="ready">
-              {unsent.length} comment{unsent.length === 1 ? '' : 's'}{failing.length > 0 ? `, ${failing.length} failing check${failing.length === 1 ? '' : 's'}` : ''}{unmet.length > 0 ? `, ${unmet.length} criteria not confirmed` : ''} — read it before it goes
+              {unsent.length} comment{unsent.length === 1 ? '' : 's'}{failing.length > 0 ? `, ${failing.length} failing check${failing.length === 1 ? '' : 's'}` : ''}{unmet.length > 0 ? `, ${unmet.length} criteria not confirmed` : ''}. Read it before it goes
             </p>
             <button type="button" className="pf__verb pf__verb--word" aria-expanded={previewOpen} data-task-followup-verb="preview"
               onMouseDown={p.press(() => setPreviewOpen((v) => !v))}>{previewOpen ? 'Hide the message' : 'Show the message'}</button>
@@ -390,10 +390,10 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
         <div className="task-review__block" data-task-pr={p.pr === undefined ? 'none' : String(p.pr.number)}>
           <span className="task-review__label">Pull request</span>
           {p.pr !== undefined ? (
-            <p className="pf__note">#{p.pr.number} is open — {p.pr.url}</p>
+            <p className="pf__note">#{p.pr.number} is open: {p.pr.url}</p>
           ) : (
             <>
-              <p className="pf__note">{verification.stage === 'verified' ? 'verified — the body will say so, with the checks it passed' : `not verified yet — the body will say so: ${verification.missing.join('; ')}`}</p>
+              <p className="pf__note">{verification.stage === 'verified' ? 'verified, and the body will say so, with the checks it passed' : `not verified yet, and the body will say so: ${verification.missing.join('; ')}`}</p>
               <button type="button" className="pf__verb pf__verb--word" data-task-pr-open disabled={p.readOnly || prAsked}
                 title="Push the lane's branch and open a pull request whose body carries the outcome, the criteria and the checks"
                 onMouseDown={p.readOnly || prAsked ? undefined : p.press(() => {
@@ -424,7 +424,7 @@ export function TaskReviewPanel(p: TaskReviewPanelProps): JSX.Element {
           <summary className="task-review__label">Save as a recipe for next time</summary>
           {recipeName === null ? (
             <>
-              <p className="pf__note">{verification.stage === 'verified' ? 'verified — save how this was done to start the next one the same way' : 'not verified yet — a recipe saved now keeps checks that have not passed out of it'}{passedChecks.length > 0 ? ` · keeps ${passedChecks.map((c) => `\`${c}\``).join(', ')}` : ''}</p>
+              <p className="pf__note">{verification.stage === 'verified' ? 'verified. Save how this was done to start the next one the same way' : 'not verified yet, so a recipe saved now keeps checks that have not passed out of it'}{passedChecks.length > 0 ? ` · keeps ${passedChecks.map((c) => `\`${c}\``).join(', ')}` : ''}</p>
               <button type="button" className="pf__verb pf__verb--word" data-task-save-recipe-open
                 title="Save this task's outcome, criteria, deliverables, arrangement and passing checks as a recipe for New task"
                 onMouseDown={p.press(() => { setRecipeNote(null); setRecipeName(p.title.slice(0, 60)) })}>Save as recipe…</button>
