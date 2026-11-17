@@ -9,10 +9,10 @@ The clip is the app's own film code run on a sample night.
 ## Start a batch
 
 1. Open the tasks you want done. Each one needs a chat panel.
-2. Choose **Run tonight** in New task or in the palette (`⌘K`). From a terminal, use `tc tonight`.
+2. Choose **Run tonight** in New task or in the palette (`⌘K`). From a terminal, use `tc plan "tonight"`.
 3. Leave the Mac on and plugged in.
 
-`tonight stop` ends the batch.
+`tc plan "tonight stop"` ends the batch.
 
 ## What happens while you are away
 
