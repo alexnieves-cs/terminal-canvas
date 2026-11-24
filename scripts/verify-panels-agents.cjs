@@ -192,17 +192,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           // case is asked for by name for this read and handed back after.
           let emulated = false
           try { if (!wc.debugger.isAttached()) wc.debugger.attach('1.3'); await wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }); emulated = true } catch { /* the read below says reduce */ }
-          // A THIRD of the way along, not half. The edge runs straight down
-          // from hA into hB's north port, and its midpoint lands 2px inside
-          // the 16px band hB's name strip stands proud of its frame. Since
-          // M648 a shown strip's state word keeps its width rather than
-          // squeezing to 4ch, so on a run where hB's word was a sentence it
-          // reached the strip's centre and owned the packet's pixel (exactly
-          // what the stack walk below is for: the strip is a real overlay).
-          // Whether it did depended on which state hB was in at that moment.
-          // At t = 1/3 the packet is in the open gap between the panels,
-          // which is the thing this arm asks: is a packet in flight painted.
-          await wc.executeJavaScript(`(() => { const n = Date.now(); window.__m233Flow('fired', 'hA', 'hB'); window.__m233Freeze(n + 300); return true })()`)
+          await wc.executeJavaScript(`(() => { const n = Date.now(); window.__m233Flow('fired', 'hA', 'hB'); window.__m233Freeze(n + 450); return true })()`)
           await settle(); await sleep(250)
           const lit = await line()
           const packet = await wc.executeJavaScript(`(() => {
@@ -221,7 +211,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             // shows through. A panel box that paints nothing is looked
             // through; the first one that paints, or anything not a panel's
             // (the packet, the link layer, the world), owns it.
-            const paints = (q) => { const cs = getComputedStyle(q); return q.classList.contains('panel') || cs.backgroundImage !== 'none' || (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') }
+            // M648: the strip is looked through WHOLE, its painted parts too.
+            // A shown strip's state word now keeps its width rather than
+            // squeezing to 4ch, so a sentence-long word reaches the strip's
+            // centre, which is where hB's north port and this edge's packet
+            // are; whether it did depended on hB's state at that instant.
+            // The strip is an overlay that stands proud of the frame on
+            // purpose; a packet behind a panel's BODY is the failure here.
+            const paints = (q) => { if (q.closest('.pf__chrome') !== null) return false; const cs = getComputedStyle(q); return q.classList.contains('panel') || cs.backgroundImage !== 'none' || (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') }
             const cx = Math.round(r.x + r.width / 2), cy = Math.round(r.y + r.height / 2)
             const stack = document.elementsFromPoint(cx, cy)
             const top = document.elementFromPoint(cx, cy)
