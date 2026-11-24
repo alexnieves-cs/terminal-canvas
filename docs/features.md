@@ -156,7 +156,7 @@ The long list. The [README](../README.md) is the short version and the [user gui
 
 ## What it looks like
 
-`npm run shot` renders thirty-nine scenes of the real renderer into `out/shots/` (after a
+`npm run shot` renders every scene of the real renderer into `out/shots/` (after a
 build; nothing is asserted — the images are for eyes). Six of them, described:
 
 - **`kinds.png`** — one of every panel kind on the light ground, the same hairline frame on
@@ -200,9 +200,8 @@ build; nothing is asserted — the images are for eyes). Six of them, described:
   survive a reload or a quit; without it, sessions end with the window.
 - **Make the terminals themselves accessible to a screen reader.** The chrome
   is; what an agent CLI draws is that CLI's own — see [Accessibility](features.md#accessibility).
-- **Rename a bookmark's saved camera, region-capture the canvas, or export a
-  canvas another instance can open.** Export is a panel's text and a PNG of
-  the window; the rest is in [docs/ideas-backlog.md](ideas-backlog.md).
+- **Region-capture the canvas.** The PNG export is the whole window; the rest
+  is in [docs/ideas-backlog.md](ideas-backlog.md).
 
 
 ## Accessibility

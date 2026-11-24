@@ -1,0 +1,22 @@
+name: Feature request
+description: Something that should exist and does not
+title: "Idea: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: situation
+    attributes:
+      label: What you were trying to do, and what got in the way
+      description: The situation is more useful than a proposed fix. The constraint behind a request usually matters more than the shape of it.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+  - type: checkboxes
+    id: backlog
+    attributes:
+      label: Backlog
+      options:
+        - label: I checked [docs/ideas-backlog.md](https://github.com/alexnieves-cs/terminal-canvas/blob/main/docs/ideas-backlog.md), and if my idea is there, I said what my use case adds.
