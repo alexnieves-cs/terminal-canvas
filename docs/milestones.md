@@ -430,16 +430,33 @@ The roadmap contract: one row per milestone, pinned against `docs/build-log/` by
 | M683 | The Jira panel is gone for good, by Alex's choice: its client, channels, credential service, palette row, lab and suite. A saved Jira panel is dropped on load and saved Jira board items still read | ✅ done |
 | M684 | Sheets are gone for good, by Alex's choice, and with them the `xlsx` dependency from a CDN outside the npm registry: a `.csv` opens as a plain file and a saved sheet view is dropped quietly | ✅ done |
 | M685 | Relay terminals are gone for good, by Alex's choice: the relay server, its client, panel, protocol, nine channels, lab and suite. The shared canvas drops its `relay-bind` op and fields, so a peer still writing them is refused; a saved relay panel is dropped on load; the collab VM keeps one Caddyfile | ✅ done |
+| M695 | A signed build can install a newer release through Electron's own `autoUpdater` (Squirrel.Mac), and only after the person chooses Download and install. Signed is read from `codesign`; any other copy only opens the release page, as before. Each release carries its own per-chip feed and zip, so a feed never names another version. `update.offerInstall` turns the offer off. [Log](build-log/m695-m698-launch-feedback.md) | 🔨 built, gate owed |
+| M696 | Crash reports read the project's address from `TC_CRASH_DSN` at build time (unset sends nothing, malformed fails the build), the Sentry init closes the SDK's own reach (hostname, breadcrumbs, client reports, logs, metrics), and Settings and a new guide page say what is sent and when. [Log](build-log/m695-m698-launch-feedback.md) | ✅ done |
+| M697 | An opt-in local tally of feature use and the first-run funnel, kept in one file on the Mac and counted by channel name only. Nothing is sent; the palette copies it as text for the person to paste, or clears it. [Log](build-log/m695-m698-launch-feedback.md) | ✅ done |
+| M698 | The signed dry run checklist in `docs/release-signing.md`, with where the Open Anyway steps live and when to remove them, and the docs brought up to 7.0 in progress. [Log](build-log/m695-m698-launch-feedback.md) | 🔨 built, gate owed |
 
-### What's next — the v10 run (D01–D20)
+### What's next: 7.0
 
-The roadmap for the work after 5.0.0 is
-[the ordered product development guide](product-development-guide-2026-09-08.md), which
-executes every recommendation in [the product audit](archive/product-audit-2026-09-08.md). Its twenty
-phases are mapped to milestone numbers M193–M224 in
-[the v10 ledger](build-log/m193-m224-ledger.md) §5; that ledger, not this table, is where a
-phase's status, evidence and disposition live. Rows arrive here as they land, which is why this
-table holds no planned work: it is a record, and the guide is the plan.
+7.0 is a signed public launch with a feedback loop. M695 to M698 built what can be built and
+checked without Apple's certificate ([log](build-log/m695-m698-launch-feedback.md)). The rest
+is Alex's, in this order:
+
+1. The Apple Developer account and the signing secrets, then the dry run and the first signed
+   release: [the checklist](release-signing.md#checklist-once-the-secrets-exist-m698).
+2. The crash-report project and the `TC_CRASH_DSN` repository variable:
+   [the steps](release-signing.md#crash-reports-the-project-address-m696).
+3. The first update by hand, which needs a second signed release, and then removing the Open
+   Anyway steps (checklist steps 6 and 7).
+4. The launch and feedback triage.
+
+The sandboxed overnight default waits on macOS 26 and Apple's container runtime
+([the Mac check](streams/vm-lane/MAC-CHECK.md)).
+
+Rows arrive here as they land, which is why this table holds no planned work: it is a record.
+The v10 run's plan, [the ordered product development guide](product-development-guide-2026-09-08.md),
+and [its ledger](build-log/m193-m224-ledger.md) stay as the record of that run.
+
+### How the numbers are claimed
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
