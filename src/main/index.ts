@@ -20,6 +20,7 @@ import { createPlaces } from './bootstrap/places'
 import { createMenuActions } from './bootstrap/menu-actions'
 import { installMenuBar } from './menu-bar'
 import { installTmuxAdopt } from './tmux-adopt'
+import { createUsageCountsWiring, installUsageTap } from './bootstrap/usage-wiring'
 import { installCloudLanes } from './bootstrap/cloud-wiring'
 import { createControlWiring } from './bootstrap/control-wiring'
 import { createAccountWiring } from './bootstrap/account-handlers'
@@ -152,6 +153,13 @@ if (process.env.TC_FIXTURE === 'rd-steward' && !app.isPackaged) {
 }
 
 const stores = createStores(state)
+
+// M697. The local usage tally, and the tap that feeds it. Installed HERE,
+// before any collaborator below registers a handler, so every door is seen;
+// the tap counts a channel only if usage-counts.ts names it and only while
+// `usage.localCounts` is on (read at each call). Nothing is ever sent.
+const usageCounts = createUsageCountsWiring(stores, app.getPath('userData'))
+installUsageTap((channel) => usageCounts.store.record(channel))
 
 /**
  * The login environment is resolved inside whenReady, so availability costs
@@ -436,7 +444,9 @@ app.whenReady().then(async () => {
     {
       status: () => state.worldFeed?.status() ?? { state: 'live' },
       retry: () => state.worldFeed?.retry() ?? { state: 'live' }
-    }
+    },
+    // M697. The local usage tally's read and clear (the tap is installed at module scope).
+    usageCounts.handlers
   )
   // M651. The run marker, behind the gate and BEFORE the window: its first
   // call reads what the previous run left, and the renderer's `lastExit` ask
@@ -595,6 +605,8 @@ app.on('before-quit', () => {
   kit.learn?.stop()
   // Offline in the org's rows too; not awaited — quit does not wait on a network.
   void teamReporter.stop()
+  // M697. The tally's last coalesced write, so a quit inside the window keeps it.
+  usageCounts.store.flush()
 
   // The file watchers are the renderer's, not a session's, and go either way.
   try {

@@ -3016,6 +3016,97 @@ await (async () => {
     can ? JSON.stringify({ off, truthy, noAddress, on, own, typo, shipped, project: F.PROJECT_DSN === '' ? 'empty' : 'set', saysNothingSent }) : 'telemetry not exported')
 }
 
+// tally.1 (M697). THE LOCAL USAGE TALLY HOLDS ONLY WHAT ITS TABLE NAMES. A
+// feature is a count of one contract door, a funnel step is the first DAY it
+// happened, and nothing a call carries is read. Every door in the table is a
+// real channel (a renamed channel would count nothing, silently). A channel
+// not in the table returns the same object (no write), and a file holding
+// anything else is read back without it.
+{
+  const can = typeof F.recordUsage === 'function' && typeof F.parseUsageCounts === 'function' && typeof F.usageCountsText === 'function'
+  let detail = 'tally not exported'
+  let pass = false
+  if (can) {
+    const channels = new Set(Object.values(F.IPC_FOR_TALLY))
+    const unknownDoors = Object.keys(F.FEATURE_OF).filter((c) => !channels.has(c))
+    const funnelOutside = F.FUNNEL.filter((f) => F.FEATURE_OF[f.channel] === undefined).map((f) => f.step)
+    let t = F.emptyUsageCounts('2026-11-20')
+    t = F.recordUsage(t, 'pty:create', '2026-11-20')
+    t = F.recordUsage(t, 'pty:create', '2026-11-21')
+    t = F.recordUsage(t, 'agent:create', '2026-11-22')
+    const capped = F.recordUsage({ ...t, counts: { ...t.counts, 'terminal.open': F.COUNT_CAP } }, 'pty:create', '2026-11-23').counts['terminal.open']
+    const junk = JSON.stringify({ version: 1, since: '2026-11-20', funnel: { 'first-terminal': '2026-11-20', 'first-agent': 'yesterday', evil: '2026-11-20' }, counts: { 'terminal.open': 3, 'agent.start': 1.5, 'path:/Users/x': 9, 'review.open': -1 }, extra: { cwd: '/Users/x' } })
+    const back = F.parseUsageCounts(junk)
+    const text = F.usageCountsText(t, '7.0.0')
+    const shown = JSON.parse(text)
+    pass = (
+      unknownDoors.length === 0 && funnelOutside.length === 0 &&
+      F.usageFeatureOf('pty:write') === null && F.usageFeatureOf('__proto__') === null && F.usageFeatureOf('constructor') === null &&
+      t.counts['terminal.open'] === 2 && t.counts['agent.start'] === 1 &&
+      t.funnel['first-terminal'] === '2026-11-20' && t.funnel['first-agent'] === '2026-11-22' && t.funnel['first-review'] === undefined &&
+      capped === F.COUNT_CAP &&
+      back !== null && JSON.stringify(back.funnel) === JSON.stringify({ 'first-terminal': '2026-11-20' }) && JSON.stringify(back.counts) === JSON.stringify({ 'terminal.open': 3 }) && back.extra === undefined &&
+      F.parseUsageCounts('not json') === null && F.parseUsageCounts('{"version":2,"since":"2026-11-20"}') === null &&
+      JSON.stringify(Object.keys(shown)) === JSON.stringify(['app', 'version', 'since', 'funnel', 'counts']) && shown.version === '7.0.0' &&
+      !/\/Users|\/home|pty:/.test(text) &&
+      F.dayOf(new Date(2026, 10, 25, 23, 59).getTime()) === '2026-11-25'
+    )
+    const sameRef = (() => { const e = F.emptyUsageCounts('2026-11-20'); return F.recordUsage(e, 'pty:write', '2026-11-20') === e })()
+    pass = pass && sameRef
+    detail = JSON.stringify({ unknownDoors, funnelOutside, counts: t.counts, funnel: t.funnel, capped, back, sameRef, keys: Object.keys(shown) })
+  }
+  ok('tally.1 the tally counts only the doors its table names (each a real contract channel), keeps the first day of each funnel step, caps a count, reads a file back through the same closed lists, and its copy text holds only the app, version, start day, funnel and counts', pass, detail)
+}
+
+// tally.3 (M697). THE FILE: nothing while the setting is off, one coalesced
+// atomic 0600 write while it is on, an uncounted door never touches disk, the
+// switch is read at each call, Clear deletes it, and a later run reads it back.
+{
+  const { mkdtempSync, existsSync, statSync, readFileSync, writeFileSync, rmSync } = require('node:fs')
+  const { join } = require('node:path')
+  const { tmpdir } = require('node:os')
+  const can = typeof F.createUsageStore === 'function'
+  let pass = false
+  let detail = 'store not exported'
+  if (can) {
+    const dir = mkdtempSync(join(tmpdir(), 'tc-tally-'))
+    const file = join(dir, F.USAGE_FILE)
+    let on = false
+    const timers = []
+    const mk = () => F.createUsageStore({ dir, enabled: () => on, now: () => new Date(2026, 10, 25, 12).getTime(), setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length }, clearTimer: () => {} })
+    const s = mk()
+    s.record('pty:create')
+    const offNoFile = !existsSync(file) && s.read() === null && timers.length === 0
+    on = true
+    s.record('pty:write')
+    const uncountedNoTimer = timers.length === 0
+    s.record('pty:create'); s.record('pty:create'); s.record('review:panel')
+    const beforeFlush = existsSync(file)
+    const oneTimer = timers.length === 1
+    timers[0].fn()
+    const mode = existsSync(file) ? (statSync(file).mode & 0o777) : null
+    const written = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null
+    on = false
+    s.record('pty:create')
+    const offStops = s.read().counts['terminal.open'] === 2
+    const again = mk().read()
+    const text = mk().text('7.0.0')
+    writeFileSync(file, '{ broken')
+    const broken = mk().read()
+    const s2 = mk()
+    writeFileSync(file, JSON.stringify(written))
+    const cleared = s2.clear()
+    const gone = !existsSync(file) && s2.read() === null && s2.clear() === false
+    rmSync(dir, { recursive: true, force: true })
+    pass = offNoFile && uncountedNoTimer && !beforeFlush && oneTimer && mode === 0o600 &&
+      written !== null && written.counts['terminal.open'] === 2 && written.counts['review.open'] === 1 && written.since === '2026-11-25' &&
+      offStops && again !== null && again.counts['terminal.open'] === 2 && typeof text === 'string' && /"terminal.open": 2/.test(text) &&
+      broken === null && cleared === true && gone
+    detail = JSON.stringify({ offNoFile, uncountedNoTimer, beforeFlush, oneTimer, mode: mode === null ? null : mode.toString(8), written, offStops, again: again && again.counts, broken, cleared, gone })
+  }
+  ok('tally.3 with the setting off nothing is read or written and no file is made; on, writes are coalesced into one atomic 0600 file; an uncounted door costs nothing; turning it off stops counting at once; a later run reads it back, a broken file reads as none, and Clear deletes it', pass, detail)
+}
+
 // telemetry.7 (M696). THE ADDRESS COMES FROM THE BUILD. `buildTimeDsn` is
 // what electron.vite.config.ts compiles into main: unset or blank is '' (no
 // address, nothing sent), a DSN is kept exactly, and a value that is set and

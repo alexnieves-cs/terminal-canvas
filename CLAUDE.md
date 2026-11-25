@@ -143,14 +143,15 @@ shelf:save plugin:details skill:write skill:create skill:rename skill:delete ski
 browser:read preview:discover preview:capture asset:put asset:choose node:fetch portable:export
 portable:import pack:read pack:add pack:export preset:mark-reviewed github:publish pack:sample
 board:lane board:lane-status board:open-pr board:comment-pr board:repositories update:check
-update:install image:read starter:prepare docx:import flowchart:read world:status world:retry
-pty:data pty:exit edit:copy edit:paste edit:undo edit:redo canvas:counts canvas:model
-canvas:reset preset:spawn preset:default preset:capture agent:state attention:jump
-settings:changed spawn:open-sheet agent:event presence:remote team:observed team:asks-changed
-team:flow-changed canvas:shared auth:changed text:remote world:events world:connection
-vm:lanes-changed watcher:state vault:changed session:live session:host session:recover
-subagent:state file:changed usage:panel routine:fire canvas:tidy canvas:feedback canvas:flip
-board:add canvas:plan pool:mint pool:event boot:progress cloud:changed
+update:install tally:read tally:clear image:read starter:prepare docx:import flowchart:read
+world:status world:retry pty:data pty:exit edit:copy edit:paste edit:undo edit:redo
+canvas:counts canvas:model canvas:reset preset:spawn preset:default preset:capture agent:state
+attention:jump settings:changed spawn:open-sheet agent:event presence:remote team:observed
+team:asks-changed team:flow-changed canvas:shared auth:changed text:remote world:events
+world:connection vm:lanes-changed watcher:state vault:changed session:live session:host
+session:recover subagent:state file:changed usage:panel routine:fire canvas:tidy
+canvas:feedback canvas:flip board:add canvas:plan pool:mint pool:event boot:progress
+cloud:changed
 ```
 <!-- /ipc:channels -->
 

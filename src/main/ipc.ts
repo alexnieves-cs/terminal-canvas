@@ -27,7 +27,7 @@ import type { ImageResult, StarterFiles } from '../shared/starter'
 import type { TemplateSaveResult } from '../shared/templates'
 import { incomingWorkflowGraphSchema, graphProblems } from '../shared/workflow-graph-schema'
 import type { BrowserReadRequest } from '../shared/browser-panel'
-import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult, UpdateInstallResult, PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
+import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult, UpdateInstallResult, PoolStartRequest, PoolStartResult, BoardRepositoriesResult, UsageCountsRead, UsageCountsCleared } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
 import { crashReportsDescription } from './telemetry'
@@ -353,6 +353,20 @@ export interface WorldHandlers {
 const INERT_WORLD: WorldHandlers = {
   status: () => ({ state: 'live' }),
   retry: () => ({ state: 'live' })
+}
+
+/**
+ * M697. The local usage tally (main/usage-store.ts). Appended last; an unwired
+ * harness says counting is off and has nothing to copy or clear.
+ */
+export interface UsageCountHandlers {
+  read(): UsageCountsRead
+  clear(): UsageCountsCleared
+}
+
+const INERT_USAGE_COUNTS: UsageCountHandlers = {
+  read: () => ({ on: false, text: null }),
+  clear: () => ({ cleared: false })
 }
 
 /** M188. The fetch node's one door; see main/node-run.ts. */
@@ -768,8 +782,12 @@ export function registerIpcHandlers(
   /** The flowchart's file doors. Appended last, like every collaborator before it — an unwired harness gets a named refusal, never a dialog. */
   flowcharts: FlowchartHandlers = INERT_FLOWCHARTS,
   /** The world feed's status and retry. Appended last, like every collaborator before it. */
-  world: WorldHandlers = INERT_WORLD
+  world: WorldHandlers = INERT_WORLD,
+  /** M697. The local usage tally's read and clear. Appended last, like every collaborator before it; inert by default (off, nothing to copy). */
+  usageCounts: UsageCountHandlers = INERT_USAGE_COUNTS
 ): void {
+  ipcMain.handle(IPC.USAGE_COUNTS_READ, () => usageCounts.read())
+  ipcMain.handle(IPC.USAGE_COUNTS_CLEAR, () => usageCounts.clear())
   ipcMain.handle(IPC.PRESENCE_LOCAL, (_event, raw: unknown) => {
     const report = parseLocalPresence(raw)
     if (report !== undefined) presence.local(report)

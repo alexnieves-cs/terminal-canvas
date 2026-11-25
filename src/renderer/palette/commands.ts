@@ -618,6 +618,14 @@ export interface PaletteActions {
    * the feedback line. Excluded from plans by name.
    */
   installUpdate(): void
+  /**
+   * M697. Put the local usage tally on the clipboard as text, for the person
+   * to read and share if they choose. The only way it leaves the Mac.
+   * Excluded from plans by name.
+   */
+  copyUsageCounts(): void
+  /** M697. Delete the local usage tally, after a confirm on the palette line. Excluded from plans by name. */
+  clearUsageCounts(): void
 }
 
 

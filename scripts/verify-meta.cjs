@@ -987,6 +987,36 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ note: note.length, wired, missingNote, missingGuide, published, dashes }))
 }
 
+// M697 — tally.4. EVERYTHING ON YOUR MAC. (a) `usage.localCounts` is a
+// boolean, OFF by default, in Privacy, and not planWritable. (b) The tally's
+// two modules import nothing that can reach a network (no http, https, net,
+// tls, electron, and no fetch call), so a later edit that tried to send it
+// would have to change this check too. (c) The tap is installed in
+// main/index.ts BEFORE registerIpcHandlers runs, and it hands `record` the
+// channel name and nothing else. (d) The renderer's only way out is the
+// clipboard, from copyUsageCounts.
+{
+  const schema = stripComments(read('src/shared/settings-schema.ts') ?? '')
+  const start = schema.indexOf("id: 'usage.localCounts'")
+  const entry = start === -1 ? '' : schema.slice(schema.lastIndexOf('{', start), schema.indexOf('}', start))
+  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: false/.test(entry) && /category: TELEMETRY_CATEGORY/.test(entry) && !/planWritable/.test(entry)
+  const offline = ['src/main/usage-counts.ts', 'src/main/usage-store.ts'].filter((f) => {
+    const src = stripComments(read(f) ?? '')
+    return src === '' || /from ['"](node:)?(https?|net|tls|dgram|electron)['"]/.test(src) || /\bfetch\(/.test(src) || /require\(['"](node:)?(https?|net|tls)['"]\)/.test(src)
+  })
+  const index = stripComments(read('src/main/index.ts') ?? '')
+  const tapAt = index.indexOf('installUsageTap(')
+  const registerAt = index.indexOf('registerIpcHandlers(')
+  const tapFirst = tapAt !== -1 && registerAt !== -1 && tapAt < registerAt && /installUsageTap\(\(channel\) => usageCounts\.store\.record\(channel\)\)/.test(index)
+  const wiring = stripComments(read('src/main/bootstrap/usage-wiring.ts') ?? '')
+  const channelOnly = /try \{ record\(channel\) \}/.test(wiring) && (wiring.match(/record\(/g) ?? []).length === 1
+  const action = stripComments(read('src/renderer/canvas/palette-actions/settings.ts') ?? '')
+  const outOnlyClipboard = /navigator\.clipboard\.writeText\(r\.text\)/.test(action) && !/usageCounts[\s\S]{0,400}(fetch\(|links\.open)/.test(action)
+  ok('tally.4 usage.localCounts is boolean, off, in Privacy and not planWritable; the tally imports no network module and calls no fetch; the tap is installed before any handler is registered and records the channel name only; the one way out is the clipboard',
+    settingOk && offline.length === 0 && tapFirst && channelOnly && outOnlyClipboard,
+    JSON.stringify({ settingOk, offline, tapFirst, channelOnly, outOnlyClipboard }))
+}
+
 // M123 — update.1. THE UPDATE CHECK NEVER REACHES THE NETWORK FROM A SUITE,
 // AND NO PLAN MAY SWITCH IT ON. Three facts pinned as text, each with a
 // silent failure behind it. (a) The setting `update.checkOnLaunch` exists,

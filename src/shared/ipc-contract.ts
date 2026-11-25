@@ -1081,6 +1081,14 @@ export const IPC = {
    * the download is the install), then asks when to restart. Never rejects.
    */
   UPDATE_INSTALL: 'update:install',
+  /**
+   * M697. The local usage tally (main/usage-counts.ts): whether counting is
+   * on, and the text "Copy my usage counts" hands the clipboard. Read only;
+   * nothing is sent anywhere. Never rejects.
+   */
+  USAGE_COUNTS_READ: 'tally:read',
+  /** M697. Delete the tally's file. Never rejects. */
+  USAGE_COUNTS_CLEAR: 'tally:clear',
   /** M181. An image panel's bytes as a data URL, read in main by magic number under a cap; four arms, never rejects. */
   IMAGE_READ: 'image:read',
   /** M181. The starter's two files under userData/starter, written once; answers both paths. */
@@ -1136,6 +1144,11 @@ export type UpdateInstallResult =
   | { kind: 'restarting'; version: string }
   | { kind: 'refused'; reason: string }
   | { kind: 'failed'; reason: string }
+
+/** M697. USAGE_COUNTS_READ's answer: `text` is null when there is no tally yet. */
+export interface UsageCountsRead { on: boolean; text: string | null }
+/** M697. USAGE_COUNTS_CLEAR's answer: whether there was a tally to delete. */
+export interface UsageCountsCleared { cleared: boolean }
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
 /** M114. What `dispatch` asks main for: a worktree lane for the chat it is about to mint. `repo` is `owner/repo` from a GitHub key; `root` is the place the sheet chose for an item with no repository. */
@@ -2665,6 +2678,11 @@ export interface CanvasBridge {
     check(): Promise<UpdateResult>
     /** M695. See UPDATE_INSTALL. Asks the person first, in main; never rejects. */
     install(req: { version: string }): Promise<UpdateInstallResult>
+  }
+  /** M697. See USAGE_COUNTS_READ and USAGE_COUNTS_CLEAR. Local only; never rejects. */
+  usageCounts: {
+    read(): Promise<UsageCountsRead>
+    clear(): Promise<UsageCountsCleared>
   }
   /** M181. See IMAGE_READ. */
   image: {

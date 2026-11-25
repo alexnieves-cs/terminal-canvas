@@ -29,6 +29,8 @@ export type SettingsActions = Pick<PaletteActions,
   | 'beginClearScrollback'
   | 'checkForUpdates'
   | 'installUpdate'
+  | 'copyUsageCounts'
+  | 'clearUsageCounts'
   | 'checkReadiness'
   | 'openStarter'
   | 'setAgentLinks'
@@ -327,6 +329,40 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
       }).catch((e: unknown) => {
         setUpdateInstall({ kind: 'failed', reason: e instanceof Error ? e.message : 'the install did not answer' })
       })
+    },
+    // M697. The local usage tally. Copy reads main's text and writes it to
+    // the clipboard; the line says it was copied and that nothing was sent.
+    // Clear asks on the palette line first, then deletes the file in main.
+    copyUsageCounts: () => {
+      const say = (label: string): void => {
+        setInputMode({ kind: 'confirm', label, initial: '', feedback: true, submit: () => setInputMode(null) })
+        palette.openPalette()
+      }
+      void window.canvas.usageCounts.read().then(async (r) => {
+        if (r.text === null) {
+          say(r.on ? 'No usage counts yet. Use the app for a while and copy them again.' : 'Usage counts are off. Turn on "Count which features I use, on this Mac only" in Settings, Privacy & export.')
+          return
+        }
+        await navigator.clipboard.writeText(r.text)
+        say('Usage counts copied to the clipboard. Nothing was sent; paste them wherever you choose.')
+      }).catch((e: unknown) => {
+        say(`Could not copy the usage counts: ${e instanceof Error ? e.message : 'no answer'}`)
+      })
+    },
+    clearUsageCounts: () => {
+      setInputMode({
+        kind: 'confirm',
+        label: 'Delete the usage counts kept on this Mac? Press Enter to delete.',
+        initial: '',
+        submit: () => {
+          setInputMode(null)
+          void window.canvas.usageCounts.clear().then((r) => {
+            setInputMode({ kind: 'confirm', label: r.cleared ? 'Usage counts deleted.' : 'There were no usage counts to delete.', initial: '', feedback: true, submit: () => setInputMode(null) })
+            palette.openPalette()
+          })
+        }
+      })
+      palette.openPalette()
     },
     checkReadiness: recheckEnvironment,
     openStarter: applyStarter,

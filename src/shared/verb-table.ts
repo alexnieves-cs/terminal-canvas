@@ -329,6 +329,11 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // M695. It replaces the app itself; main asks the person in its own dialog,
   // and no plan line, workflow node or agent may stand in for that answer.
   installUpdate: 'replaces the app after the person answers main\'s own dialog — never a plan',
+  // M697. The tally leaves the Mac only when its person copies it; a plan that
+  // could copy it could paste it anywhere, and one that could clear it could
+  // erase what the person meant to keep.
+  copyUsageCounts: 'puts the person\'s own usage tally on the clipboard: their act, never a plan',
+  clearUsageCounts: 'deletes the person\'s usage tally after they confirm it: never a plan',
   // M253. "I've read this" is a PERSON's statement about a stranger's command
   // or verb lines. A plan that could make it would undo the very gate it
   // clears, so neither has a verb.

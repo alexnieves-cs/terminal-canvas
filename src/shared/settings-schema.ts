@@ -741,6 +741,20 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
+    // M697. A tally that stays on this Mac, and OFF: a person opts in. Never
+    // planWritable, for telemetry.sentryDsn's reason (an agent never decides
+    // what this app records about its person). The description says the three
+    // things that matter: what is kept, that it is never sent, and the one way
+    // it leaves (a palette verb the person runs, onto their own clipboard).
+    id: 'usage.localCounts',
+    label: 'Count which features I use, on this Mac only',
+    description: 'keep a private tally of how often each feature is used and the first day you opened a terminal, started an agent, reviewed and committed; it is stored only on this Mac and never sent; Copy my usage counts in the palette puts it on your clipboard so you can read it and share it if you choose',
+    keywords: ['usage', 'counts', 'statistics', 'analytics', 'feature', 'funnel', 'privacy', 'local', 'export', 'copy', 'opt in'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
+  },
+  {
     // M488. Off unless a person turns it on, and never `planWritable`: a plan
     // that could set this would be an agent granting itself the answer to its
     // own permission prompts. The description names who it reaches HONESTLY:

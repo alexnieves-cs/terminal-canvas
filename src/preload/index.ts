@@ -570,6 +570,10 @@ const bridge: CanvasBridge = {
     check: () => ipcRenderer.invoke(IPC.UPDATE_CHECK),
     install: (req) => ipcRenderer.invoke(IPC.UPDATE_INSTALL, req)
   },
+  usageCounts: {
+    read: () => ipcRenderer.invoke(IPC.USAGE_COUNTS_READ),
+    clear: () => ipcRenderer.invoke(IPC.USAGE_COUNTS_CLEAR)
+  },
   image: {
     read: (path) => ipcRenderer.invoke(IPC.IMAGE_READ, path)
   },

@@ -304,7 +304,10 @@ const spyActions = () => {
     // M509. The `>` row's verb (cmd.*).
     runCommandPanel: record('runCommandPanel'),
     // M695. The signed build's install row (selfupdate.6).
-    installUpdate: record('installUpdate')
+    installUpdate: record('installUpdate'),
+    // M697. The local usage tally's two rows (usage.counts.2).
+    copyUsageCounts: record('copyUsageCounts'),
+    clearUsageCounts: record('clearUsageCounts')
   }
 }
 
@@ -801,13 +804,14 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
 //     drives red styling and the confirm gate, so a flag that spread to a
 //     benign row would put a confirm step in front of spawning a panel.
 //     M39 added the third: clearing every panel's recorded output from disk
-//     is exactly the kind of row this flag exists for.
+//     is exactly the kind of row this flag exists for. M697 added the fourth:
+//     deleting the local usage tally.
 {
   const rows = P.buildCommands(ctx({ presets: [MINE], prompts: [{ id: 'p1', name: 'r', source: 'saved' }],
     capturedId: 'n1', panels: [{ id: 'n1', label: 'n1' }] }))
   const marked = rows.filter((r) => r.destructive === true).map((r) => r.id).sort()
-  ok('47 exactly the three delete rows are destructive',
-    marked.join(',') === 'canvas.clear-scrollback,preset.delete.u1,prompt.delete.p1', marked.join(','))
+  ok('47 exactly the four delete rows are destructive',
+    marked.join(',') === 'canvas.clear-scrollback,preset.delete.u1,prompt.delete.p1,usage.clear', marked.join(','))
 }
 
 // 48. The Cmd+N hint, on the DEFAULT preset's spawn row and no other. This is
@@ -2699,6 +2703,33 @@ const WS = [
       JSON.stringify(out.calls) === JSON.stringify(['installUpdate']) &&
       out.busy === 'installing…' && out.staged === 'Restart to install 7.1.0…' &&
       /asks first/.test(out.envSigned ?? '') && /nothing is downloaded or installed/.test(out.envUnsigned ?? ''),
+    JSON.stringify({ threw, ...out }))
+}
+
+// M697 — tally.2. THE TALLY'S TWO VERBS ARE FOUND BY NAME, NOT SEEN AT REST.
+// Copy my usage counts runs copyUsageCounts (the only way the tally leaves
+// the Mac, onto the person's own clipboard); Clear my usage counts is
+// destructive and runs clearUsageCounts, which asks on the palette line.
+{
+  let threw = null
+  let out = {}
+  try {
+    const c = ctx()
+    const rows = P.buildCommands(c)
+    const copy = byId(rows, 'usage.copy')
+    const clear = byId(rows, 'usage.clear')
+    if (copy) copy.run()
+    if (clear) clear.run()
+    out = {
+      copy: copy ? [copy.title, copy.hiddenAtRest === true, copy.destructive === true, /nothing is sent/.test(copy.subtitle)] : null,
+      clear: clear ? [clear.title, clear.hiddenAtRest === true, clear.destructive === true] : null,
+      calls: c.actions.calls.map((x) => x[0])
+    }
+  } catch (e) { threw = String(e) }
+  ok('tally.2 Copy my usage counts and Clear my usage counts are hidden at rest, Copy says nothing is sent, Clear is destructive, and each runs its own verb',
+    threw === null && JSON.stringify(out.copy) === JSON.stringify(['Copy my usage counts', true, false, true]) &&
+      JSON.stringify(out.clear) === JSON.stringify(['Clear my usage counts', true, true]) &&
+      JSON.stringify(out.calls) === JSON.stringify(['copyUsageCounts', 'clearUsageCounts']),
     JSON.stringify({ threw, ...out }))
 }
 

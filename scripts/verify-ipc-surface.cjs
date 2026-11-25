@@ -365,7 +365,9 @@ app.whenReady().then(() => {
   // view (M685) — the pty relay was removed (docs/streams/cut-list.md).
   // +1: update:install (M695) — a signed build downloads and installs a newer
   // release through Electron's own autoUpdater, after main's own dialog.
-  const EXPECTED_CHANNELS = 223
+  // +2: tally:read / tally:clear (M697) — the local usage tally's copy text
+  // and its delete; nothing is sent anywhere.
+  const EXPECTED_CHANNELS = 225
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

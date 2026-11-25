@@ -45,7 +45,7 @@ export interface SettingsPane {
  * same words as docs/guide/privacy.md. `verify:meta privacy.1` holds the two
  * pages to the same claims.
  */
-export const PRIVACY_NOTE = 'Crash reports stay off until you turn them on. A report holds the error\'s name, its message and where in the code it happened, with tokens and paths under your home folder removed. Terminal output, file contents, prompts and your Mac\'s name are never in it. A build with no reporting address sends nothing, and the setting says so.'
+export const PRIVACY_NOTE = 'Crash reports stay off until you turn them on. A report holds the error\'s name, its message and where in the code it happened, with tokens and paths under your home folder removed. Terminal output, file contents, prompts and your Mac\'s name are never in it. A build with no reporting address sends nothing, and the setting says so. Usage counts, when on, stay on this Mac and leave it only when you copy them yourself.'
 
 export const SETTINGS_PANES: readonly SettingsPane[] = [
   {
@@ -146,7 +146,7 @@ export function sectionOf(def: Pick<SettingDef, 'id' | 'category'>): string {
     if (/^(learn\.|agents\.team|agents\.turnSnapshots)/.test(def.id)) return 'Teams and lessons'
     return 'Attention'
   }
-  if (def.category === TELEMETRY_CATEGORY) return def.id.startsWith('remote.') ? 'Phone alerts and remote clients' : 'Crash reports'
+  if (def.category === TELEMETRY_CATEGORY) return def.id.startsWith('remote.') ? 'Phone alerts and remote clients' : def.id.startsWith('usage.') ? 'Usage counts' : 'Crash reports'
   return def.category
 }
 

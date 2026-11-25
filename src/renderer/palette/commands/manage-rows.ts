@@ -182,6 +182,30 @@ export function manageRows(ctx: PaletteContext): Command[] {
     run: () => actions.beginClearScrollback()
   })
 
+  // M697. The local usage tally's two verbs. Hidden at rest: a person who
+  // wants them types "usage", and the setting's own sentence names Copy.
+  // Copy is the ONLY way the tally leaves the Mac, onto the person's own
+  // clipboard; Clear deletes the file after a confirm, like the row above.
+  out.push({
+    id: 'usage.copy',
+    title: 'Copy my usage counts',
+    subtitle: 'the tally kept on this Mac, as text on your clipboard; nothing is sent',
+    group: 'canvas',
+    hiddenAtRest: true,
+    searchText: 'usage counts statistics analytics feature funnel copy export clipboard privacy feedback',
+    run: () => actions.copyUsageCounts()
+  })
+  out.push({
+    id: 'usage.clear',
+    title: 'Clear my usage counts',
+    subtitle: 'deletes the tally kept on this Mac',
+    group: 'canvas',
+    hiddenAtRest: true,
+    destructive: true,
+    searchText: 'usage counts statistics analytics clear delete reset privacy',
+    run: () => actions.clearUsageCounts()
+  })
+
   // M37. The worktree door and its rows. The door is present at rest and
   // disabled with a reason when there are none: a door that vanished would
   // read as a feature that was never built, the rule every other door here

@@ -246,6 +246,10 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
       async check() { return { kind: 'current', version: options.appVersion ?? '' } },
       async install() { return { kind: 'refused', reason: 'The browser demo does not install updates.' } }
     },
+    usageCounts: {
+      async read() { return { on: false, text: null } },
+      async clear() { return { cleared: false } }
+    },
     files: {
       list: async () => ({ kind: 'unreadable', detail: 'The browser demo has no disk.' })
     },
