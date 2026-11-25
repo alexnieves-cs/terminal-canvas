@@ -100,7 +100,7 @@ export function SettingsView({
           {pane === 'keyboard' ? (
             <KeyboardPane purpose={current.purpose} overrides={overrides} onSave={save} />
           ) : (
-            <PaneHost purpose={current.purpose} rows={liveRows(rowsForPane(pane), rows)} />
+            <PaneHost purpose={current.purpose} note={current.note} rows={liveRows(rowsForPane(pane), rows)} />
           )}
         </div>
       </div>

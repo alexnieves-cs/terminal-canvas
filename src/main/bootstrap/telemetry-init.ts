@@ -71,7 +71,24 @@ export async function initTelemetry(state: MainState, stores: Stores): Promise<v
       // relationship that does not exist. `scrubEvent` itself is
       // Task 3's and stays unmodified.
       beforeSend: (event) => scrubEvent(event, paths) as unknown as typeof event | null,
-      beforeBreadcrumb: () => null
+      beforeBreadcrumb: () => null,
+      // M696. The rest of the SDK's own reach, closed by option rather than
+      // trusted to the allowlist alone. The Node client names the machine
+      // (`os.hostname()`) as server_name unless told otherwise; scrubEvent
+      // already drops it from an event, and this keeps it out of everything
+      // else too. No breadcrumbs are kept at all, no client reports (counts
+      // of dropped events) are sent, no transactions or spans are sent, and
+      // the logs and metrics features, which this SDK turns on by default
+      // and which do not pass through beforeSend, are off. `verify:meta
+      // telemetry.8` pins each of these.
+      serverName: 'terminal-canvas',
+      maxBreadcrumbs: 0,
+      sendClientReports: false,
+      enableLogs: false,
+      enableMetrics: false,
+      includeLocalVariables: false,
+      beforeSendTransaction: () => null,
+      beforeSendLog: () => null
       // M112 review, IMPORTANT 1: `beforeSend` only sees envelopes the SDK
       // resolves to an EVENT (`node_modules/@sentry/electron/main/ipc.js`'s
       // `handleEnvelope`, confirmed against the installed 7.18.0 tree).

@@ -35,8 +35,17 @@ export interface SettingsPane {
   id: SettingsPaneId
   label: string
   purpose: string
+  /** M696. A plain note under the purpose, for a page whose rows decide what leaves the Mac. */
+  note?: string
   categories: readonly string[]
 }
+
+/**
+ * M696. The privacy note the Privacy page shows above its switches, in the
+ * same words as docs/guide/privacy.md. `verify:meta privacy.1` holds the two
+ * pages to the same claims.
+ */
+export const PRIVACY_NOTE = 'Crash reports stay off until you turn them on. A report holds the error\'s name, its message and where in the code it happened, with tokens and paths under your home folder removed. Terminal output, file contents, prompts and your Mac\'s name are never in it. A build with no reporting address sends nothing, and the setting says so.'
 
 export const SETTINGS_PANES: readonly SettingsPane[] = [
   {
@@ -90,6 +99,7 @@ export const SETTINGS_PANES: readonly SettingsPane[] = [
     id: 'privacy',
     label: 'Privacy & export',
     purpose: 'What may leave this machine. A crash report is off until you turn it on. Exporting your work stays a verb you run yourself.',
+    note: PRIVACY_NOTE,
     categories: [TELEMETRY_CATEGORY]
   }
 ]

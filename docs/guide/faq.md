@@ -19,7 +19,8 @@ Check a picture before you share it.
 ## Does it send my code anywhere?
 
 No. The app needs no account and has no server of its own. Your agent CLI talks to its own provider, as it does in
-any terminal. Crash reports are off unless you add your own Sentry address in Settings.
+any terminal. Crash reports are off until you turn them on in Settings, and never hold your code or terminal output.
+[Privacy](privacy.md) lists everything the app can send.
 
 ## What does it cost?
 

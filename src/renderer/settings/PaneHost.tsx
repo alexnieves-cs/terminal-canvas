@@ -17,12 +17,14 @@ import { hostedWords } from '@shared/hosted-keys'
 import { isHosted } from '@renderer/hosted'
 import { sectionsFor } from './panes'
 
-export function PaneHost({ purpose, rows }: { purpose: string; rows: readonly SettingRow[] }): JSX.Element {
+export function PaneHost({ purpose, note, rows }: { purpose: string; note?: string; rows: readonly SettingRow[] }): JSX.Element {
   const full = rows.find((row) => row.id === FULL_SETTING)?.value === true
   const sections = sectionsFor(rows, full || !rows.some((row) => row.id === FULL_SETTING))
   return (
     <div className="rd-settings__host">
       <p className="rd-settings__lead" data-settings-purpose>{purpose}</p>
+      {/* M696. A page that decides what leaves the Mac says what a report holds, before its switches. */}
+      {note !== undefined && <p className="rd-settings__lead" data-settings-note>{note}</p>}
       {sections.map((section) => (
         <section key={section.title} className="rd-settings__section" data-settings-section={section.title}>
           {sections.length > 1 && <h2 className="rd-settings__section-title">{section.title}</h2>}

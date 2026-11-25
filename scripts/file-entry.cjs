@@ -51,6 +51,8 @@ module.exports = {
   ...require('../src/main/browser-read.ts'),
   /* M112. Telemetry's decision and its scrubber: pure over injected paths. */
   ...require('../src/main/telemetry.ts'),
+  /* M696. The build-time crash-report address: its shape, the build's read, the host. */
+  ...require('../src/shared/crash-dsn.ts'),
   // M650. The crash guard: pure over an injected process, log and clock.
   ...require('../src/main/crash-guard.ts'),
   SETTINGS_FOR_TELEMETRY: require('../src/shared/settings-schema.ts').SETTINGS,

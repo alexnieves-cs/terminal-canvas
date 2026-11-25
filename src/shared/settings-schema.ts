@@ -727,9 +727,11 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     // M652. The maintainers' half of crash reporting, and OFF: a person opts
     // in, nothing opts them in. Never planWritable, for telemetry.sentryDsn's
-    // reason. The description says what is sent, what is removed, and — while
-    // main/telemetry.ts's PROJECT_DSN is empty — that nothing is sent at all;
-    // `verify:file telemetry.6` fails if that clause and the constant disagree.
+    // reason. The description says what is sent, what is removed, and that a
+    // build with no address sends nothing. M696: the address comes from the
+    // build (shared/crash-dsn.ts), so main's settings:list rewrites the last
+    // clause for a build that has one (main/telemetry.ts
+    // crashReportsDescription; `verify:file telemetry.6`).
     id: 'telemetry.crashReports',
     label: 'Send crash reports to the maintainers',
     description: 'when the app hits an error, send the error’s name, its message and where in the code it happened — tokens and paths under your home folder are removed first, and terminal output, file contents and prompts are never included; your own Sentry DSN above takes its place when set; takes effect on next launch; this build has no reporting address yet, so nothing is sent',

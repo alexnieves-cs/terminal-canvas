@@ -3001,8 +3001,11 @@ await (async () => {
   const typo = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true, 'telemetry.sentryDsn': 'htps://oops' }), PROJECT) : null
   const shipped = can ? F.telemetryPlan(read({ 'telemetry.crashReports': true })) : null
   const row = can ? F.SETTINGS_FOR_TELEMETRY.find((d) => d.id === 'telemetry.crashReports') : null
-  const saysNothingSent = !!row && /nothing is sent/.test(row.description)
-  ok('telemetry.6 the crash-report toggle is boolean, off by default and never planWritable; off (or a non-boolean) sends nothing, on with no project address is off by name, a person\'s own DSN is final whether valid or a typo, a native dump never rides the toggle, and the description says "nothing is sent" exactly while PROJECT_DSN is empty',
+  // M696. The sentence a person reads is the one main's settings:list sends,
+  // crashReportsDescription over the schema's, for THIS build's address.
+  const shown = !!row && typeof F.crashReportsDescription === 'function' ? F.crashReportsDescription(row.description) : ''
+  const saysNothingSent = /nothing is sent/.test(shown)
+  ok('telemetry.6 the crash-report toggle is boolean, off by default and never planWritable; off (or a non-boolean) sends nothing, on with no project address is off by name, a person\'s own DSN is final whether valid or a typo, a native dump never rides the toggle, and the description it is shown with says "nothing is sent" exactly while PROJECT_DSN is empty',
     can && !!row && row.type === 'boolean' && row.default === false && row.planWritable === undefined &&
       off.on === false && off.reason === 'no-dsn' && truthy.on === false &&
       noAddress.on === false && noAddress.reason === 'no-project-dsn' && badAddress.on === false && badAddress.reason === 'no-project-dsn' &&
@@ -3011,6 +3014,31 @@ await (async () => {
       typo.on === false && typo.reason === 'malformed-dsn' &&
       (F.PROJECT_DSN === '' ? shipped.on === false && shipped.reason === 'no-project-dsn' && saysNothingSent : shipped.on === true && !saysNothingSent),
     can ? JSON.stringify({ off, truthy, noAddress, on, own, typo, shipped, project: F.PROJECT_DSN === '' ? 'empty' : 'set', saysNothingSent }) : 'telemetry not exported')
+}
+
+// telemetry.7 (M696). THE ADDRESS COMES FROM THE BUILD. `buildTimeDsn` is
+// what electron.vite.config.ts compiles into main: unset or blank is '' (no
+// address, nothing sent), a DSN is kept exactly, and a value that is set and
+// is not a DSN THROWS, so the build fails instead of shipping a toggle that
+// claims to report. With an address, the toggle's sentence names where
+// reports go and stops saying nothing is sent; without one it is unchanged.
+{
+  const can = typeof F.buildTimeDsn === 'function' && typeof F.dsnHost === 'function' && typeof F.crashReportsDescription === 'function'
+  const throws = (env) => { try { F.buildTimeDsn(env); return false } catch (e) { return /TC_CRASH_DSN/.test(String(e)) } }
+  const row = can ? F.SETTINGS_FOR_TELEMETRY.find((d) => d.id === 'telemetry.crashReports') : null
+  const base = row ? row.description : ''
+  const withAddress = can ? F.crashReportsDescription(base, 'https://feed1234@o9.ingest.example.io/7') : ''
+  const withNone = can ? F.crashReportsDescription(base, '') : ''
+  const withTypo = can ? F.crashReportsDescription(base, 'htps://oops') : ''
+  ok('telemetry.7 TC_CRASH_DSN unset or blank builds with no address, a DSN is kept exactly, a malformed one fails the build; with an address the toggle names the host and no longer says nothing is sent, and with none or a typo it is unchanged',
+    can && F.buildTimeDsn({}) === '' && F.buildTimeDsn({ TC_CRASH_DSN: '   ' }) === '' &&
+      F.buildTimeDsn({ TC_CRASH_DSN: ' https://feed1234@o9.ingest.example.io/7 ' }) === 'https://feed1234@o9.ingest.example.io/7' &&
+      throws({ TC_CRASH_DSN: 'feed1234@o9.ingest.example.io/7' }) && throws({ TC_CRASH_DSN: 'http://feed1234@o9.ingest.example.io/7' }) && throws({ TC_CRASH_DSN: 'https://o9.ingest.example.io/7' }) &&
+      F.dsnHost('https://feed1234@o9.ingest.example.io:443/7') === 'o9.ingest.example.io' && F.dsnHost('nope') === null &&
+      base.endsWith(F.NO_ADDRESS_CLAUSE) &&
+      /o9\.ingest\.example\.io/.test(withAddress) && !/nothing is sent/.test(withAddress) && !/feed1234/.test(withAddress) &&
+      withNone === base && withTypo === base,
+    JSON.stringify({ withAddress, withNone: withNone === base, withTypo: withTypo === base }))
 }
 
 // crash.* (M650). THE MAIN PROCESS'S LAST LISTENER, under plain node: an

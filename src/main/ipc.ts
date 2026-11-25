@@ -30,6 +30,7 @@ import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult, UpdateInstallResult, PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
+import { crashReportsDescription } from './telemetry'
 import type { TonightStatus } from '../shared/tonight'
 import type { ForkRequest, ForkResult, TurnSnapshotRow } from '../shared/turn-fork'
 import type { TournamentStatus } from '../shared/tournament'
@@ -1238,7 +1239,9 @@ export function registerIpcHandlers(
     SETTINGS.map((def) => ({
       id: def.id,
       label: def.label,
-      description: def.description,
+      // M696. The crash-report toggle's sentence follows this build's
+      // address: "nothing is sent" with none, where reports go with one.
+      description: def.id === 'telemetry.crashReports' ? crashReportsDescription(def.description) : def.description,
       keywords: [...def.keywords],
       type: def.type,
       // M642. The harnesses exercise the Full product (the World scenes, the

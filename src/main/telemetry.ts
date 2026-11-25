@@ -19,6 +19,10 @@
  */
 import { redactSecrets } from '../shared/redact'
 import type { SettingValue } from '../shared/settings-schema'
+import { DSN_SHAPE, dsnHost } from '../shared/crash-dsn'
+
+/** M696. Replaced at `electron-vite build` (electron.vite.config.ts); undeclared, and so `''`, everywhere else. */
+declare const __TC_CRASH_DSN__: string | undefined
 
 /**
  * M652. WHERE THE OPT-IN TOGGLE SENDS, AND IT IS EMPTY ON PURPOSE.
@@ -31,19 +35,37 @@ import type { SettingValue } from '../shared/settings-schema'
  * a switch that claimed to report and silently did not would be the exact
  * failure this repository's rules exist to prevent.
  *
- * When one is added: it goes in this constant and nowhere else, it must pass
- * the `DSN` shape below, and the setting's description loses its last clause
- * in the same change (`verify:file telemetry.6` holds the two together).
- * A DSN is not a secret — it can only submit events — so a literal is right.
+ * M696: the address is no longer a literal here. It comes from the BUILD
+ * (`TC_CRASH_DSN` at `electron-vite build`, shared/crash-dsn.ts says how and
+ * fails the build on a malformed value), so filling it is a repository
+ * variable, not a code change. A build without it (every suite's bundle, a
+ * dev build, a fork, a release before the owner sets it) has none, and the
+ * toggle sends nothing. The setting's sentence follows the build:
+ * `crashReportsDescription` swaps the "nothing is sent" clause for the host
+ * when there is an address (`verify:file telemetry.6`).
  */
-export const PROJECT_DSN = ''
+export const PROJECT_DSN: string = typeof __TC_CRASH_DSN__ === 'string' ? __TC_CRASH_DSN__ : ''
+
+/** The clause `telemetry.crashReports`'s description ends with in a build that has no address. */
+export const NO_ADDRESS_CLAUSE = '; this build has no reporting address yet, so nothing is sent'
+
+/**
+ * M696. The toggle's sentence for THIS build: unchanged with no address, and
+ * with one, the "nothing is sent" clause becomes where reports go. main's
+ * settings:list applies it, so the page and the palette say the same thing.
+ */
+export function crashReportsDescription(description: string, projectDsn: string = PROJECT_DSN): string {
+  const host = dsnHost(projectDsn)
+  if (host === null || !description.endsWith(NO_ADDRESS_CLAUSE)) return description
+  return `${description.slice(0, -NO_ADDRESS_CLAUSE.length)}; this build sends them to the maintainers' crash-report service at ${host}, only while this is on`
+}
 
 export type TelemetryPlan =
   | { on: false; reason: 'no-dsn' | 'malformed-dsn' | 'no-project-dsn' }
   | { on: true; dsn: string; nativeCrashes: boolean; to: 'own' | 'project' }
 
-/** `https://<key>@<host>/<project>` — Sentry's own shape, nothing looser. */
-const DSN = /^https:\/\/[A-Za-z0-9]+@[A-Za-z0-9.-]+(:\d+)?\/\d+$/
+/** `https://<key>@<host>/<project>`, Sentry's own shape; one copy, in shared/crash-dsn.ts. */
+const DSN = DSN_SHAPE
 
 /**
  * The order of the arms is the rule. A person's OWN DSN is asked about first

@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { buildTimeDsn } from './src/shared/crash-dsn'
 
 export default defineConfig({
   main: {
@@ -8,6 +9,11 @@ export default defineConfig({
     // every `dependencies` entry out of the bundle so it is `require`d from
     // node_modules instead of being inlined (which would break the binary link).
     plugins: [externalizeDepsPlugin()],
+    // M696. The project's crash-report address, from TC_CRASH_DSN at build
+    // time; '' when unset. A value that is set and is not a DSN throws here,
+    // so the build fails rather than shipping a toggle that cannot report.
+    // Main only: the renderer never holds the address (reports ride IPC).
+    define: { __TC_CRASH_DSN__: JSON.stringify(buildTimeDsn(process.env)) },
     build: {
       rollupOptions: {
         // M54. The tc CLI is a second main-process entry: out/main/tc.js,

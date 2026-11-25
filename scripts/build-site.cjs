@@ -51,6 +51,7 @@ const PAGES = [
   ['keyboard.md', 'keyboard', 'Keyboard'],
   ['agents.md', 'agents', 'Supported agents'],
   ['faq.md', 'faq', 'FAQ'],
+  ['privacy.md', 'privacy', 'Privacy'],
   ['compare.md', 'compare', 'Comparison']
 ]
 

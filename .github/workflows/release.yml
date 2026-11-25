@@ -178,6 +178,13 @@ jobs:
         env:
           # The hosted Intel image is the slower machine by a wide margin.
           TC_WATCHDOG_SCALE: ${{ matrix.arch == 'x64' && '4' || '2' }}
+          # M696. THIS step runs `electron-vite build`; the DMG steps below only
+          # package out/. So the crash-report address is read here: the
+          # repository VARIABLE (a DSN can only submit events, so it is not a
+          # secret). Unset, the build has no address and the opt-in toggle
+          # sends nothing; set and malformed, the build fails
+          # (src/shared/crash-dsn.ts). docs/release-signing.md says how to set it.
+          TC_CRASH_DSN: ${{ vars.TC_CRASH_DSN }}
         run: npm run verify:packaged
 
       # The DMG itself. `--publish never`: the release step below is the only

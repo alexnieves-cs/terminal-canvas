@@ -24,11 +24,13 @@ Off by default, and there are two separate switches in Settings, Privacy & expor
 
 - **Sentry DSN** (since M112): a person's own Sentry project. Reports go there and nowhere else.
 - **Send crash reports to the maintainers** (M652): the opt-in toggle for the
-  project's own address. **That address does not exist yet**: `PROJECT_DSN` in
-  `main/telemetry.ts` is empty, so the toggle sends nothing, and its description
-  says so. When a DSN is added, it goes in that constant and the description
-  loses its last clause in the same change. `verify:file telemetry.6` fails if
-  only one of the two moves.
+  project's own address. **That address comes from the build** (M696): `PROJECT_DSN`
+  in `main/telemetry.ts` is `TC_CRASH_DSN` as `electron-vite build` saw it, and
+  release.yml passes the repository variable of that name. Until the owner sets
+  it, every build has no address, the toggle sends nothing, and its description
+  says so. With one, main's `settings:list` names the host in that clause
+  instead. `verify:file telemetry.6` and `telemetry.7` hold the two together;
+  docs/release-signing.md has the owner's steps.
 
 Either way every event passes `scrubEvent`, an allowlist that drops
 breadcrumbs, request, user, tags and frame variables, and runs each kept

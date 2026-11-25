@@ -932,6 +932,61 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ importsNamespacedHookup, hookupInsideGate, noDeadRendererImport, rendererHasGlobalHandlers }))
 }
 
+// M696 — telemetry.8. THE PROJECT ADDRESS IS THE BUILD'S, AND THE SDK'S OWN
+// REACH IS CLOSED BY OPTION. (a) main/telemetry.ts holds no DSN literal: the
+// address is `__TC_CRASH_DSN__`, which electron.vite.config.ts defines for
+// MAIN ONLY from buildTimeDsn(process.env). (b) release.yml reads the
+// repository variable TC_CRASH_DSN on the verify:packaged step, the one that
+// runs electron-vite build (the DMG steps only package out/). (c) The init
+// names every option that keeps data out of what beforeSend cannot see:
+// sendDefaultPii false, a fixed serverName (the Node client would send the
+// hostname), no breadcrumbs, no client reports, logs and metrics off, and
+// transactions and logs dropped. Text pins: a wrapper one hop away evades
+// them, the honest limit telemetry.3 names.
+{
+  const tel = stripComments(read('src/main/telemetry.ts') ?? '')
+  const noLiteral = /PROJECT_DSN: string = typeof __TC_CRASH_DSN__ === 'string' \? __TC_CRASH_DSN__ : ''/.test(tel) && !/['"]https:\/\/[A-Za-z0-9]+@/.test(tel)
+  const vite = stripComments(read('electron.vite.config.ts') ?? '')
+  const mainAt = vite.indexOf('main: {')
+  const preloadAt = vite.indexOf('preload: {')
+  const mainBlock = mainAt === -1 || preloadAt === -1 ? '' : vite.slice(mainAt, preloadAt)
+  const defined = /__TC_CRASH_DSN__: JSON\.stringify\(buildTimeDsn\(process\.env\)\)/.test(mainBlock) &&
+    (vite.match(/__TC_CRASH_DSN__/g) ?? []).length === 1
+  const yml = read('.github/workflows/release.yml') ?? ''
+  const step = yml.slice(yml.indexOf('- name: verify:packaged'), yml.indexOf('run: npm run verify:packaged'))
+  const ci = /TC_CRASH_DSN: \$\{\{ vars\.TC_CRASH_DSN \}\}/.test(step) && !/secrets\.TC_CRASH_DSN/.test(yml)
+  const init = stripComments(read('src/main/bootstrap/telemetry-init.ts') ?? '')
+  const need = ['sendDefaultPii: false', "serverName: 'terminal-canvas'", 'maxBreadcrumbs: 0', 'sendClientReports: false', 'enableLogs: false', 'enableMetrics: false', 'defaultIntegrations: false', 'beforeSendTransaction: () => null', 'beforeSendLog: () => null', 'beforeBreadcrumb: () => null']
+  const missing = need.filter((n) => !init.includes(n))
+  ok('telemetry.8 telemetry.ts holds no DSN literal and reads __TC_CRASH_DSN__, which only the main build defines from buildTimeDsn; release.yml passes the TC_CRASH_DSN variable to the step that builds; the Sentry init names every option that keeps data out of what beforeSend cannot see',
+    noLiteral && defined && ci && missing.length === 0,
+    JSON.stringify({ noLiteral, defined, ci, missing }))
+}
+
+// M696 — privacy.1. THE PRIVACY NOTE SAYS ONE THING IN BOTH PLACES. The
+// settings page's Privacy note (panes.ts PRIVACY_NOTE, rendered by PaneHost)
+// and docs/guide/privacy.md each say that crash reports are off until turned
+// on, what is removed, and what is never in a report; the guide page is
+// published (build-site PAGES) and linked from the guide's index; and neither
+// joins its clauses with an em dash.
+{
+  const panes = read('src/renderer/settings/panes.ts') ?? ''
+  const m = /export const PRIVACY_NOTE = '((?:[^'\\]|\\.)*)'/.exec(panes)
+  const note = m === null ? '' : m[1].replace(/\\'/g, "'")
+  const wired = /note: PRIVACY_NOTE/.test(panes) && /data-settings-note/.test(read('src/renderer/settings/PaneHost.tsx') ?? '') &&
+    /note=\{current\.note\}/.test(read('src/renderer/settings/SettingsView.tsx') ?? '')
+  const guide = (read('docs/guide/privacy.md') ?? '').replace(/\s+/g, ' ')
+  const claims = [/off until you turn them on/i, /tokens/i, /home folder/i, /terminal output/i, /file contents/i, /prompts/i, /Mac's name/i]
+  const missingNote = claims.filter((c) => !c.test(note)).map(String)
+  const missingGuide = claims.filter((c) => !c.test(guide)).map(String)
+  const { PAGES } = require('./build-site.cjs')
+  const published = PAGES.some((p) => p[0] === 'privacy.md') && /\(privacy\.md\)/.test(read('docs/guide/README.md') ?? '')
+  const dashes = [note, guide].filter((t) => /\u2014/.test(t)).length
+  ok('privacy.1 the Privacy settings note and the guide\'s Privacy page make the same claims about crash reports, the page is published and linked, and neither uses an em dash',
+    note !== '' && wired && missingNote.length === 0 && missingGuide.length === 0 && published && dashes === 0,
+    JSON.stringify({ note: note.length, wired, missingNote, missingGuide, published, dashes }))
+}
+
 // M123 — update.1. THE UPDATE CHECK NEVER REACHES THE NETWORK FROM A SUITE,
 // AND NO PLAN MAY SWITCH IT ON. Three facts pinned as text, each with a
 // silent failure behind it. (a) The setting `update.checkOnLaunch` exists,

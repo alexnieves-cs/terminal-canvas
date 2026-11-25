@@ -18,6 +18,7 @@ a list of tasks while you sleep.
 - [Supported agents](agents.md): which CLIs work, and what each one gets.
 - [Overnight](overnight.md): hand over a list of tasks and wake up to a queue.
 - [FAQ](faq.md): safety, cost, platforms and troubleshooting.
+- [Privacy](privacy.md): what can leave your Mac, and how to turn each one off.
 - [Comparison](compare.md): how it differs from similar tools.
 - [Getting started](../getting-started.md): a longer walk through workflows, previews, notes and
   sharing a canvas.

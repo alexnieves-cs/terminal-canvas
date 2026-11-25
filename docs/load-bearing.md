@@ -3254,7 +3254,12 @@ person's own DSN is asked about first and a MALFORMED one answers `malformed-dsn
 through, because a typo in a field must never change where bytes go; a native dump never rides the
 toggle. With no project address the plan is off BY NAME (`no-project-dsn`) and the setting's
 description says nothing is sent. `verify:file telemetry.6` fails when the constant and that
-sentence disagree.
+sentence disagree. M696: the constant is the BUILD's (`TC_CRASH_DSN` at `electron-vite build`,
+`shared/crash-dsn.ts`, defined for main only), a malformed value fails the build, and main's
+`settings:list` rewrites the description's last clause for a build that has an address
+(`crashReportsDescription`, `verify:file telemetry.7`). The Sentry init also closes what
+`beforeSend` never sees: a fixed `serverName`, no breadcrumbs, no client reports, logs and
+metrics off, transactions and logs dropped (`verify:meta telemetry.8`).
 
 **What was running when the window went away is RECORDED before the teardown, sealed by the quit, and read-and-deleted at the next boot (`main/last-exit.ts`, `shared/persistence.ts`, `shell/ReopenNotice.tsx`, `session:last-exit`).**
 Brief #20. On reopening, a reattached session, a kept session that died, and a process the quit
