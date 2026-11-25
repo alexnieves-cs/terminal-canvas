@@ -79,8 +79,15 @@ npm run dev
 
 ## Updates
 
-The app checks GitHub for a newer release and tells you when there is one. It does not replace
-itself. Download the new `.dmg` and drag it over the old app, or run
+The app checks GitHub for a newer release and tells you when there is one. In an unsigned build
+it does not replace itself: download the new `.dmg` and drag it over the old app, or run
 `brew upgrade --cask terminal-canvas` if you installed with Homebrew.
+
+A build signed with an Apple Developer ID can also install the update. When a newer release is
+found, the palette and the launcher offer **Install update**. Nothing downloads until you choose
+**Download and install** in the dialog that follows. The download is checked against the app's
+signature and installed the next time the app starts. To turn the offer off, switch off **Offer
+to install updates** in Settings → General → Updates. [Signing and the network](../release-signing.md#updates-and-the-network-m695)
+lists exactly what is requested.
 
 Next: [your first task](first-task.md).

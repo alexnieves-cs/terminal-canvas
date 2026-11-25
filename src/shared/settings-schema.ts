@@ -827,6 +827,22 @@ export const SETTINGS: readonly SettingDef[] = [
     default: true,
     category: UPDATES_CATEGORY
   },
+  {
+    // M695. The install half, and only in a SIGNED build (main/self-update.ts
+    // reads the signature; an unsigned build never offers it, whatever this
+    // says). ON by default because it only OFFERS: every install still waits
+    // for the person's yes in main's own dialog, asked before a byte is
+    // fetched. Off keeps M123's notice exactly. Never planWritable, for
+    // update.checkOnLaunch's reason: a plan that could reach a download has
+    // the shape of exfiltration in the other direction.
+    id: 'update.offerInstall',
+    label: 'Offer to install updates',
+    description: 'in a signed build, when a newer release is found, offer to download and install it — nothing downloads until you choose Download and install, and it is applied the next time the app starts; off, or in an unsigned build, the notice only links to the release',
+    keywords: ['update', 'install', 'auto', 'automatic', 'download', 'restart', 'signed', 'upgrade', 'release'],
+    type: 'boolean',
+    default: true,
+    category: UPDATES_CATEGORY
+  },
   // M496. The cut list's hidden surfaces, off by default, and World, kept on
   // with a switch to hide it (shared/labs.ts says why). Never planWritable: a
   // plan should not grow or shrink the product a person chose.

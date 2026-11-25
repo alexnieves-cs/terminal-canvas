@@ -326,6 +326,9 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // fire is a beacon on a schedule; the setting that automates it is not
   // planWritable for the same reason.
   checkForUpdates: 'a network call the user makes by hand — never a plan',
+  // M695. It replaces the app itself; main asks the person in its own dialog,
+  // and no plan line, workflow node or agent may stand in for that answer.
+  installUpdate: 'replaces the app after the person answers main\'s own dialog — never a plan',
   // M253. "I've read this" is a PERSON's statement about a stranger's command
   // or verb lines. A plan that could make it would undo the very gate it
   // clears, so neither has a verb.

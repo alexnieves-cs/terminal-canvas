@@ -290,6 +290,25 @@ export function canvasRows(ctx: PaletteContext): Command[] {
     group: 'canvas',
     run: () => actions.checkForUpdates()
   }, ctx.update?.checking === true ? 'checking…' : undefined))
+  // M695. Present ONLY when main marked the newer release installable (a
+  // signed build with Offer to install updates on): an unsigned build's
+  // palette is exactly M123's. The row opens main's own question.
+  const installable = ctx.update?.result?.kind === 'newer' && ctx.update.result.installable === true ? ctx.update.result.version : null
+  if (installable !== null) {
+    // Once downloaded, the same row asks only when to restart (main keeps
+    // the staged version; a second download is never started).
+    const staged = ctx.update?.install?.kind === 'ready' && ctx.update.install.version === installable
+    out.push(withReason({
+      id: 'update.install',
+      title: staged ? `Restart to install ${installable}…` : `Install update ${installable}…`,
+      subtitle: staged
+        ? 'downloaded — asks first, then quits the way ⌘Q does; otherwise it installs the next time the app starts'
+        : 'asks first — downloads from GitHub and installs the next time the app starts',
+      searchText: 'update install upgrade restart newer release download signed',
+      group: 'canvas',
+      run: () => actions.installUpdate()
+    }, ctx.update?.installing === true ? 'installing…' : undefined))
+  }
 
   return out
 }

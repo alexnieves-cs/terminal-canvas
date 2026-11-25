@@ -498,6 +498,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
         codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
         update={updateState}
         onOpenRelease={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
+        onInstallUpdate={() => paletteActions.installUpdate()}
       />
       )
     })()}
@@ -575,7 +576,9 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
       )
     })()}
     <CanvasHud
-      updateNewer={updateState.result?.kind === 'newer' ? { version: updateState.result.version, url: updateState.result.url } : null}
+      updateNewer={updateState.result?.kind === 'newer'
+        ? { version: updateState.result.version, url: updateState.result.url, ...(updateState.result.installable === true ? { onInstall: () => paletteActions.installUpdate() } : {}) }
+        : null}
       viewport={viewport}
       onZoomBy={zoomBy}
       onFit={fitAll}

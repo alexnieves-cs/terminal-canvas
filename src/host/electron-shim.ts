@@ -462,6 +462,22 @@ export const net = {
   fetch: (input: string | URL | Request, init?: RequestInit): Promise<Response> => globalThis.fetch(input, init)
 }
 
+// ── autoUpdater: INERT, a host is not an app bundle ─────────────────────────
+
+/**
+ * M695. Main's update handlers import Electron's `autoUpdater`, and the plan
+ * in self-update.ts turns a host off before it is touched (`process.execPath`
+ * is node, not an `.app`). Present so the import resolves; every call throws,
+ * so a future caller that skipped the plan is a loud error, never a download.
+ */
+class AutoUpdaterStub extends EventEmitter {
+  setFeedURL(): void { throw new Error('a hosted session does not install updates') }
+  checkForUpdates(): void { throw new Error('a hosted session does not install updates') }
+  quitAndInstall(): void { throw new Error('a hosted session does not install updates') }
+  getFeedURL(): string { return '' }
+}
+export const autoUpdater = new AutoUpdaterStub()
+
 // ── safeStorage: real encryption, with the key on the host ──────────────────
 
 /**
@@ -510,5 +526,5 @@ export { hub as __hubForVerify }
 
 export default {
   app, ipcMain, BrowserWindow, webContents, dialog, shell, clipboard, nativeImage, Menu, MenuItem,
-  Tray, Notification, globalShortcut, powerSaveBlocker, powerMonitor, session, net, safeStorage
+  Tray, Notification, globalShortcut, powerSaveBlocker, powerMonitor, session, net, safeStorage, autoUpdater
 }

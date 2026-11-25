@@ -11,7 +11,7 @@
  */
 
 import { notifyDone } from '../../shell/toast'
-import { beginUpdateCheck, getUpdateState, setUpdateResult, updateSentence } from '@renderer/session/update-store'
+import { beginUpdateCheck, beginUpdateInstall, getUpdateState, installableVersion, setUpdateInstall, setUpdateResult, updateSentence } from '@renderer/session/update-store'
 import { findService } from '@shared/credential-schema'
 import type { PaletteActions } from '@renderer/palette/commands'
 import { installSettingsHost } from '@renderer/settings/mount'
@@ -28,6 +28,7 @@ export type SettingsActions = Pick<PaletteActions,
   | 'beginDeleteCredential'
   | 'beginClearScrollback'
   | 'checkForUpdates'
+  | 'installUpdate'
   | 'checkReadiness'
   | 'openStarter'
   | 'setAgentLinks'
@@ -281,8 +282,9 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
     // feedback so it renders as an answer rather than a hint), and the store
     // remembers it for the environment row and the launcher. On `newer` the
     // line's verb is Enter — `Open release` through links.open, main's own
-    // door for a url, never a download: auto-swap is declined by name for
-    // an unsigned build. A second ask while one is in flight is a no-op
+    // door for a url, never a download: an unsigned build does not install
+    // updates (M695 offers Install… only when main says the build is signed
+    // and the setting is on). A second ask while one is in flight is a no-op
     // (the store refuses it), so a double-tap on the row is one GET.
     checkForUpdates: () => {
       if (getUpdateState().checking) return
@@ -290,7 +292,11 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
       void window.canvas.update.check().then((result) => {
         setUpdateResult(result)
         const sentence = updateSentence(getUpdateState())
-        if (result.kind === 'newer') {
+        if (result.kind === 'newer' && result.installable === true) {
+          // M695. A signed build: Enter opens main's own question, which
+          // defaults to Cancel. Nothing downloads from this line.
+          setInputMode({ kind: 'confirm', label: `${sentence} — Install… (asks first)`, initial: '', feedback: true, submit: () => { setInputMode(null); self.installUpdate() } })
+        } else if (result.kind === 'newer') {
           const url = result.url
           setInputMode({ kind: 'confirm', label: `${sentence} — Open release`, initial: '', feedback: true, submit: () => { void window.canvas.links.open({ panelId: '', target: url }); setInputMode(null) } })
         } else {
@@ -301,6 +307,25 @@ export function settingsActions(ctx: ActionCtx): SettingsActions {
         // The invoke itself failed (no handler in an old main): the third
         // state, never a hang with the row saying `checking…` forever.
         setUpdateResult({ kind: 'could-not-check', reason: e instanceof Error ? e.message : 'the update check did not answer' })
+      })
+    },
+    // M695. Only for a `newer` answer main marked installable; the dialog,
+    // the download and the restart question are all main's. A decline says
+    // nothing (the person just answered); every other answer lands on the
+    // feedback line, and the store keeps it for the rows and the HUD.
+    installUpdate: () => {
+      const version = installableVersion(getUpdateState())
+      if (version === null || !beginUpdateInstall()) return
+      void window.canvas.update.install({ version }).then((answer) => {
+        setUpdateInstall(answer)
+        if (answer.kind === 'declined' || answer.kind === 'restarting') return
+        const label = answer.kind === 'ready'
+          ? `${answer.version} is downloaded — it installs the next time the app starts`
+          : `could not install ${version} — ${answer.reason}`
+        setInputMode({ kind: 'confirm', label, initial: '', feedback: true, submit: () => setInputMode(null) })
+        palette.openPalette()
+      }).catch((e: unknown) => {
+        setUpdateInstall({ kind: 'failed', reason: e instanceof Error ? e.message : 'the install did not answer' })
       })
     },
     checkReadiness: recheckEnvironment,

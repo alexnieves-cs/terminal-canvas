@@ -25,6 +25,12 @@
 # M631: two DMGs, Apple silicon and Intel, one `build` leg each; `publish`
 # runs once after both and is the only job that creates the release.
 #
+# M695: a SIGNED release also carries what a signed copy of the app needs to
+# install it as an update: each leg's zip of the stapled .app, and one
+# static feed per chip (update-arm64.json, update-x64.json) that
+# build/update-feed.cjs writes in `publish`. An unsigned release carries
+# neither, because no copy of the app can install an unsigned update.
+#
 # Run by hand (workflow_dispatch), or on a PR that touches the packaging, it
 # does everything except publish, so the pipeline is proved without minting a
 # tag. The DMGs are still uploaded as artifacts.
@@ -234,6 +240,15 @@ jobs:
           mkdir -p ../dist
           cp "$dmg" "../dist/Terminal-Canvas-$version-$ARCH.dmg"
           app=$(ls -d mac*/*.app | head -1)
+          # M695. Squirrel.Mac compares the feed's currentRelease with the
+          # running app's CFBundleVersion; a build number appended to it would
+          # make every launch see an update to the version it already is.
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
+          echo "CFBundleVersion $bundle"
+          if [ "$SIGNED" = true ] && [ "$bundle" != "$version" ]; then
+            echo "::error::CFBundleVersion is $bundle, not $version: the update feed would never settle"
+            exit 1
+          fi
           # The binary is the chip the name says. An arm64 app in an Intel DMG
           # would pass every other step on a runner that can run both.
           want=$([ "$ARCH" = x64 ] && echo x86_64 || echo "$ARCH")
@@ -252,6 +267,10 @@ jobs:
               codesign -dv --verbose=2 "$app" 2>&1 | grep -E '^(Authority|TeamIdentifier|Runtime)'
               spctl --assess --type execute --verbose=2 "$app" 2>&1
               xcrun stapler validate "$app" 2>&1; } | tee "../dist/codesign-$ARCH.txt"
+            # M695. The zip of this same stapled app, under the one name
+            # build/update-feed.cjs writes into the feed. Signed only.
+            zip=$(ls *.zip | head -1)
+            cp "$zip" "../dist/$(node -p "require('../build/update-feed.cjs').zipAssetName('$version', '$ARCH')")"
           else
             # Not a gate: the build is unsigned by decision. What macOS will
             # make of it is written down so nobody has to guess.
@@ -290,15 +309,23 @@ jobs:
           # The legs already checked the tag against package.json (a tag push)
           # or that it is new and on main (a dispatch); this is the same name.
           TAG="v$(node -p 'require("./package.json").version')"
-          cd dist
-          # The versionless copies: stable URLs under releases/latest/download/.
-          for arch in arm64 x64; do cp "Terminal-Canvas-${TAG#v}-$arch.dmg" "Terminal-Canvas-$arch.dmg"; done
-          shasum -a 256 *.dmg > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-          cd ..
           # Signed only if BOTH legs were: the notes must not promise one chip
           # an app that opens without a warning when it will not.
           SIGNED=true; for f in dist/signed-*.txt; do [ "$(cat "$f")" = true ] || SIGNED=false; done
+          cd dist
+          # The versionless copies: stable URLs under releases/latest/download/.
+          for arch in arm64 x64; do cp "Terminal-Canvas-${TAG#v}-$arch.dmg" "Terminal-Canvas-$arch.dmg"; done
+          # M695. Signed only: the per-chip zips (copied by each leg) and the
+          # static feeds a signed copy of the app reads, pinned to this tag.
+          if [ "$SIGNED" = true ]; then
+            node ../build/update-feed.cjs "$GITHUB_REPOSITORY" "$TAG" .
+            cat update-*.json
+            shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+          else
+            shasum -a 256 *.dmg > SHA256SUMS.txt
+          fi
+          cat SHA256SUMS.txt
+          cd ..
           DMGS="Terminal-Canvas-${TAG#v}-arm64.dmg (Apple silicon) or Terminal-Canvas-${TAG#v}-x64.dmg (Intel)"
           if [ "$SIGNED" = true ]; then
           cat > notes.md <<EOF
@@ -338,7 +365,9 @@ jobs:
           # A tag push already has its tag; a dispatch has it created here, on
           # the commit that was just packaged and gated.
           if [ "$GITHUB_REF_NAME" = "$TAG" ]; then verify=--verify-tag; else verify="--target $GITHUB_SHA"; fi
-          gh release create "$TAG" dist/*.dmg dist/SHA256SUMS.txt \
+          if [ "$SIGNED" = true ]; then ASSETS="dist/*.dmg dist/*.zip dist/update-*.json dist/SHA256SUMS.txt"; else ASSETS="dist/*.dmg dist/SHA256SUMS.txt"; fi
+          # $ASSETS is unquoted on purpose: the globs expand here.
+          gh release create "$TAG" $ASSETS \
             --title "Terminal Canvas ${TAG#v}" \
             --notes-file notes.md \
             $verify

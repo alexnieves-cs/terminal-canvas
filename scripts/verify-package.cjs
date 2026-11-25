@@ -93,15 +93,16 @@ const config = buildConfig()
     `present=${Object.prototype.hasOwnProperty.call(mac, 'identity')} value=${String(mac.identity)}`)
 }
 
-// 9. Both artifacts, one architecture PER BUILD (M631: the Intel DMG is a
+// 9. Every artifact, one architecture PER BUILD (M631: the Intel DMG is a
 // second run of this config with TC_MAC_ARCH=x64, see arch.*). `dir` is the plain .app verify:packaged
-// launches; dmg is the one worth keeping.
+// launches; dmg is the one worth keeping; zip (M695) is what a signed copy
+// of the app installs as an update.
 {
   const targets = config.mac?.target ?? []
   const names = targets.map((t) => (typeof t === 'string' ? t : t.target))
   const arches = targets.flatMap((t) => (typeof t === 'string' ? [] : t.arch ?? []))
-  ok('9 dir and dmg are built, for arm64',
-    names.includes('dir') && names.includes('dmg') &&
+  ok('9 dir, dmg and zip are built, for arm64',
+    names.includes('dir') && names.includes('dmg') && names.includes('zip') &&
       arches.length > 0 && arches.every((a) => a === 'arm64'),
     JSON.stringify(targets))
 }
@@ -261,6 +262,45 @@ console.log('\n' + '='.repeat(60))
       JSON.stringify(signed.files) === JSON.stringify(base.files) &&
       signed.appId === base.appId &&
       JSON.stringify(mac.target) === JSON.stringify(base.mac.target),
+    '')
+}
+
+// feed.* (M695). The self-update feed release.yml writes for a signed
+// release. Squirrel.Mac (Electron's built-in autoUpdater, serverType 'json')
+// reads `currentRelease` and installs `updateTo.url`, so a wrong field is an
+// update that silently never comes, and a wrong url is a download of
+// something that is not the zip the signed job built.
+{
+  const { ARCHES, feedAssetName, zipAssetName, updateFeed } = require('../build/update-feed.cjs')
+  const { MAC_DIR } = require('../build/builder-config.cjs')
+  const feed = updateFeed({ repo: 'acme/canvas', tag: 'v7.1.0', arch: 'x64', pubDate: '2026-11-25T00:00:00.000Z' })
+  const to = feed.releases?.[0]?.updateTo ?? {}
+  ok('feed.1 the feed is the static JSON shape Squirrel.Mac reads',
+    feed.currentRelease === '7.1.0' && feed.releases.length === 1 && feed.releases[0].version === '7.1.0' &&
+      to.version === '7.1.0' && typeof to.pub_date === 'string' && typeof to.name === 'string' && typeof to.notes === 'string',
+    JSON.stringify(feed))
+  ok('feed.2 the update points at this tag\'s own zip for this chip',
+    to.url === 'https://github.com/acme/canvas/releases/download/v7.1.0/' + zipAssetName('7.1.0', 'x64') &&
+      zipAssetName('7.1.0', 'x64').endsWith('.zip') && zipAssetName('7.1.0', 'x64') !== zipAssetName('7.1.0', 'arm64'),
+    String(to.url))
+  const refuses = (args) => { try { updateFeed(args); return false } catch { return true } }
+  ok('feed.3 a tag, repo or chip it cannot spell exactly is refused, never guessed',
+    refuses({ repo: 'acme/canvas', tag: 'latest', arch: 'x64', pubDate: '' }) &&
+      refuses({ repo: 'acme/canvas', tag: 'v7.1.0-beta.1', arch: 'x64', pubDate: '' }) &&
+      refuses({ repo: 'https://evil.example/x', tag: 'v7.1.0', arch: 'x64', pubDate: '' }) &&
+      refuses({ repo: 'acme/canvas', tag: 'v7.1.0', arch: 'universal', pubDate: '' }),
+    '')
+  ok('feed.4 one feed per chip release.yml builds, named per chip',
+    JSON.stringify([...ARCHES].sort()) === JSON.stringify(['arm64', 'x64']) &&
+      ARCHES.every((a) => Object.prototype.hasOwnProperty.call(MAC_DIR, a)) &&
+      feedAssetName('arm64') === 'update-arm64.json' && feedAssetName('x64') === 'update-x64.json',
+    JSON.stringify(ARCHES))
+  // The workflow is where the files are made and uploaded; a feed the
+  // module can write but the job never publishes is the same silent miss.
+  const yml = require('fs').readFileSync(require('path').join(__dirname, '..', '.github', 'workflows', 'release.yml'), 'utf8')
+  ok('feed.5 release.yml writes the feed and uploads the zips only for a signed release',
+    /node (\.\.\/)?build\/update-feed\.cjs \"\$GITHUB_REPOSITORY\" \"\$TAG\"/.test(yml) && /update-\*\.json/.test(yml) && /\.zip/.test(yml) &&
+      /if \[ "\$SIGNED" = true \]; then[\s\S]*update-feed\.cjs/.test(yml),
     '')
 }
 

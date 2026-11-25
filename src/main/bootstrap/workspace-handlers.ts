@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { get as httpsGet } from 'node:https'
 import { get as httpGet } from 'node:http'
-import { app } from 'electron'
+import { execFile } from 'node:child_process'
+import { app, autoUpdater } from 'electron'
 import { createBoardLane } from '../board-lane'
 import { repositoriesAnswer } from '../board-repo'
 import { buildPushArgs } from '../git-args'
@@ -16,6 +17,7 @@ import { importDocx } from '../docx-import'
 import { createFile } from '../file-create'
 import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from '../node-run'
 import { checkForUpdate, repoOf } from '../update-check'
+import { createSelfUpdater, selfUpdatePlan, SELF_UPDATE_SETTING, type SelfUpdatePlan, type SignatureRead, type Updater } from '../self-update'
 import { parsePortable } from '../../shared/portable'
 import { askOpenFile, askSave, confirm, inDownloads, liveWindow } from './dialogs'
 import type { Places } from './places'
@@ -274,25 +276,113 @@ export function createNodeFetchHandlers() {
  * naming the status, not a fetch of wherever it pointed. The repository is
  * package.json's own `repository.url`; a build without one gets the third
  * state by name.
+ *
+ * M695. And its second verb, `install`, over Electron's own `autoUpdater`
+ * (Squirrel.Mac; no updater package). All of the deciding is in
+ * self-update.ts, pure; what is here is the three impure things it is handed:
+ * the `codesign` reads, the dialog, and the updater. The plan is read only on
+ * a `newer` answer, so a launch with nothing to install spawns nothing.
  */
-export function createUpdateHandlers() {
+export function createUpdateHandlers(state: MainState, stores: Stores) {
+  const repo = (): string | null => {
+    try { return repoOf(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))) } catch { return null }
+  }
+  // The running bundle's signature cannot change under this process (a staged
+  // update replaces it only at the next start), so it is read at most once.
+  let signature: Promise<SignatureRead | null> | null = null
+  const plan = (): Promise<SelfUpdatePlan> => selfUpdatePlan({
+    setting: stores.layoutStore.getSetting(SELF_UPDATE_SETTING),
+    platform: process.platform,
+    packaged: app.isPackaged,
+    arch: process.arch,
+    execPath: process.execPath,
+    repo: repo()
+  }, (bundle) => (signature ??= readSignature(bundle)))
+  const updater = createSelfUpdater({
+    plan,
+    current: app.getVersion(),
+    confirm: (ask) => confirm(liveWindow(state), ask),
+    updater: electronUpdater(),
+    // The invoke answers `restarting` before the windows close.
+    defer: (fn) => { setTimeout(fn, 250) }
+  })
   return {
-    check: () => {
-      let repo: string | null = null
-      try { repo = repoOf(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))) } catch { repo = null }
-      if (repo === null) return Promise.resolve({ kind: 'could-not-check' as const, reason: 'this build names no GitHub repository in its package.json' })
-      return checkForUpdate(app.getVersion(), {
-        repo,
+    check: async () => {
+      const r = repo()
+      if (r === null) return { kind: 'could-not-check' as const, reason: 'this build names no GitHub repository in its package.json' }
+      const result = await checkForUpdate(app.getVersion(), {
+        repo: r,
         fetch: (url: string) => new Promise((resolve, reject) => {
-          const deadline = setTimeout(() => { r.destroy(new Error('GitHub did not answer within 10 seconds')) }, 10_000)
-          const r = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas', Accept: 'application/vnd.github+json' } }, (res) => {
+          const deadline = setTimeout(() => { req.destroy(new Error('GitHub did not answer within 10 seconds')) }, 10_000)
+          const req = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas', Accept: 'application/vnd.github+json' } }, (res) => {
             const chunks: Buffer[] = []
             res.on('data', (c: Buffer) => { chunks.push(c) })
             res.on('end', () => { clearTimeout(deadline); resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }) })
           })
-          r.on('error', (error) => { clearTimeout(deadline); reject(error) })
+          req.on('error', (error) => { clearTimeout(deadline); reject(error) })
         })
       })
+      if (result.kind !== 'newer') return result
+      // An unsigned build answers exactly what M123 answered: no field at all.
+      const p = await plan()
+      return p.on ? { ...result, installable: true as const } : result
+    },
+    install: (req: unknown) => updater.install(req)
+  }
+}
+
+/**
+ * M695. `codesign` reports on stderr, and a non-zero exit is an ANSWER (an
+ * unsigned app exits 1 with "not signed at all"); only a process that could
+ * not run or was killed at the deadline is null, which the plan reads as
+ * could-not-read-signature, never as signed.
+ */
+function codesign(args: string[]): Promise<{ code: number; text: string } | null> {
+  return new Promise((resolve) => {
+    execFile('/usr/bin/codesign', args, { timeout: 30_000 }, (error, stdout, stderr) => {
+      const text = `${String(stdout)}${String(stderr)}`
+      if (error === null) { resolve({ code: 0, text }); return }
+      const code = (error as { code?: unknown }).code
+      resolve(typeof code === 'number' ? { code, text } : null)
+    })
+  })
+}
+
+async function readSignature(bundle: string): Promise<SignatureRead | null> {
+  // --strict without --deep: the seal over the bundle's resources and the
+  // main executable. Squirrel.Mac checks the DOWNLOAD itself before it is used.
+  const verify = await codesign(['--verify', '--strict', '--verbose=2', bundle])
+  if (verify === null) return null
+  if (verify.code !== 0) return { verifyCode: verify.code, verifyText: verify.text, display: '' }
+  const display = await codesign(['--display', '--verbose=2', bundle])
+  if (display === null) return null
+  return { verifyCode: 0, verifyText: verify.text, display: display.text }
+}
+
+/**
+ * Electron's `autoUpdater` as the four things self-update.ts asks of it. Read
+ * at CALL time, never at creation: nothing here touches the updater unless a
+ * plan said on and the person said yes.
+ */
+function electronUpdater(): Updater {
+  return {
+    setFeedURL: (options) => autoUpdater.setFeedURL(options),
+    checkForUpdates: () => autoUpdater.checkForUpdates(),
+    quitAndInstall: () => autoUpdater.quitAndInstall(),
+    onError: (listener) => {
+      const f = (error: Error): void => listener(error instanceof Error ? error.message : String(error ?? ''))
+      autoUpdater.on('error', f)
+      return () => { autoUpdater.removeListener('error', f) }
+    },
+    onDownloaded: (listener) => {
+      const f = (): void => listener()
+      autoUpdater.on('update-downloaded', f)
+      return () => { autoUpdater.removeListener('update-downloaded', f) }
+    },
+    onNotAvailable: (listener) => {
+      const f = (): void => listener()
+      autoUpdater.on('update-not-available', f)
+      return () => { autoUpdater.removeListener('update-not-available', f) }
     }
   }
 }

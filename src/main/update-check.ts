@@ -3,10 +3,19 @@ import type { UpdateResult } from '../shared/ipc-contract'
 /**
  * M123 — THE UPDATE CHECK, pure over an injected fetcher.
  *
- * A NOTICE, not an updater: auto-swap is declined by name (`electron-updater`
- * refuses to install an unsigned build on macOS, and this machine holds no
- * `Developer ID Application` identity), so what this answers is "is a newer
- * release published, and where" — three states and never two. `current`,
+ * A NOTICE, not an updater. THE RECORDED DECISION, as M123 made it:
+ * auto-swap was declined by name (`electron-updater` refuses to install an
+ * unsigned build on macOS, and this machine held no `Developer ID
+ * Application` identity). M695 REVISITED it: the main reason was the missing
+ * signature, and release.yml's signed job (M631, docs/release-signing.md)
+ * removes it. A signed build may now install a newer release through
+ * Electron's BUILT-IN `autoUpdater` (Squirrel.Mac; still no electron-updater,
+ * no new package), after the person says yes in main's own dialog, and with
+ * `update.offerInstall` able to turn it off. That lives in
+ * `main/self-update.ts`, which decides from the signature macOS reports, not
+ * from a build flag. An unsigned build keeps exactly this notice. This module
+ * is unchanged by it and still only answers "is a newer release published,
+ * and where" — three states and never two. `current`,
  * `newer` (with the release's own url) and `could-not-check` (with the
  * reason in the credential rows' words): a check that folded the last into
  * the first would tell an offline user they are up to date, silently.

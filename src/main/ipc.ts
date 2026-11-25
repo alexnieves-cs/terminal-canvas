@@ -27,7 +27,7 @@ import type { ImageResult, StarterFiles } from '../shared/starter'
 import type { TemplateSaveResult } from '../shared/templates'
 import { incomingWorkflowGraphSchema, graphProblems } from '../shared/workflow-graph-schema'
 import type { BrowserReadRequest } from '../shared/browser-panel'
-import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
+import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult, UpdateInstallResult, PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import { RADAR_LANES_MAX } from '../shared/collision-radar'
 import type { TonightStatus } from '../shared/tonight'
@@ -432,9 +432,17 @@ const INERT_BOARD: BoardHandlers = {
  */
 export interface UpdateHandlers {
   check(): Promise<UpdateResult>
+  /**
+   * M695. Rides this collaborator rather than a new positional parameter
+   * (src/main/CLAUDE.md rule 3): it is the same notice's second verb.
+   * Optional so a harness's own `{ check }` object still type-checks and
+   * gets the inert refusal below, never an undefined call.
+   */
+  install?(req: unknown): Promise<UpdateInstallResult>
 }
 const INERT_UPDATE: UpdateHandlers = {
-  check: async () => ({ kind: 'could-not-check', reason: 'the update check is not available here' })
+  check: async () => ({ kind: 'could-not-check', reason: 'the update check is not available here' }),
+  install: async () => ({ kind: 'refused', reason: 'installing updates is not available here' })
 }
 
 const INERT_SCROLLBACK: ScrollbackHandlers = {
@@ -913,6 +921,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.RECIPE_HISTORY, (_event, id: unknown) => (typeof id === 'string' ? (kit.recipeHistory?.(id) ?? []) : []))
   ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
+  // M695. The request is passed through as unknown: main's own parser
+  // (self-update.ts) reads the version, and the dialog is main's.
+  ipcMain.handle(IPC.UPDATE_INSTALL, (_event, req: unknown) => (update.install ?? INERT_UPDATE.install!)(req))
   // M250. The renderer names a path (or none, for the chooser) and nothing
   // else; a non-string is treated as absent rather than trusted.
   ipcMain.handle(IPC.DOCX_IMPORT, (_event, req: { path?: unknown }) => docx.import(typeof req?.path === 'string' ? { path: req.path } : {}))

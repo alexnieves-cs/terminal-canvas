@@ -567,7 +567,8 @@ const bridge: CanvasBridge = {
     repositories: (req) => ipcRenderer.invoke(IPC.BOARD_REPOSITORIES, req)
   },
   update: {
-    check: () => ipcRenderer.invoke(IPC.UPDATE_CHECK)
+    check: () => ipcRenderer.invoke(IPC.UPDATE_CHECK),
+    install: (req) => ipcRenderer.invoke(IPC.UPDATE_INSTALL, req)
   },
   image: {
     read: (path) => ipcRenderer.invoke(IPC.IMAGE_READ, path)

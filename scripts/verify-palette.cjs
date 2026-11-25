@@ -302,7 +302,9 @@ const spyActions = () => {
     undoCanvas: record('undoCanvas'),
     redoCanvas: record('redoCanvas'),
     // M509. The `>` row's verb (cmd.*).
-    runCommandPanel: record('runCommandPanel')
+    runCommandPanel: record('runCommandPanel'),
+    // M695. The signed build's install row (selfupdate.6).
+    installUpdate: record('installUpdate')
   }
 }
 
@@ -2658,6 +2660,46 @@ const WS = [
       current && /up to date — 3\.0\.0/.test(current.title) &&
       failed && /could not check — GitHub answered 403/.test(failed.title),
     JSON.stringify({ threw, door: door && [door.group, door.disabledReason], calls, titles: [notChecked, newer, current, failed].map((r) => r && r.title) }))
+}
+
+// M695 — selfupdate.6. THE INSTALL ROW EXISTS ONLY WHEN MAIN SAID SO. An
+// unsigned build's `newer` (no `installable`) has exactly M123's rows; a
+// signed one gains `Install update <v>…`, which runs installUpdate (on
+// EXCLUDED_ACTIONS: main's own dialog asks, a plan never reaches it), is
+// disabled while an ask is in flight, and once the download is staged reads
+// `Restart to install <v>…`. env.update's subtitle stops saying "nothing is
+// downloaded" when that is no longer the whole truth.
+{
+  let threw = null
+  let out = {}
+  try {
+    const url = 'https://github.com/acme/canvas/releases/tag/v7.1.0'
+    const rowsFor = (update) => { const c = ctx({ update }); return { c, row: byId(P.buildCommands(c), 'update.install') } }
+    const unsigned = rowsFor({ result: { kind: 'newer', version: '7.1.0', url }, checking: false, at: 1 }).row
+    const signed = rowsFor({ result: { kind: 'newer', version: '7.1.0', url, installable: true }, checking: false, at: 1 })
+    if (signed.row) signed.row.run()
+    const busy = rowsFor({ result: { kind: 'newer', version: '7.1.0', url, installable: true }, checking: false, at: 1, installing: true }).row
+    const staged = rowsFor({ result: { kind: 'newer', version: '7.1.0', url, installable: true }, checking: false, at: 1, install: { kind: 'ready', version: '7.1.0' } }).row
+    const report = { probedAt: 0, shell: { path: '/bin/zsh', ok: true }, pathEntries: [], clis: [], tmux: { kind: 'direct', reason: 'x', path: null }, layout: { path: '/x', backupWritten: false }, envKeys: [] }
+    const envSigned = byId(P.buildEnvironmentRows(report, { result: { kind: 'newer', version: '7.1.0', url, installable: true }, checking: false, at: 1 }), 'env.update')
+    const envUnsigned = byId(P.buildEnvironmentRows(report, { result: { kind: 'newer', version: '7.1.0', url }, checking: false, at: 1 }), 'env.update')
+    out = {
+      unsigned: unsigned ?? null,
+      signed: signed.row ? [signed.row.title, signed.row.group, signed.row.disabledReason] : null,
+      calls: signed.c.actions.calls.map((x) => x[0]),
+      busy: busy ? busy.disabledReason : null,
+      staged: staged ? staged.title : null,
+      envSigned: envSigned ? envSigned.subtitle : null,
+      envUnsigned: envUnsigned ? envUnsigned.subtitle : null
+    }
+  } catch (e) { threw = String(e) }
+  ok('selfupdate.6 Install update… appears only for an installable newer result, runs installUpdate, is disabled while installing and reads Restart to install once staged; an unsigned build keeps M123\'s rows and words',
+    threw === null && out.unsigned === null &&
+      out.signed && out.signed[0] === 'Install update 7.1.0…' && out.signed[1] === 'canvas' && out.signed[2] === undefined &&
+      JSON.stringify(out.calls) === JSON.stringify(['installUpdate']) &&
+      out.busy === 'installing…' && out.staged === 'Restart to install 7.1.0…' &&
+      /asks first/.test(out.envSigned ?? '') && /nothing is downloaded or installed/.test(out.envUnsigned ?? ''),
+    JSON.stringify({ threw, ...out }))
 }
 
 // M146 — zoom.fit.1. TWO verbs, two names (backlog #23's rule: zoom-to-fit

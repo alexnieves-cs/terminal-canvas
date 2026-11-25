@@ -114,7 +114,13 @@ function buildConfig(opts) {
       icon: 'build/icon.icns',
       target: [
         { target: 'dir', arch: [arch] },
-        { target: 'dmg', arch: [arch] }
+        { target: 'dmg', arch: [arch] },
+        // M695. A zip of the same .app: the one file Squirrel.Mac (Electron's
+        // built-in autoUpdater) can install. Built in BOTH modes so signing
+        // still changes nothing but the signing keys (verify:package sign.5);
+        // release.yml uploads it only from a signed build, because an
+        // unsigned zip is something no copy of the app can install.
+        { target: 'zip', arch: [arch] }
       ],
 
       // UNSIGNED: EXPLICIT null, not omitted, and the difference is the whole

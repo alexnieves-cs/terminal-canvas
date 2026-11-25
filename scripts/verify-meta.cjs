@@ -964,6 +964,35 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ settingOk, moduleOk, offenders }))
 }
 
+// M695 — selfupdate.5. SELF-UPDATE IS ELECTRON'S OWN, AND NO PLAN MAY REACH
+// IT. (a) `update.offerInstall` is a boolean, default true (it only OFFERS:
+// every install still asks first in main's dialog), and not planWritable, for
+// update.checkOnLaunch's reason. (b) self-update.ts is pure: no electron, no
+// child_process, no https, so verify:file drives every arm under plain node.
+// (c) The updater is Electron's built-in `autoUpdater`, imported where the
+// wiring lives, and package.json depends on no updater package (the task's
+// own line: no electron-updater, no new package). (d) No suite script calls
+// setFeedURL or checkForUpdates on a real updater.
+{
+  const { readdirSync } = require('node:fs')
+  const schema = stripComments(read('src/shared/settings-schema.ts') ?? '')
+  const start = schema.indexOf("id: 'update.offerInstall'")
+  const entry = start === -1 ? '' : schema.slice(schema.lastIndexOf('{', start), schema.indexOf('}', start))
+  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: true/.test(entry) && !/planWritable/.test(entry)
+  const pure = stripComments(read('src/main/self-update.ts') ?? '')
+  const pureOk = pure !== '' && !/from ['"](electron|node:child_process|child_process|node:https|https)['"]/.test(pure)
+  const wiring = stripComments(read('src/main/bootstrap/workspace-handlers.ts') ?? '')
+  const wiringOk = /import \{[^}]*\bautoUpdater\b[^}]*\} from 'electron'/.test(wiring) && /selfUpdatePlan\(/.test(wiring) && /createSelfUpdater\(/.test(wiring)
+  const pkg = JSON.parse(read('package.json') ?? '{}')
+  const deps = Object.keys({ ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}), ...(pkg.optionalDependencies ?? {}) })
+  const updaterPkgs = deps.filter((d) => /updater|squirrel|update-electron/i.test(d))
+  const callers = readdirSync(join(ROOT, 'scripts')).filter((n) => /\.cjs$/.test(n))
+    .filter((f) => /autoUpdater\.(setFeedURL|checkForUpdates|quitAndInstall)\(/.test(stripComments(read(join('scripts', f)) ?? '')))
+  ok('selfupdate.5 update.offerInstall is a boolean, default true, not planWritable; self-update.ts imports no electron, child_process or https; the wiring uses Electron\'s own autoUpdater and package.json depends on no updater package; no suite script drives a real updater',
+    settingOk && pureOk && wiringOk && updaterPkgs.length === 0 && callers.length === 0,
+    JSON.stringify({ settingOk, pureOk, wiringOk, updaterPkgs, callers }))
+}
+
 // panels-split.1 / panels-split.2 (M135). `verify:panels` was one 19,813-line
 // file with 357 checks and a 600 s watchdog it had outgrown three times; the
 // M130 note said the fourth raise must be a split. The split is a HARNESS

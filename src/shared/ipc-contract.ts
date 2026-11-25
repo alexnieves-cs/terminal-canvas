@@ -1066,11 +1066,21 @@ export const IPC = {
   BOARD_REPOSITORIES: 'board:repositories',
   /**
    * M123. The update NOTICE: one GET of the releases feed in main, three
-   * states back. Nothing is downloaded or installed — auto-swap is declined
-   * by name for an unsigned build. Asked by the renderer once at launch only
-   * when `update.checkOnLaunch` is on, and by hand from the palette row.
+   * states back. The check itself downloads and installs nothing. Asked by
+   * the renderer once at launch only when `update.checkOnLaunch` is on, and
+   * by hand from the palette row. M695: in a SIGNED build with
+   * `update.offerInstall` on, a `newer` answer also carries `installable`,
+   * which is what lets the renderer offer UPDATE_INSTALL; an unsigned build
+   * never carries it and keeps the notice exactly as it was.
    */
   UPDATE_CHECK: 'update:check',
+  /**
+   * M695. Install the version a `newer` answer named. Main re-reads the plan
+   * (signature, setting), asks the person in its own dialog BEFORE anything
+   * downloads (Squirrel.Mac applies a downloaded update at the next start, so
+   * the download is the install), then asks when to restart. Never rejects.
+   */
+  UPDATE_INSTALL: 'update:install',
   /** M181. An image panel's bytes as a data URL, read in main by magic number under a cap; four arms, never rejects. */
   IMAGE_READ: 'image:read',
   /** M181. The starter's two files under userData/starter, written once; answers both paths. */
@@ -1109,8 +1119,23 @@ export const IPC = {
  */
 export type UpdateResult =
   | { kind: 'current'; version: string }
-  | { kind: 'newer'; version: string; url: string; publishedAt?: string }
+  /** `installable` (M695) is present only when main verified this build can install it: a signed build with the setting on. */
+  | { kind: 'newer'; version: string; url: string; publishedAt?: string; installable?: true }
   | { kind: 'could-not-check'; reason: string }
+
+/**
+ * M695. What an install ask came to. `declined` is the person's no, before
+ * any byte was fetched; `ready` is downloaded and applies at the next start;
+ * `restarting` is the person's yes to restarting now; `refused` named why it
+ * was not offered (an unsigned build, the setting, a stale version);
+ * `failed` is the updater's own sentence.
+ */
+export type UpdateInstallResult =
+  | { kind: 'declined' }
+  | { kind: 'ready'; version: string }
+  | { kind: 'restarting'; version: string }
+  | { kind: 'refused'; reason: string }
+  | { kind: 'failed'; reason: string }
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
 /** M114. What `dispatch` asks main for: a worktree lane for the chat it is about to mint. `repo` is `owner/repo` from a GitHub key; `root` is the place the sheet chose for an item with no repository. */
@@ -2638,6 +2663,8 @@ export interface CanvasBridge {
   /** M123. See UPDATE_CHECK. Three arms; never rejects. */
   update: {
     check(): Promise<UpdateResult>
+    /** M695. See UPDATE_INSTALL. Asks the person first, in main; never rejects. */
+    install(req: { version: string }): Promise<UpdateInstallResult>
   }
   /** M181. See IMAGE_READ. */
   image: {

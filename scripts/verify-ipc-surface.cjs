@@ -363,7 +363,9 @@ app.whenReady().then(() => {
   // the Jira panel and its client were removed (docs/streams/cut-list.md).
   // -9: relay:spawn / attach / detach / input / resize / control / kill / list /
   // view (M685) — the pty relay was removed (docs/streams/cut-list.md).
-  const EXPECTED_CHANNELS = 222
+  // +1: update:install (M695) — a signed build downloads and installs a newer
+  // release through Electron's own autoUpdater, after main's own dialog.
+  const EXPECTED_CHANNELS = 223
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -68,6 +68,8 @@ export interface LauncherProps {
   update?: UpdateState | null
   /** M123. Open the release page through main's link door; absent hides the verb. */
   onOpenRelease?: (url: string) => void
+  /** M695. Open main's install question; used only when the newer result is `installable`. */
+  onInstallUpdate?: () => void
 }
 
 /**
@@ -132,7 +134,7 @@ export function startVerbHint(refusedField: string | undefined, opensChat: boole
 /** M395. What the launcher's Create… says it adds — exactly what its sheet offers (verify:first-run revamp.launcher.2). */
 export const CREATE_SHEET_OFFERS = 'Add an agent, a terminal, a conversation or a workflow.'
 
-export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, starterHint, onDismissStarterHint, recents, recentUsed, now, onCreateObject, onBlankCanvas, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, starterHint, onDismissStarterHint, recents, recentUsed, now, onCreateObject, onBlankCanvas, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease, onInstallUpdate }: LauncherProps): JSX.Element {
   const readiness = onboardingReadiness(report)
   const unanswered = readiness.rows.some((row) => row.discovery === 'unknown')
   const [intention, setIntention] = useState('')
@@ -605,14 +607,19 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
       })()}
       {/* M123. A second footer line ONLY when the last check said `newer`. A
           NOTICE — the verb opens the release page through main's link door;
-          nothing is downloaded or installed. */}
+          nothing is downloaded or installed. M695: when main marked the
+          release installable (a signed build), the verb is Install… and opens
+          main's own question, which asks before anything downloads. */}
       {update !== undefined && update !== null && update.result !== null && update.result.kind === 'newer' && (() => {
         const url = update.result.url
+        const install = update.result.installable === true && onInstallUpdate !== undefined
         return (
           <p className="launcher__env" data-launcher-update data-launcher-update-version={update.result.version}>
             <span data-tone="needs-you">{update.result.version} is out</span>
-            {' · '}<span className="launcher__env-hint">download it from the release page; the app does not install updates itself</span>
-            {onOpenRelease !== undefined && (
+            {' · '}<span className="launcher__env-hint">{install ? 'the app asks before it downloads, and installs it the next time it starts' : 'download it from the release page; the app does not install updates itself'}</span>
+            {install ? (
+              <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-install-update disabled={update.installing === true} {...shellControl(() => onInstallUpdate())}>Install…</button>
+            ) : onOpenRelease !== undefined && (
               <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-open-release title={url} {...shellControl(() => onOpenRelease(url))}>Open release</button>
             )}
           </p>

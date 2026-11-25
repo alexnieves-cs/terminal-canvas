@@ -2359,6 +2359,24 @@ launcher's second footer line (rendered ONLY on `newer` — a launcher that said
 on every fresh install is a line nobody reads) and the `env.update` row all read the one
 store. Three doors, one sentence: `updateSentence` is the only place the words live.
 
+**M695 revisited the auto-swap decision above; the notice is unchanged for an unsigned build
+(`main/self-update.ts`, `build/update-feed.cjs`, `update.offerInstall`).** The decision's main
+reason was the missing signature, and release.yml's signed job removes it. A signed copy may
+now install a newer release through Electron's BUILT-IN `autoUpdater` (Squirrel.Mac; still no
+`electron-updater`, no new package, `verify:meta selfupdate.5`). Three rules. **Signed is what
+`codesign` reports, not a build flag:** the seal verifies, the leaf is a Developer ID
+Application certificate with a team, and the hardened runtime is on; every other build is a
+named off arm and its `newer` result carries no `installable`, so its rows and words are M123's
+(`verify:file selfupdate.1`, `verify:palette selfupdate.6`). **The question comes before the
+download:** Squirrel.Mac applies a downloaded update at the next start whether or not anyone
+restarts, so `setFeedURL` and `checkForUpdates` run only after *Download and install* in main's
+Cancel-default dialog, and a no touches the updater not at all (`selfupdate.2`). **The feed is
+pinned to the tag the check chose** (`releases/download/v<version>/update-<arch>.json`), never
+`latest`, because Squirrel.Mac installs whatever `currentRelease` names, older included; the
+two spellings of the asset name are held together by `selfupdate.4`, and the workflow's feed
+by `verify:package feed.*`. `update.offerInstall` is boolean, on (it only offers), and not
+`planWritable`; `installUpdate` is on `EXCLUDED_ACTIONS`.
+
 **The manual-only list, M123's own item.** *A real GET of the real feed.* `verify:file
 update.1` drives a fake fetcher over a hand-written feed; that the fetcher in
 `main/bootstrap/workspace-handlers.ts` reaches `api.github.com` with the app's `User-Agent`, that the repository's

@@ -14,8 +14,12 @@ export interface CanvasHudProps {
   viewport: Viewport
   onZoomBy: (factor: number) => void
   onFit: () => void
-  /** M123. The last update check's `newer` result, or absent. */
-  updateNewer?: { version: string; url: string } | null
+  /**
+   * M123. The last update check's `newer` result, or absent. M695: with
+   * `onInstall` (a signed build main marked installable), the notice opens
+   * main's install question instead of the release page.
+   */
+  updateNewer?: { version: string; url: string; onInstall?: () => void } | null
   /** M247. The agent-links toggle — the canvas door of `canvas.agentLinks` (the palette row, the agent line and an action node are the other three). */
   agentLinks?: { on: boolean; onToggle: () => void }
   /** M258. Fit task — the canvas door of `fit-task`. Disabled with the named reason when there is no task context; never removed. */
@@ -167,8 +171,12 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
           launcher's banner and the environment report the tmux fact. */}
       {/* M123. The launcher's notice reaches only an empty canvas; a user with panels sees it HERE. */}
       {updateNewer !== undefined && updateNewer !== null && (
-        <span className="canvas-hud__notice" data-hud-update={updateNewer.version} title="Open release — the app does not install it">
-          <a href={updateNewer.url} onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: '', target: updateNewer.url }) }}>{updateNewer.version} is out</a>
+        <span className="canvas-hud__notice" data-hud-update={updateNewer.version} title={updateNewer.onInstall === undefined ? 'Open release — the app does not install it' : 'Install — the app asks first, then downloads it'}>
+          <a href={updateNewer.url} onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()} onClick={(e) => {
+            e.preventDefault()
+            if (updateNewer.onInstall !== undefined) updateNewer.onInstall()
+            else void window.canvas.links.open({ panelId: '', target: updateNewer.url })
+          }}>{updateNewer.version} is out</a>
         </span>
       )}
     </div>

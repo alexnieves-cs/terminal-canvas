@@ -612,6 +612,12 @@ export interface PaletteActions {
   scrollChatTurn(panelId: string, turnIndex: number): void
   /** M123. Ask GitHub once, by hand; the three states land on the palette's feedback line. Excluded from plans by name. */
   checkForUpdates(): void
+  /**
+   * M695. Install the version the last check found installable. Main asks the
+   * person in its own dialog before anything downloads; the answer lands on
+   * the feedback line. Excluded from plans by name.
+   */
+  installUpdate(): void
 }
 
 

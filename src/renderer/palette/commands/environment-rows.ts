@@ -117,7 +117,10 @@ export function buildEnvironmentRows(report: EnvReport | null, update: UpdateSta
     u.result === null
       ? 'Check for updates… asks GitHub by hand; the launch check is a setting, off by default'
       : u.result.kind === 'newer'
-        ? `${u.result.url} — nothing is downloaded or installed; download the release by hand`
+        ? u.result.installable === true
+          // M695. A signed build: the install row asks first, in main's dialog.
+          ? `${u.result.url} — Install update… asks first, then downloads it; it installs the next time the app starts`
+          : `${u.result.url} — nothing is downloaded or installed; download the release by hand`
         : u.result.kind === 'current'
           ? `read at ${new Date(u.at).toLocaleTimeString()} from the releases feed`
           : 'the releases feed was asked and did not answer usefully — try again later',

@@ -365,7 +365,7 @@ app.whenReady().then(async () => {
     toolbox.pluginDetails,
     toolbox.skillWrite,
     createTrailReader(state, stores),
-    createUpdateHandlers(),
+    createUpdateHandlers(state, stores),
     createPreviewHandlers(),
     createAssetHandlers(state),
     createNodeFetchHandlers(),

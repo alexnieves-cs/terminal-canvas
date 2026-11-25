@@ -1766,6 +1766,154 @@ const p = (name) => join(DIR, name)
         urls.every((u) => u === 'https://api.github.com/repos/acme/canvas/releases'),
       JSON.stringify({ newer, same, ahead, bare, forbidden, threw, notJson, notList, onlyPre, cmp, cmpEq, repo, repoStr, noRepo, url: urls[0] }))
   } catch (e) { ok('update.1 (threw)', false, String(e)) }
+  // M695 — selfupdate.1. THE PLAN: a signed build only, decided from what
+  // `codesign` reports, never from a flag. The cheap arms come first and the
+  // probe is not called at all until each passes (a dev build, a non-Mac and
+  // a turned-off setting spawn no process). Then the signature, by name:
+  // unsigned, a broken seal, ad hoc, a non-Developer-ID leaf, and a
+  // Developer ID without the hardened runtime are each their own off arm.
+  try {
+    const APP = '/Applications/Terminal Canvas.app'
+    const base = { setting: true, platform: 'darwin', packaged: true, arch: 'arm64', execPath: `${APP}/Contents/MacOS/Terminal Canvas`, repo: 'acme/canvas' }
+    const DISPLAY = [
+      `Executable=${APP}/Contents/MacOS/Terminal Canvas`,
+      'Identifier=com.alexnieves.terminal-canvas',
+      'CodeDirectory v=20500 size=600 flags=0x10000(runtime) hashes=8+7 location=embedded',
+      'Authority=Developer ID Application: Acme Example (ABCDE12345)',
+      'Authority=Developer ID Certification Authority',
+      'Authority=Apple Root CA',
+      'TeamIdentifier=ABCDE12345'
+    ].join('\n')
+    const signed = { verifyCode: 0, verifyText: `${APP}: valid on disk\n${APP}: satisfies its Designated Requirement`, display: DISPLAY }
+    const calls = []
+    const probeOf = (read) => async (bundle) => { calls.push(bundle); return read }
+    const plan = (facts, read) => F.selfUpdatePlan({ ...base, ...facts }, probeOf(read))
+    const on = await plan({}, signed)
+    const cheap = [
+      await plan({ setting: false }, signed), await plan({ setting: 'true' }, signed), await plan({ setting: undefined }, signed),
+      await plan({ platform: 'linux' }, signed), await plan({ packaged: false }, signed), await plan({ arch: 'ia32' }, signed),
+      await plan({ execPath: '/usr/local/bin/electron' }, signed),
+      await plan({ execPath: '/Volumes/Terminal Canvas/Terminal Canvas.app/Contents/MacOS/Terminal Canvas' }, signed),
+      await plan({ execPath: '/private/var/folders/x/AppTranslocation/ABC/d/Terminal Canvas.app/Contents/MacOS/Terminal Canvas' }, signed),
+      await plan({ repo: null }, signed)
+    ].map((p) => p.on ? 'on' : p.reason)
+    const callsAfterCheap = calls.length
+    const unsigned = await plan({}, { verifyCode: 1, verifyText: `${APP}: code object is not signed at all\nIn architecture: arm64`, display: '' })
+    const broken = await plan({}, { verifyCode: 1, verifyText: `${APP}: a sealed resource is missing or invalid`, display: '' })
+    const unread = await plan({}, null)
+    const thrown = await F.selfUpdatePlan(base, async () => { throw new Error('spawn ENOENT') })
+    const adhoc = await plan({}, { ...signed, display: `Executable=${APP}/Contents/MacOS/x\nCodeDirectory v=20400 size=1 flags=0x2(adhoc) hashes=1+1 location=embedded\nSignature=adhoc\nTeamIdentifier=not set` })
+    const devCert = await plan({}, { ...signed, display: DISPLAY.replace('Developer ID Application: Acme Example (ABCDE12345)', 'Apple Development: someone@example.com (XYZ)') })
+    const noTeam = await plan({}, { ...signed, display: DISPLAY.replace('TeamIdentifier=ABCDE12345', 'TeamIdentifier=not set') })
+    const noRuntime = await plan({}, { ...signed, display: DISPLAY.replace('flags=0x10000(runtime)', 'flags=0x0(none)') })
+    const sig = [unsigned, broken, unread, thrown, adhoc, devCert, noTeam, noRuntime].map((p) => p.on ? 'on' : p.reason)
+    const words = ['unsigned', 'not-installed', 'turned-off'].map((r) => F.offWords(r))
+    ok('selfupdate.1 only a Developer ID signature with the hardened runtime, as codesign reports it, turns install on; every other build, and the setting off, is a named off arm, and the cheap arms never spawn codesign',
+      on.on === true && on.repo === 'acme/canvas' && on.arch === 'arm64' && on.teamId === 'ABCDE12345' &&
+        JSON.stringify(cheap) === JSON.stringify(['turned-off', 'turned-off', 'turned-off', 'not-macos', 'not-packaged', 'unknown-arch', 'not-an-app-bundle', 'not-installed', 'not-installed', 'no-feed']) &&
+        callsAfterCheap === 1 && calls[0] === APP &&
+        JSON.stringify(sig) === JSON.stringify(['unsigned', 'signature-invalid', 'could-not-read-signature', 'could-not-read-signature', 'ad-hoc', 'not-developer-id', 'not-developer-id', 'no-hardened-runtime']) &&
+        /download the release by hand/.test(words[0]) && /Applications/.test(words[1]) && /Settings/.test(words[2]) &&
+        F.appBundleOf(`${APP}/Contents/MacOS/Terminal Canvas`) === APP && F.appBundleOf('/usr/bin/node') === null,
+      JSON.stringify({ on, cheap, callsAfterCheap, sig }))
+  } catch (e) { ok('selfupdate.1 (threw)', false, String(e)) }
+  // M695 — selfupdate.2. NOTHING WITHOUT A YES. Squirrel.Mac applies a
+  // downloaded update at the next start whether or not anyone restarts, so
+  // the download IS the install: the question comes before setFeedURL and
+  // checkForUpdates, and a no touches the updater not at all. A plan that is
+  // off refuses before any question; a version that is not newer is refused
+  // before the plan is read.
+  try {
+    const rig = (planOn = true, answers = [true, false]) => {
+      const log = []
+      const listeners = { error: [], downloaded: [], notAvailable: [] }
+      const sub = (k) => (fn) => { listeners[k].push(fn); return () => { listeners[k] = listeners[k].filter((f) => f !== fn) } }
+      const asks = []
+      let planReads = 0
+      const timers = []
+      const updater = {
+        setFeedURL: (o) => log.push(['setFeedURL', o]),
+        checkForUpdates: () => log.push(['checkForUpdates']),
+        quitAndInstall: () => log.push(['quitAndInstall']),
+        onError: sub('error'), onDownloaded: sub('downloaded'), onNotAvailable: sub('notAvailable')
+      }
+      const u = F.createSelfUpdater({
+        plan: async () => { planReads++; return planOn ? { on: true, repo: 'acme/canvas', arch: 'x64', teamId: 'T' } : { on: false, reason: 'unsigned' } },
+        current: '7.0.0',
+        confirm: async (ask) => { asks.push(ask); return answers.shift() ?? false },
+        updater,
+        setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length },
+        clearTimer: () => {},
+        defer: (fn) => fn()
+      })
+      return { u, log, listeners, asks, timers, planReads: () => planReads }
+    }
+    const tick = () => new Promise((r) => setImmediate(r))
+    const no = rig(true, [false])
+    const declined = await no.u.install({ version: '7.1.0' })
+    const off = rig(false)
+    const refusedOff = await off.u.install({ version: '7.1.0' })
+    const old = rig(true)
+    const refusedOld = [await old.u.install({ version: '7.0.0' }), await old.u.install({ version: 'latest' }), await old.u.install(null)]
+    const yes = rig(true, [true, false])
+    const pending = yes.u.install({ version: 'v7.1.0' })
+    await tick(); await tick()
+    const second = await yes.u.install({ version: '7.1.0' })
+    yes.listeners.downloaded.forEach((f) => f())
+    const ready = await pending
+    const leftListeners = yes.listeners.downloaded.length + yes.listeners.error.length + yes.listeners.notAvailable.length
+    const again = rig(true, [true, true])
+    const p2 = again.u.install({ version: '7.1.0' })
+    await tick(); await tick()
+    again.listeners.error.forEach((f) => f('Could not get code signature for running application'))
+    const failed = await p2
+    const restart = rig(true, [true, true])
+    const p3 = restart.u.install({ version: '7.1.0' })
+    await tick(); await tick()
+    restart.listeners.downloaded.forEach((f) => f())
+    const restarting = await p3
+    const slow = rig(true, [true])
+    const p4 = slow.u.install({ version: '7.1.0' })
+    await tick(); await tick()
+    slow.timers[0].fn()
+    const timedOut = await p4
+    const afterTimeout = await slow.u.install({ version: '7.1.0' })
+    ok('selfupdate.2 a no touches the updater not at all; an off plan refuses before asking; the feed is set only after the yes, pinned to the tag and chip; a second ask while downloading is refused; an error, or a download past the deadline, is failed and the second is not retried; restart only on its own yes',
+      declined.kind === 'declined' && no.log.length === 0 && no.asks.length === 1 &&
+        refusedOff.kind === 'refused' && /not signed/.test(refusedOff.reason) && off.asks.length === 0 && off.log.length === 0 &&
+        refusedOld.every((r) => r.kind === 'refused') && old.planReads() === 0 && old.log.length === 0 &&
+        JSON.stringify(yes.log.slice(0, 2)) === JSON.stringify([['setFeedURL', { url: 'https://github.com/acme/canvas/releases/download/v7.1.0/update-x64.json', serverType: 'json' }], ['checkForUpdates']]) &&
+        second.kind === 'refused' && /already downloading/.test(second.reason) &&
+        ready.kind === 'ready' && ready.version === '7.1.0' && !yes.log.some((l) => l[0] === 'quitAndInstall') && leftListeners === 0 &&
+        failed.kind === 'failed' && /code signature/.test(failed.reason) && !again.log.some((l) => l[0] === 'quitAndInstall') &&
+        restarting.kind === 'restarting' && restart.log.at(-1)[0] === 'quitAndInstall' &&
+        timedOut.kind === 'failed' && /did not finish/.test(timedOut.reason) && afterTimeout.kind === 'refused' && /restart/i.test(afterTimeout.reason) &&
+        slow.log.filter((l) => l[0] === 'checkForUpdates').length === 1,
+      JSON.stringify({ declined, noLog: no.log, refusedOff, refusedOld, yesLog: yes.log, second, ready, leftListeners, failed, restarting, timedOut, afterTimeout }))
+  } catch (e) { ok('selfupdate.2 (threw)', false, String(e)) }
+  // M695 — selfupdate.3. The question says what the person is agreeing to:
+  // where the download comes from, what checks it, when it applies, and that
+  // the verb is the act (main's confirm() defaults to Cancel either way).
+  try {
+    const ask = F.consentAsk('7.1.0')
+    const restart = F.restartAsk('7.1.0')
+    ok('selfupdate.3 the consent question names the version, GitHub releases, the signature check and the next start, and its verb is Download and install; the restart question warns that agents end on quit',
+      /7\.1\.0/.test(ask.message) && /GitHub releases/.test(ask.detail) && /code signature/.test(ask.detail) && /next time/.test(ask.detail) &&
+        ask.verb === 'Download and install' && restart.verb === 'Restart now' && /agents end/.test(restart.detail) &&
+        !/[—]/.test(ask.detail + ask.message + restart.detail + restart.message),
+      JSON.stringify({ ask, restart }))
+  } catch (e) { ok('selfupdate.3 (threw)', false, String(e)) }
+  // M695 — selfupdate.4. The feed's asset name is spelled twice, once in this
+  // TypeScript and once in build/update-feed.cjs, which release.yml runs with
+  // bare node; a drift between them is an update that is never found.
+  try {
+    const feed = require('../build/update-feed.cjs')
+    ok('selfupdate.4 the app asks for the asset name build/update-feed.cjs writes, for both chips',
+      feed.ARCHES.every((a) => F.feedAssetName(a) === feed.feedAssetName(a)) &&
+        F.feedUrl('acme/canvas', '7.1.0', 'arm64') === 'https://github.com/acme/canvas/releases/download/v7.1.0/' + feed.feedAssetName('arm64') &&
+        F.SELF_UPDATE_SETTING === 'update.offerInstall',
+      JSON.stringify(feed.ARCHES.map((a) => [F.feedAssetName(a), feed.feedAssetName(a)])))
+  } catch (e) { ok('selfupdate.4 (threw)', false, String(e)) }
 
 // M145 — clipboard.1–.3 (backlog #13's bytes case). An image on the
 // clipboard pasted into a TERMINAL becomes a file main writes under the

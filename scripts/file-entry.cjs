@@ -71,6 +71,10 @@ module.exports = {
   /* M123. The update check, pure over an injected fetcher — no https here;
      the real fetcher lives in main/index.ts, which no suite bundles. */
   ...require('../src/main/update-check.ts'),
+  /* M695. Self-update: the plan over injected facts and a codesign probe, and
+     the install over an injected dialog and updater. Electron's autoUpdater
+     and the real codesign live in main/bootstrap, which no suite bundles. */
+  ...require('../src/main/self-update.ts'),
   /* M145. The clipboard-image file: pure over an injected directory and clock; the real
      clipboard read lives in main/index.ts, which no suite bundles. Absent until it lands. */
   ...((() => { try { return require('../src/main/clipboard-file.ts') } catch { return {} } })()),

@@ -95,7 +95,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        skill:write / skill:create / skill:rename / skill:delete
                        skill:trail
                        agent:pool-start / agent:pool-stop
-                       update:check
+                       update:check / update:install
                        image:read / starter:prepare
                        docx:import / flowchart:read / world:status / world:retry
                        fork:turns / fork:branch
