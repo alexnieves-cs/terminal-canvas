@@ -1,0 +1,128 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   M700 (Strip bay, step 1). The redesign's tokens, loaded AFTER styles.css
+   (main.tsx imports it last). Every block below uses the same selectors as
+   styles.css's own structure and theme blocks, so these values win by source
+   order at equal specificity, and a name this file leaves out (--t-xs,
+   --r-full, the layout constants, the world view's and the deck's colours)
+   keeps its styles.css value.
+
+   The alias block at the bottom points today's colour, radius, shadow and
+   duration NAMES at the new tokens, so every var() in styles.css still
+   resolves in step 1 and the stylesheet can move to the new names file by
+   file. Delete an alias once a search finds no use of the old name.
+
+   What changed, in one place (PRODUCT.md "Brand Commitments" has the why):
+   - Opaque graphite, one step lighter per layer, in place of glass over blur.
+   - State is the only colour: amber needs you, teal working, red failing,
+     green done. Selection and focus are the text colour, never a state hue.
+   - The radius grows with the size of the thing: 8 controls, 10 strips,
+     12 panels, 16 task frames, 18 dialogs, pills for buttons.
+   - Instrument Sans for the chrome, Geist Mono for code (fonts/fonts.css).
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Type. The scale keeps today's steps; the faces change. */
+  --font-ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Shape: the radius grows with the size of the thing. */
+  --r-ctl: 8px;     /* fields, menu rows, segmented controls */
+  --r-strip: 10px;  /* strips, and the sheet that unfolds under one */
+  --r-panel: 12px;  /* panels, the permission card, menus */
+  --r-frame: 16px;  /* task frames on the canvas */
+  --r-sheet: 18px;  /* the command palette and dialogs */
+  --r-pill: 999px;  /* buttons and the canvas toolbar */
+
+  /* Strip geometry. */
+  --strip-h: 52px; --strip-h-sm: 38px;
+  --edge-w: 3px; --strip-offset: 12px; --bay-w: 330px; --mark: 12px;
+
+  /* Motion: every duration names the thing it moves. */
+  --dur-color: 90ms;    /* colour changes: a state edge, a hover */
+  --dur-offset: 160ms;  /* a strip stepping out of line */
+  --dur-unfold: 200ms;  /* the ask band, the sheet */
+  --dur-file: 240ms;    /* a strip moving between groups in the bay */
+
+  /* Agent marks. The SHAPE says which kind of agent, so state stays the only
+     colour. Drawn as a mask and filled with --text-2. */
+  --g-claude: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Ccircle cx='6' cy='6' r='4.4' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3C/svg%3E");
+  --g-codex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 1.3L10.7 6 6 10.7 1.3 6z' fill='none' stroke='%23000' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --g-shell: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 3l3.2 3L2 9M6.6 9.4h3.6' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --g-other: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 1.6l4.6 8.2H1.4z' fill='none' stroke='%23000' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Light. Bare :root carries it too, as styles.css's light block does, so the
+   frame before useTheme stamps the attribute already has the new values. */
+:root,
+:root[data-theme="light"] {
+  --ground: #F4F4F3; --bay: #FAFAF9; --card: #FFFFFF; --raise: #FFFFFF; --term: #FFFFFF; --field: #FFFFFF;
+  --hover: #F0F0EE; --pressed: #EBEBE9;
+  --rule: #E3E3E0; --rule-strong: #D3D3CF; --grid-dot: #D9D9D5;
+  --text: #18181A; --text-2: #5D5D63; --text-3: #85858B;
+
+  --state-needs: #F5A524; --state-working: #34C3C9; --state-done: #3FBF7F;
+  --state-failed: #E5484D; --state-idle: #86868D;
+  /* Text tokens clear 4.5:1 on --bay and --hover. */
+  --state-needs-text: #8A4B00; --state-working-text: #0A6A6E;
+  --state-done-text: #1C6B42;  --state-failed-text: #B4282E;
+  --needs-line: rgba(214, 130, 0, .6);
+
+  --primary: #18181A; --on-primary: #FFFFFF;   /* the one filled button: a graphite pill */
+  --select: #18181A;  --on-select: #FFFFFF;
+
+  --drop-strip: 0 1px 2px rgba(24, 24, 26, .06);
+  --drop-offset: 0 8px 18px -8px rgba(24, 24, 26, .25);
+  --lift: 0 24px 48px -20px rgba(24, 24, 26, .28);
+  --scrim: rgba(24, 24, 26, .32);
+}
+
+:root[data-theme="dark"] {
+  --ground: #0B0B0C;   /* canvas */
+  --bay: #111113;      /* top bar, bay, side lists */
+  --card: #18181B;     /* strips, cards */
+  --raise: #1B1B1E;    /* palette, menus, the permission card */
+  --term: #0F0F11;     /* terminal wells, diffs */
+  --field: #161618;
+  --hover: #1F1F22; --pressed: #26262A;
+  --rule: #232326; --rule-strong: #323236; --grid-dot: #1E1E21;
+  --text: #EDEDEE; --text-2: #A0A0A6; --text-3: #717177;   /* --text-3: disabled only */
+
+  --state-needs: #F5A524; --state-working: #34C3C9; --state-done: #3FBF7F;
+  --state-failed: #E5484D; --state-idle: #86868D;
+  --state-needs-text: #F7B955; --state-working-text: #6ADCE0;
+  --state-done-text: #62D69A;  --state-failed-text: #F28B8E;
+  --needs-line: rgba(245, 165, 36, .55);
+
+  --primary: #EDEDEE; --on-primary: #111113;   /* a light pill */
+  --select: #EDEDEE;  --on-select: #111113;
+
+  --drop-strip: 0 1px 2px rgba(0, 0, 0, .35);
+  --drop-offset: 0 6px 16px -6px rgba(0, 0, 0, .6);
+  --lift: 0 28px 60px -24px rgba(0, 0, 0, .85);
+  --scrim: rgba(0, 0, 0, .6);
+}
+
+/* Step 1 aliases: today's name → the new token. Declared on both theme
+   selectors so they beat styles.css's dark block (0,2,0) by source order. */
+:root,
+:root[data-theme] {
+  --s-0: var(--ground); --s-1: var(--term); --s-2: var(--bay); --s-3: var(--raise);
+  --s-4: var(--hover); --s-5: var(--pressed); --well: var(--term);
+  --fg: var(--text); --fg-2: var(--text-2); --fg-3: var(--text-2); --fg-4: var(--text-3);
+  --muted: var(--text-2); --bg: var(--ground);
+  --line: var(--rule); --line-strong: var(--rule-strong); --border: var(--rule);
+  --frame-line: var(--rule-strong); --canvas-grid: var(--grid-dot); --nav-moat: var(--ground);
+  --glass-0: var(--bay); --glass-1: var(--term); --glass-2: var(--bay); --glass-3: var(--raise);
+  --panel-bg: var(--term); --chrome-bg: var(--bay); --blur: none;
+  --bubble: var(--hover); --edge-light: transparent; --bezel: var(--rule);
+  --amber: var(--state-needs); --green: var(--state-done); --red: var(--state-failed);
+  --blue: var(--state-working); --iris: var(--select); --focus: var(--select);
+  --state-select: var(--select); --on-iris: var(--on-select);
+  --violet: var(--text-2); --external: var(--text-2);
+  --glow-iris: 0 0 0 2px var(--select);
+  --font-display: var(--font-ui); --font-read: var(--font-ui);
+  --r-sm: var(--r-ctl); --r-md: var(--r-ctl); --r-lg: var(--r-panel); --r-region: var(--r-frame);
+  --e-1: var(--drop-strip); --e-2: var(--drop-strip); --e-3: var(--lift); --e-4: var(--lift);
+  --track-caps: 0;
+  --dur-1: var(--dur-color); --dur-2: var(--dur-offset);
+}

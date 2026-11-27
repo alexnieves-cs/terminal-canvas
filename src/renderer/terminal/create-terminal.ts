@@ -43,8 +43,10 @@ export function createTerminal(theme: ITheme = LIGHT_TERMINAL_THEME): TerminalHa
     // The SAME list as the stylesheet's --font-mono, so a path in the
     // inspector and the same path in the terminal resolve to the same glyphs.
     // The pre-M45 list named JetBrains Mono, which the app does not ship and
-    // which therefore fell through silently on every machine.
-    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
+    // which therefore fell through silently on every machine. M700: Geist
+    // Mono is bundled (fonts/fonts.css) and main.tsx awaits it before the
+    // first render, so open() measures the real face, never the fallback.
+    fontFamily: '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: 13,
     lineHeight: 1.2,
     letterSpacing: 0,
