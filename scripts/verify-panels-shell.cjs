@@ -1369,10 +1369,11 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         const visible = [...document.querySelectorAll('.rail-list--panels [data-rail-row]')]
           .filter((row) => getComputedStyle(row).display !== 'none')
           .map((row) => row.getAttribute('data-rail-row'))
-        const heading = document.querySelector('[data-rail-group="agents"] .rail-heading__button')
+        // M700 (Strip bay): the bay groups by state, so the rung panel sits under Needs you.
+        const heading = document.querySelector('[data-rail-group="needs"] .rail-heading__button')
         heading?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         await new Promise((r) => setTimeout(r, 80))
-        const folded = [...document.querySelectorAll('[data-rail-group-row="agents"]')].every((row) => row.hidden)
+        const folded = [...document.querySelectorAll('[data-rail-group-row="needs"]')].every((row) => row.hidden)
         const stored = (await window.canvas.settings.list()).find((row) => row.id === 'shell.collapsedRailGroups')?.value
         heading?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         filters.find((b) => b.textContent.trim() === 'All')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -1380,7 +1381,7 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       })()`)
       ok('shell.recommendations.2 Needs you filters the live rows and a folded section persists',
         filterAndFold.visible.length === 1 && filterAndFold.visible[0] === target &&
-          filterAndFold.folded === true && Array.isArray(filterAndFold.stored) && filterAndFold.stored.includes('agents'),
+          filterAndFold.folded === true && Array.isArray(filterAndFold.stored) && filterAndFold.stored.includes('needs'),
         JSON.stringify(filterAndFold))
       // What 83 LEAVES BEHIND: an extra sh panel in wants-you, in main's
       // store and on its row, alongside renamedId (still 'starting', untouched

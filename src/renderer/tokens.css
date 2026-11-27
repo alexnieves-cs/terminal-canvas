@@ -215,3 +215,122 @@
   .sessions-group td,
   .rd-settings__section-title
 )::first-letter { text-transform: uppercase; }
+
+/* ───────────────────────────────────────────────────────────
+   M700 (Strip bay, step 3). THE BAY. The Panels list's rows become strips:
+   a graphite card per panel with its state as a 3px edge (the tone block's
+   --tone, never a hue spelled here), the agent as a shape mark, and the
+   last line said under the name. A strip that needs you steps 12px out of
+   line with an amber rule and carries its question in an ask band; the
+   selected strip unfolds its sheet. Everything is scoped to
+   .rail-list--panels: workspace rows, runs and history keep their rows.
+   ─────────────────────────────────────────────────────────── */
+.shell__rail { background: var(--bay); }
+.rail-list--panels { display: flex; flex-direction: column; gap: 6px; padding: 0 var(--sp-4) var(--sp-5); }
+.rail-list--panels .rail-heading { margin: var(--sp-4) 0 2px; padding: 0 2px; min-height: 22px; color: var(--text-2); font-size: 12.5px; }
+.rail-list--panels .rail-heading:first-child { margin-top: var(--sp-2); }
+.rail-list--panels .rail-heading[data-rail-group="needs"] { color: var(--state-needs-text); }
+.rail-list--panels .rail-heading__button svg { opacity: .6; }
+
+.rail-list--panels .rail-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  min-height: var(--strip-h-sm);
+  padding: 3px 4px 3px calc(var(--edge-w) + 8px);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-strip);
+  background: var(--card);
+  box-shadow: var(--drop-strip);
+  transition: border-color var(--dur-color) var(--ease), background var(--dur-color) var(--ease), margin var(--dur-offset) var(--ease), box-shadow var(--dur-offset) var(--ease);
+}
+.rail-list--panels .rail-row::before {
+  content: "";
+  position: absolute;
+  left: 6px; top: 9px; bottom: 9px;
+  width: var(--edge-w);
+  border-radius: 2px;
+  background: var(--tone, transparent);
+  transition: background var(--dur-color) var(--ease);
+}
+.rail-list--panels .rail-row[data-tone="kind"]::before { background: var(--rule-strong); }
+.rail-list--panels .rail-row[data-asleep="true"]::before { opacity: .45; }
+.rail-list--panels .rail-row:hover { background: var(--hover); }
+.rail-list--panels .rail-row--selected,
+.rail-list--panels .rail-row--selected:hover { background: var(--card); border-color: var(--select); box-shadow: inset 0 0 0 .5px var(--select), var(--drop-strip); }
+
+/* Needs you: out of line, an amber rule, the drop of a thing lifted. */
+.rail-list--panels .rail-row[data-needs-you="true"] { margin-left: var(--strip-offset); background: var(--card); border-color: var(--needs-line); box-shadow: var(--drop-offset); }
+.rail-list--panels .rail-row[data-needs-you="true"].rail-row--selected { border-color: var(--state-needs); box-shadow: inset 0 0 0 .5px var(--state-needs), var(--drop-offset); }
+
+.rail-list--panels .rail-row__main { grid-column: 1; grid-row: 1; gap: 8px; padding: 6px 4px; color: var(--text); font-size: 13px; }
+.rail-list--panels .rail-row__start { grid-column: 2; grid-row: 1; }
+.rail-list--panels .rail-row__close { grid-column: 3; grid-row: 1; }
+.rail-list--panels .rail-row__kind[data-mark] {
+  width: var(--mark); height: var(--mark);
+  border-radius: 0;
+  background: var(--text-2);
+  -webkit-mask: var(--g-claude) center / contain no-repeat;
+  mask: var(--g-claude) center / contain no-repeat;
+}
+.rail-list--panels .rail-row__kind[data-mark="codex"] { -webkit-mask-image: var(--g-codex); mask-image: var(--g-codex); }
+.rail-list--panels .rail-row__kind[data-mark="shell"] { -webkit-mask-image: var(--g-shell); mask-image: var(--g-shell); }
+.rail-list--panels .rail-row__kind[data-mark="other"] { -webkit-mask-image: var(--g-other); mask-image: var(--g-other); }
+.rail-list--panels .rail-row__kind:not([data-mark]) { background: transparent; color: var(--text-2); }
+.strip__agent { flex: 0 0 auto; min-width: 46px; font-weight: 600; color: var(--text); }
+.rail-list--panels .rail-row__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.rail-list--panels .rail-row__state-dot { display: none; }
+.rail-list--panels .rail-row__last {
+  grid-column: 1 / -1; grid-row: 2;
+  margin-top: -5px; padding: 0 10px 6px calc(4px + var(--mark) + 8px);
+  color: var(--text-2); font-size: 12px;
+}
+
+/* The ask band: the question, then Deny and Allow once, Deny first. */
+.strip__ask {
+  grid-column: 1 / -1; grid-row: 3;
+  display: flex; align-items: center; gap: 8px;
+  margin: 2px 0 4px; padding: 8px 4px 2px calc(4px + var(--mark) + 8px);
+  border-top: 1px solid var(--rule);
+  font-size: 12.5px;
+  animation: strip-unfold var(--dur-unfold) var(--ease);
+}
+.strip__ask-q { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; white-space: nowrap; }
+.strip__ask-verb { flex: 0 0 auto; color: var(--text); }
+.strip__ask-arg { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); }
+.strip__ask-verbs { display: flex; gap: 6px; flex: 0 0 auto; }
+.strip__pill {
+  height: 26px; padding: 0 12px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-pill);
+  background: var(--card); color: var(--text);
+  font: 500 12px/1 var(--font-ui); cursor: pointer;
+  transition: background var(--dur-color) var(--ease), border-color var(--dur-color) var(--ease);
+}
+.strip__pill:hover { background: var(--hover); border-color: var(--text-3); }
+.strip__pill:focus-visible { outline: 2px solid var(--select); outline-offset: 2px; }
+.strip__pill--primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.strip__pill--primary:hover { background: var(--primary); border-color: var(--primary); opacity: .88; }
+
+/* The sheet: the selected strip unfolds what the inspector said first. */
+.strip__sheet {
+  grid-column: 1 / -1; grid-row: 4;
+  margin: 2px 0 4px; padding: 10px 6px 4px calc(4px + var(--mark) + 8px);
+  border-top: 1px solid var(--rule);
+  animation: strip-unfold var(--dur-unfold) var(--ease);
+}
+.strip__facts { display: grid; grid-template-columns: 58px minmax(0, 1fr); row-gap: 6px; margin: 0; font-size: 12px; }
+.strip__facts > div { display: contents; }
+.strip__facts dt { color: var(--text-2); }
+.strip__facts dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.strip__verbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+@keyframes strip-unfold { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .rail-list--panels .rail-row, .rail-list--panels .rail-row::before, .strip__pill { transition: none; }
+  .strip__ask, .strip__sheet { animation: none; }
+}
+/* A lit task lens: strips outside the task step back, never out of their group. */
+.rail-list--panels .rail-row[data-strip-outside] { opacity: .55; }
+.rail-list--panels .rail-row[data-strip-outside]:hover,
+.rail-list--panels .rail-row[data-strip-outside]:focus-within,
+.rail-list--panels .rail-row[data-strip-outside][data-needs-you="true"] { opacity: 1; }

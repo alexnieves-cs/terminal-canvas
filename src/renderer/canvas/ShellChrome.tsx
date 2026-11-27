@@ -9,6 +9,7 @@ import type { Tone } from '@renderer/panels/panel-state'
 import type { ToolScope } from '@shared/toolbox'
 import { getChat } from '@renderer/chat/chat-store'
 import { panelName } from '@renderer/palette/panel-name'
+import { shortPath } from '@shared/display-path'
 import type { BoardVerbs } from './useBoardVerbs'
 import type { CenterView } from '../shell/useShellChrome'
 import type { FocusSide } from '../focus/focus-model'
@@ -231,6 +232,14 @@ export function renderShellChrome(ctx: RenderShellChromeContext): JSX.Element {
       onDeleteWorkspace={paletteActions.deleteWorkspace}
       inbox={resumeBanner}
       rows={railRows}
+      // M700 (Strip bay). A waiting request is answered on its strip, once;
+      // the selected strip's sheet names its folder and carries the
+      // inspector's verbs.
+      asks={railAttention}
+      onAnswer={paletteActions.answerApproval}
+      selectedFolder={selectedPanel === undefined ? undefined : stripFolder(selectedPanel)}
+      onHandOffPanel={paletteActions.beginLink}
+      onRestartPanel={paletteActions.restartPanel}
       selectedId={selectedId}
       taskMemberReason={navTask === null ? undefined : (panelId) => navTask.members.find((m) => m.panelId === panelId)?.reason}
       onGoToPanel={goToPanelOrRequest}
@@ -266,4 +275,10 @@ export function renderShellChrome(ctx: RenderShellChromeContext): JSX.Element {
     />
     </>
   )
+}
+
+/** M700 (Strip bay). The folder a strip's sheet names: a process's working directory, shortened. */
+function stripFolder(panel: Panel): string | undefined {
+  const cwd = isChatPanel(panel) ? panel.chat.cwd : isTerminalPanel(panel) ? panel.spec.cwd : undefined
+  return cwd === undefined || cwd === '' ? undefined : shortPath(cwd, 3)
 }

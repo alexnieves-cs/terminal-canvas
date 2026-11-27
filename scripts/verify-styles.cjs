@@ -1143,7 +1143,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const hook = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'useDockExpanded.ts'), 'utf8')
   const canvasSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
   const control = /data-dock="expand"/.test(dockSrc) && /aria-label="Expand navigation"/.test(dockSrc) && /aria-pressed=\{expanded\}/.test(dockSrc)
-  const remembered = /localStorage\.getItem\(KEY\)/.test(hook) && /localStorage\.setItem\(KEY/.test(hook) && /pref \?\? bp === 'wide'/.test(hook)
+  const remembered = /localStorage\.getItem\(KEY\)/.test(hook) && /localStorage\.setItem\(KEY/.test(hook) && /pref \?\? false/.test(hook) // M700: the icon column is the default at every width (was `pref ?? bp === 'wide'`)
   const stamped = /data-dock=\{dock\.expanded \? 'expanded' : 'icons'\}/.test(canvasSrc)
   const shortcuts = /aria-keyshortcuts/.test(dockSrc)
   ok('dock-expand.1', 'the dock has a remembered Expand navigation control, the shell stamps its mode, and shortcuts are announced', control && remembered && stamped && shortcuts, JSON.stringify({ control, remembered, stamped, shortcuts }))
