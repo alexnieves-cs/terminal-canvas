@@ -1,6 +1,7 @@
 import type { CanvasBridge, SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import type { AgentEvent, WorldConnection } from '@shared/world-events'
 import type { AgentStateUpdate, PtyCreateResult, PtyDataChunk, PtyExitInfo } from '@shared/types'
+import type { PanelUsage } from '@shared/cost'
 import { EMPTY_MACHINE_COST } from '@shared/machine-cost'
 import { SETTINGS, resolveSetting, type SettingValue } from '@shared/settings-schema'
 import { startWorldSimulation, type WorldSim } from '../main/world-sim'
@@ -77,6 +78,7 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
   const worldConnection = channel<WorldConnection>()
   const agentState = channel<AgentStateUpdate>()
   const settingsChanged = channel<string>()
+  const usage = channel<{ panelId: string; usage: PanelUsage }>()
   const preferences: Record<string, SettingValue> = {}
 
   // A recording per panel. A chunk that lands before the terminal attaches
@@ -95,6 +97,37 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
   }
   for (const panel of castPanels.values()) write(panel.id, recordingOpener(panel))
 
+  // M699. What a scripted Claude agent "spent": a cumulative PanelUsage per
+  // panel, grown on each turn-sized event, so the fleet wall's spend chart
+  // has something to draw. Only the claude panels report, which is the app's
+  // own truth: a Codex transcript is not accounted (AGENT_CAPABILITIES), so
+  // its panels show no usage rather than an invented one. The figures are
+  // DEMO figures, sized like a real turn, and the demo says so nowhere else
+  // because nothing else on the page is real either.
+  const spent = new Map<string, PanelUsage>()
+  const spend = (event: AgentEvent): void => {
+    if (castPanels.get(event.agentId)?.engine !== 'claude') return
+    if (event.type !== 'tool_result' && event.type !== 'message' && event.type !== 'thought') return
+    const weight = 1 + ([...event.agentId].reduce((h, c) => h + c.charCodeAt(0), 0) % 4) * 0.6
+    const model = event.agentId.includes('ledger') ? 'claude-opus-4-8' : 'claude-opus-5-5'
+    const add = {
+      input: Math.round(2400 * weight),
+      output: Math.round(event.type === 'message' ? 900 * weight : 380 * weight),
+      cacheWrite: Math.round(1800 * weight),
+      cacheRead: Math.round(14000 * weight)
+    }
+    const prev = spent.get(event.agentId)
+    const totals = prev === undefined ? add : {
+      input: prev.totals.input + add.input,
+      output: prev.totals.output + add.output,
+      cacheWrite: prev.totals.cacheWrite + add.cacheWrite,
+      cacheRead: prev.totals.cacheRead + add.cacheRead
+    }
+    const next: PanelUsage = { totals, byModel: { [model]: { ...totals } }, turns: (prev?.turns ?? 0) + 1, subagentTurns: 0 }
+    spent.set(event.agentId, next)
+    usage.emit({ panelId: event.agentId, usage: next })
+  }
+
   let sim: WorldSim | null = null
   const startWorld = (): void => {
     if (sim !== null) return
@@ -111,6 +144,7 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
         for (const event of events) {
           if (event.type === 'status') agentState.emit({ panelId: event.agentId, state: panelStateOf(event.payload) })
           write(event.agentId, terminalLine(event))
+          spend(event)
         }
       }
     }, demoAgents(options.cast))
@@ -218,7 +252,23 @@ export function createDemoBridge(options: DemoBridgeOptions): DemoBridge {
     },
     session: {
       async info() { return { kind: 'direct', reason: 'The browser demo has no tmux.' } },
-      async lastExit() { return null }
+      async lastExit() { return null },
+      onUsage: usage.on
+    },
+    // M699. A film made in the browser has no save dialog to go through, so
+    // it is handed to the browser as a download, which is what a visitor who
+    // pressed Export expects. Nothing leaves the page.
+    export: {
+      async nightFilm(req) {
+        const name = `${req.film === 'fleet' ? 'fleet-wall' : 'last-night'}-demo.mp4`
+        const url = URL.createObjectURL(new Blob([req.bytes as BlobPart], { type: 'video/mp4' }))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = name
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 10_000)
+        return { kind: 'written', path: name, seconds: req.seconds, redacted: req.redacted }
+      }
     },
     skill: {
       async trail() { return { kind: 'none' } }

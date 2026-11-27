@@ -13,6 +13,7 @@ import { arrangementTemplate } from '../orchestration/orch-arrangement'
 import { FocusTask } from '../focus/FocusTask'
 import type { FocusSide } from '../focus/focus-model'
 import { TeamView } from '../team/TeamView'
+import { FleetWall } from '../fleet/FleetWall'
 import { useLessonHarvest } from '../learn/useLessonHarvest'
 import { panelPath } from '@renderer/palette/panel-name'
 import type { useAccounts } from '../account/useAccounts'
@@ -264,6 +265,18 @@ export function CenterPages({
       {centerView === 'team' && (
         <div className="shell__orch shell__orch--on" data-center-view="team" role="presentation">
           <TeamView accounts={accounts} />
+        </div>
+      )}
+      {/* M699. The fleet wall: every agent on this canvas on one page. A page
+          like Sessions, in the canvas cell; it reads the world and usage
+          stores and nothing Canvas owns but the panels' names. */}
+      {centerView === 'fleet' && (
+        <div className="shell__page" data-center-view="fleet">
+          <FleetWall
+            nameOf={(id) => { const p = panelsRef.current.find((c) => c.rect.id === id); return p === undefined ? undefined : railLabel(p, undefined) }}
+            onShowOnCanvas={(id) => { setCenterView('canvas'); paletteActions.goToPanel(id) }}
+            save={(req) => window.canvas.export.nightFilm(req)}
+          />
         </div>
       )}
       {/* M324. A task's focus view: the same overlay cell as Orchestrate, over

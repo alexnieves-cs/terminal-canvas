@@ -45,8 +45,14 @@ function claudeScript(panel: CastPanel): Step[] {
     result(900, 'read'),
     call(400, 'grep', 'Grep', `Search "export function" in ${dir}/src`, '9 matches in 4 files'),
     result(800, 'grep'),
+    // M699. A second file read and a test edited, so the fleet wall's map of
+    // files touched has more than one square per folder to show.
+    call(300, 'types', 'Read', `Read ${dir}/src/types.ts`),
+    result(700, 'types'),
     call(500, 'edit', 'Edit', `Edit ${dir}/src/index.ts`, '+18 −4'),
     result(1700, 'edit'),
+    call(400, 'spec', 'Edit', `Edit ${dir}/test/index.test.ts`, '+12'),
+    result(1100, 'spec'),
     call(400, 'test', 'Bash', 'npm test'),
     result(3200, 'test', { detail: '24 passed' }),
     message(500, 'Tests pass. The change is ready for review.'),
@@ -83,6 +89,8 @@ function codexScript(panel: CastPanel): Step[] {
     result(700, 'read'),
     call(500, 'patch', 'apply_patch', `Update ${dir}/src/main.ts`, '+9 −2'),
     result(1500, 'patch'),
+    call(400, 'config', 'apply_patch', `Update ${dir}/src/config.ts`, '+3 −1'),
+    result(900, 'config'),
     call(400, 'test', 'shell', 'npm test -- --run'),
     result(2800, 'test', { detail: '17 passed' }),
     status(400, 'waiting_approval'),

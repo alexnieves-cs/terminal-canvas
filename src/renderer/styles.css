@@ -13811,3 +13811,86 @@ tr[data-session-row]:focus-within .sessions-world,
 .sv-card__error { margin: 0; font-size: var(--t-sm); color: var(--red); overflow-wrap: anywhere; }
 .sv-card__note { margin: 0; font-size: var(--t-sm); color: var(--fg-3); }
 /* ── /st:M670 ── */
+
+/* ── fleet:M699 ── */
+/* The fleet wall (src/renderer/fleet/FleetWall.tsx). A page in the canvas
+   cell, like Sessions. Tokens only: every state hue is the tone block's
+   --tone through [data-tone], and money is the one accent, --violet, so an
+   agent's colour never means two things on the same page. */
+.fleet { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-6); padding: var(--sp-6) var(--sp-7) var(--sp-8); color: var(--fg); }
+.fleet .status-dot { flex: 0 0 auto; display: inline-block; width: var(--sp-4); height: var(--sp-4); border-radius: var(--r-full); }
+.fleet__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4) var(--sp-6); }
+.fleet__title { margin: 0; font-family: var(--font-display); font-size: var(--t-2xl); font-weight: 400; color: var(--fg); }
+.fleet__counts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.fleet__count { display: inline-flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-full); font-size: var(--t-sm); color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.fleet__count[data-tone="needs-you"] { border-color: var(--tone); color: var(--fg); background: var(--tone-dim); }
+.fleet__tools { margin-left: auto; display: flex; align-items: center; gap: var(--sp-4); }
+.fleet__export { padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.fleet__export:hover:not(:disabled) { background: var(--s-4); }
+.fleet__export:disabled { cursor: default; color: var(--fg-3); }
+.fleet__export:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+.fleet__film-words { flex: 1 1 100%; margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+
+.fleet__totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-5); }
+.fleet__stat { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-5) var(--sp-6); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); min-width: 0; }
+.fleet__stat-label { font-size: var(--t-xs); font-weight: 600; color: var(--fg-3); text-transform: uppercase; letter-spacing: .06em; }
+.fleet__stat-value { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.fleet__stat--accent .fleet__stat-value { color: var(--violet); }
+.fleet__stat-note { font-size: var(--t-sm); color: var(--fg-3); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fleet__tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-5); }
+.fleet__card { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; padding: var(--sp-5); border: 1px solid var(--line); border-left: 3px solid var(--tone); border-radius: var(--r-md); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); text-align: left; }
+.fleet__card--open { cursor: pointer; }
+.fleet__card--open:hover { background: var(--s-4); }
+.fleet__card--open:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; }
+.fleet__card[data-tone="needs-you"] { box-shadow: var(--tone-glow); }
+.fleet__card-head { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.fleet__card-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-md); font-weight: 600; }
+.fleet__card-word { flex: 0 0 auto; font-size: var(--t-xs); font-weight: 600; color: var(--tone); }
+.fleet__card-line { margin: 0; min-height: 2.6em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
+.fleet__card-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.fleet__card-money { font-size: var(--t-md); font-weight: 600; color: var(--violet); font-variant-numeric: tabular-nums; }
+.fleet__card-quiet { font-weight: 400; color: var(--fg-3); }
+.fleet__card-facts { font-size: var(--t-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.fleet__spark { flex: 0 0 auto; overflow: visible; }
+.fleet__spark path { fill: none; stroke: var(--violet); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.fleet__empty { margin: 0; padding: var(--sp-7); border: 1px dashed var(--line-strong); border-radius: var(--r-lg); font-size: var(--t-md); color: var(--fg-3); text-align: center; }
+
+.fleet__charts { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--sp-5); }
+.fleet__panel { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; padding: var(--sp-5) var(--sp-6); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); }
+.fleet__panel-title { margin: 0; font-size: var(--t-sm); font-weight: 600; color: var(--fg-2); }
+.fleet__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+.fleet__chart { position: relative; min-width: 0; }
+.fleet__chart svg { display: block; overflow: visible; }
+.fleet__chart-empty { padding: var(--sp-7) var(--sp-5); font-size: var(--t-sm); color: var(--fg-3); text-align: center; }
+.fleet__grid { stroke: var(--line); stroke-width: 1; }
+.fleet__axis { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.fleet__band { fill: var(--violet); stroke: var(--s-1); stroke-width: 1; }
+.fleet__total { fill: none; stroke: var(--violet); stroke-width: 2; stroke-linejoin: round; }
+.fleet__band-label { fill: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); }
+.fleet__band-value { fill: var(--violet); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.fleet__map { position: relative; min-width: 0; }
+.fleet__folder { position: absolute; border: 1px solid var(--line-strong); border-radius: var(--r-sm); overflow: hidden; }
+.fleet__folder-name { position: absolute; top: var(--sp-1); left: var(--sp-3); right: var(--sp-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); font-weight: 600; color: var(--fg-3); }
+.fleet__file { position: absolute; display: flex; flex-direction: column; justify-content: flex-start; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); overflow: hidden; }
+.fleet__file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg); }
+.fleet__file[data-hot] .fleet__file-name, .fleet__file[data-hot] .fleet__file-facts { color: var(--s-0); }
+.fleet__file-facts { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); color: var(--fg-2); font-variant-numeric: tabular-nums; }
+
+.fleet__lane-name { fill: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); }
+.fleet__lane-track { fill: var(--s-2); }
+.fleet__seg { fill: color-mix(in srgb, var(--tone) 72%, var(--s-2)); }
+.fleet__tick--edit { fill: var(--violet); background: var(--violet); }
+.fleet__tick--read { fill: var(--fg-3); background: var(--fg-3); }
+.fleet__tick--run { fill: var(--fg); background: var(--fg); }
+.fleet__tick--failed { fill: var(--state-failed); background: var(--state-failed); }
+.fleet__legend { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-6); font-size: var(--t-xs); color: var(--fg-3); }
+.fleet__legend li { display: inline-flex; align-items: center; gap: var(--sp-3); }
+.fleet__legend-tick { display: inline-block; width: 2px; height: 12px; }
+
+@media (max-width: 1100px) {
+  .fleet__totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fleet__charts { grid-template-columns: minmax(0, 1fr); }
+}
+/* ── /fleet:M699 ── */

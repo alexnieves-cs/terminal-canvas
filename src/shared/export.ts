@@ -56,7 +56,17 @@ export type NightFilmRecord =
  * script the frames were drawn from (shared/night-film.ts) — a film is
  * pixels, so its words are scrubbed before they are drawn, never after.
  */
-export interface NightFilmExportRequest { bytes: Uint8Array; seconds: number; redacted: number }
+export interface NightFilmExportRequest {
+  bytes: Uint8Array
+  seconds: number
+  redacted: number
+  /**
+   * M699. Which film, for the name the save dialog suggests. Absent is the
+   * night film (every caller before M699); `fleet` is the fleet wall's
+   * time-lapse, the second film through the same door and the same checks.
+   */
+  film?: 'night' | 'fleet'
+}
 
 export type NightFilmExportResult =
   | { kind: 'written'; path: string; seconds: number; redacted: number }

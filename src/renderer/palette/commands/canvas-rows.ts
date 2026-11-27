@@ -136,6 +136,16 @@ export function canvasRows(ctx: PaletteContext): Command[] {
     group: 'canvas',
     run: () => actions.setCenterView('team')
   })
+  // M699. The fleet wall: every agent, what it has cost, what it touched.
+  // Always here: it reads what the canvas already knows and spends nothing.
+  out.push({
+    id: 'canvas.fleet',
+    title: 'Show Fleet wall',
+    subtitle: 'every agent at once, with tokens and spend over time and the files they touched',
+    searchText: 'fleet wall agents dashboard spend cost tokens treemap files touched time-lapse lanes',
+    group: 'canvas',
+    run: () => actions.setCenterView('fleet')
+  })
   // M570 (lane O). The Lessons page: what discards and sent review comments
   // taught. Always here — reading what was kept spends nothing.
   // M607 (lane L's film, a second door). The briefing's "Last night ▸" goes

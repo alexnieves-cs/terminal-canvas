@@ -276,6 +276,83 @@ const mkDoors = (D, answer) => {
       JSON.stringify({ paintImports, encodeImports }))
   }
 
+  // ── M699. The fleet wall's numbers and its time-lapse (src/renderer/fleet/).
+  // The page and the painter need a browser; the model and the film's script
+  // are pure, so they are driven here with fixtures, the way the night is.
+  const fleet = load('src/renderer/fleet/fleet-model.ts', 'fleet-model')
+  const lapse = load('src/renderer/fleet/fleet-film.ts', 'fleet-film')
+  const T0 = Date.UTC(2026, 10, 27, 9, 0)
+  const usage = (model, input, output) => ({ totals: { input, output, cacheWrite: 0, cacheRead: 0 }, byModel: { [model]: { input, output, cacheWrite: 0, cacheRead: 0 } }, turns: 1, subagentTurns: 0 })
+  let seq = 0
+  const fev = (agentId, ts, type, payload) => ({ at: ts, event: { agentId, seq: ++seq, ts, type, payload } })
+  const tool = (summary, extra = {}) => ({ tool: summary.split(' ')[0], summary, status: 'done', ...extra })
+
+  check('film.fleet.1 spend over time starts at the window\'s baseline, only climbs, sums its lines, and counts an unpriced model in tokens only', fleet, (F) => {
+    const history = new Map([
+      ['a', [{ at: T0 - MIN, usage: usage('claude-opus-5-5', 1_000_000, 0) }, { at: T0 + 5 * MIN, usage: usage('claude-opus-5-5', 2_000_000, 100_000) }]],
+      ['b', [{ at: T0 + 2 * MIN, usage: usage('some-future-model', 500_000, 0) }]]
+    ])
+    const s = F.spendOverTime(history, T0, T0 + 10 * MIN, 20)
+    const a = s.lines.find((l) => l.agentId === 'a')
+    const climbs = s.total.every((v, i) => i === 0 || v >= s.total[i - 1] - 1e-9)
+    const sums = s.total.every((v, i) => Math.abs(v - s.lines.reduce((t, l) => t + l.values[i], 0)) < 1e-9)
+    // a: 1M input more at $4/M plus 100k output at $20/M = $6.00 in the window, not its $8 lifetime.
+    const end = s.total[s.total.length - 1]
+    return { pass: a !== undefined && a.values[0] === 0 && Math.abs(end - 6) < 1e-6 && climbs && sums && s.unpriced.includes('b') && s.lines.every((l) => l.agentId !== 'b'), detail: { end, unpriced: s.unpriced, tokens: s.tokens } }
+  })
+
+  check('film.fleet.2 files touched come from a tool\'s path or an apply_patch summary; the treemap tiles every file inside its box with no overlap', fleet, (F) => {
+    // A call is counted when it starts; its result is the same touch and is not counted again.
+    const call = (agentId, ts, summary, extra = {}) => fev(agentId, ts, 'tool_call', tool(summary, { status: 'started', ...extra }))
+    const journal = [
+      call('b', T0 - 10 * MIN, 'Read old/z.ts', { path: 'old/z.ts' }),
+      call('a', T0 + 1000, 'Read src/a.ts', { path: 'src/a.ts' }),
+      fev('a', T0 + 1500, 'tool_result', tool('Read src/a.ts', { path: 'src/a.ts' })),
+      call('a', T0 + 2000, 'Edit src/a.ts', { path: 'src/a.ts' }),
+      fev('b', T0 + 3000, 'tool_call', { tool: 'apply_patch', summary: 'Update lib/b.ts', status: 'started' }),
+      call('b', T0 + 4000, 'Bash npm test src/a.ts')
+    ]
+    const files = F.filesTouched(journal, T0, T0 + MIN)
+    const box = { x: 0, y: 0, w: 600, h: 300 }
+    const map = F.fileTreemap(files, box, 18, 2)
+    const tiles = map.flatMap((f) => f.files.map((t) => t.box))
+    const inside = tiles.every((b) => b.x >= -0.5 && b.y >= -0.5 && b.x + b.w <= box.w + 0.5 && b.y + b.h <= box.h + 0.5)
+    const overlap = tiles.some((p, i) => tiles.some((q, j) => j > i && p.x < q.x + q.w - 0.5 && q.x < p.x + p.w - 0.5 && p.y < q.y + q.h - 0.5 && q.y < p.y + p.h - 0.5))
+    const a = files.find((f) => f.path === 'src/a.ts')
+    return { pass: files.length === 2 && a?.touches === 2 && a?.edits === 1 && files.some((f) => f.path === 'lib/b.ts') && tiles.length === 2 && inside && !overlap, detail: { files: files.map((f) => [f.path, f.touches, f.edits]), tiles } }
+  })
+
+  check('film.fleet.3 a token planted in a tool summary, a path, an agent name and a message reaches no frame of the time-lapse; the gate counts it', lapse, (L) => {
+    const journal = [
+      fev('a', T0 + 1000, 'status', 'working'),
+      fev('a', T0 + 2000, 'tool_result', tool(`Read ${TOKEN}.ts`, { path: `src/${TOKEN}.ts` })),
+      fev('a', T0 + 3000, 'message', { text: `export GH=${TOKEN}` }),
+      { at: T0 + 4000, event: { agentId: 'b', seq: ++seq, ts: T0 + 4000, type: 'status', payload: 'waiting_approval', name: `agent ${TOKEN}` } }
+    ]
+    const script = L.lapseScript({ journal, history: new Map(), from: T0, to: T0 + 2 * MIN, nameOf: (id) => (id === 'b' ? `agent ${TOKEN}` : id), seconds: 2, fps: 10 })
+    const words = [...script.agents.map((a) => a.name)]
+    for (let i = 0; i < script.frames; i += 1) {
+      const f = L.lapseFrame(script, i)
+      words.push(...f.tiles.flatMap((t) => [t.name, t.word, t.line, t.money ?? '']), ...f.lanes.map((l) => l.name), ...f.files.flatMap((d) => [d.name, ...d.files.map((t) => t.item.path)]))
+    }
+    const leaked = words.filter((w) => w.includes(TOKEN.slice(4, 16)))
+    return { pass: script.frames === 20 && leaked.length === 0 && script.redacted > 0, detail: { frames: script.frames, redacted: script.redacted, leaked: leaked.slice(0, 3) } }
+  })
+
+  // film.fleet.4. The wall is joined: a center view with a View-menu row, a
+  //   palette row and a page; the film is saved as fleet-wall-*.mp4; and the
+  //   painter reads only the lapse frame, its script, the palette and the
+  //   model's formatters, never a live store.
+  {
+    const imports = (s) => [...s.matchAll(/^import .* from '([^']+)'/gm)].map((m) => m[1]).sort()
+    const paintImports = imports(src('src/renderer/fleet/fleet-paint.ts'))
+    const chrome = src('src/renderer/shell/useShellChrome.ts'), top = src('src/renderer/shell/TopBar.tsx'), rows = src('src/renderer/palette/commands/canvas-rows.ts'), pages = src('src/renderer/canvas/CenterPages.tsx'), main = src('src/main/film-export.ts')
+    ok('film.fleet.4 the fleet wall is a center view with a View row, a palette row and a page; its film saves as fleet-wall-*.mp4; its painter reads no live store',
+      /\| 'fleet'/.test(chrome) && /data-view-fleet/.test(top) && /id: 'canvas\.fleet'/.test(rows) && /data-center-view="fleet"/.test(pages) && /'fleet-wall'/.test(main) &&
+        JSON.stringify(paintImports) === JSON.stringify(['./fleet-film', './fleet-model', '@shared/redesign-contracts', '@shared/state-palette']),
+      JSON.stringify({ paintImports }))
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)

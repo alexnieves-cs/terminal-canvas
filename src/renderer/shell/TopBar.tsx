@@ -283,6 +283,16 @@ export function TopBar({
                 <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
                 Orchestrate
               </MenuCheckboxItem>
+              {/* M699. The fleet wall, beside Orchestrate: both are "show me
+                  every agent", one to steer them and one to watch them. */}
+              <MenuCheckboxItem checked={centerView === 'fleet'}
+                onSelect={() => onSetCenterView(centerView === 'fleet' ? 'canvas' : 'fleet')}
+                title="Show the fleet wall: every agent, its spend and the files it touched"
+                data-view-fleet
+              >
+                <span className="shell__view-check">{centerView === 'fleet' && <Check />}</span>
+                Fleet wall
+              </MenuCheckboxItem>
               {/* M642. Simple and Full, where the other "what do I see" switches
                   are. The same row is Settings' first and a palette row. */}
               <MenuCheckboxItem checked={fullMode} onSelect={() => setFullMode(!fullMode)}

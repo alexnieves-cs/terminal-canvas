@@ -127,7 +127,8 @@ export function createFilmDoors(deps: FilmDoorDeps): FilmDoors {
       // The renderer's count from the script; main cannot recount pixels, so it reports what it was told.
       const redacted = typeof req.redacted === 'number' && Number.isInteger(req.redacted) && req.redacted > 0 ? req.redacted : 0
       const seconds = typeof req.seconds === 'number' && Number.isFinite(req.seconds) && req.seconds > 0 ? Math.round(req.seconds) : 0
-      const picked = await deps.askPath(`last-night-${day(now())}.mp4`)
+      // M699. The fleet wall's time-lapse saves through this same door; only the suggested name differs.
+      const picked = await deps.askPath(`${req.film === 'fleet' ? 'fleet-wall' : 'last-night'}-${day(now())}.mp4`)
       if (picked === null) return { kind: 'cancelled' }
       // The dialog's filter suggests .mp4; it does not enforce it.
       const path = /\.mp4$/i.test(picked) ? picked : `${picked}.mp4`

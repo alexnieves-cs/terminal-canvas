@@ -434,6 +434,7 @@ The roadmap contract: one row per milestone, pinned against `docs/build-log/` by
 | M696 | Crash reports read the project's address from `TC_CRASH_DSN` at build time (unset sends nothing, malformed fails the build), the Sentry init closes the SDK's own reach (hostname, breadcrumbs, client reports, logs, metrics), and Settings and a new guide page say what is sent and when. [Log](build-log/m695-m698-launch-feedback.md) | ✅ done |
 | M697 | An opt-in local tally of feature use and the first-run funnel, kept in one file on the Mac and counted by channel name only. Nothing is sent; the palette copies it as text for the person to paste, or clears it. [Log](build-log/m695-m698-launch-feedback.md) | ✅ done |
 | M698 | The signed dry run checklist in `docs/release-signing.md`, with where the Open Anyway steps live and when to remove them, and the docs brought up to 7.0 in progress. [Log](build-log/m695-m698-launch-feedback.md) | 🔨 built, gate owed |
+| M699 | The fleet wall: a page with every agent at once. It has state counts, canvas tokens and spend, a card per agent with a sparkline, spend over time as stacked bands, a treemap of files touched and a lane of state per agent. **Export time-lapse** draws the window as a 24-second MP4, every word gated by `outward`. View ▸ Fleet wall, the palette's Show Fleet wall, or `#/fleet`. `verify:film` `film.fleet.*`. [Log](build-log/m699-fleet-wall.md) | 🔨 built, gate owed |
 
 ### What's next: 7.0
 

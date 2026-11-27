@@ -340,7 +340,7 @@ export interface PaletteActions {
    * M268. Show the canvas or the Orchestration center page. The canvas host
    * stays mounted either way — this only chooses which sibling is visible.
    */
-  setCenterView(view: 'canvas' | 'orchestration' | 'team' | 'learn'): void
+  setCenterView(view: 'canvas' | 'orchestration' | 'team' | 'learn' | 'fleet'): void
   /**
    * Arm the one-shot link mode with this panel as the source. The NEXT click
    * on the canvas completes or cancels it; see useLinkMode and Canvas.tsx's

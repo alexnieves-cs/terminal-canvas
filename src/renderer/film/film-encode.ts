@@ -54,13 +54,41 @@ export async function filmCodec(): Promise<string | null> {
 }
 
 export async function encodeFilm(script: FilmScript, opts: FilmEncodeOptions = {}): Promise<FilmEncodeResult> {
+  return encodeFrames({
+    width: FILM_SIZE.w,
+    height: FILM_SIZE.h,
+    fps: script.fps,
+    total: filmFrameCount(script),
+    paint: (ctx, i) => paintFilmFrame(ctx as unknown as FilmContext, filmFrame(script, (i * 1000) / script.fps, opts.clock), script),
+    onProgress: opts.onProgress
+  })
+}
+
+/**
+ * M699. The encoder loop on its own, for a second film drawn from its own
+ * script (the fleet wall's time-lapse). The night film is the first caller and
+ * still the reference: same codecs, bitrate, key spacing and queue bound, so
+ * the two films cannot diverge into two encoders. The painter draws frame `i`
+ * on a canvas this function owns; every word it draws is the caller's to have
+ * passed `outward` first (night-film.ts and fleet-film.ts both do).
+ */
+export interface FrameEncodeJob {
+  width: number
+  height: number
+  fps: number
+  total: number
+  paint: (ctx: OffscreenCanvasRenderingContext2D, index: number) => void
+  onProgress?: (done: number, total: number) => void
+}
+
+export async function encodeFrames(job: FrameEncodeJob): Promise<FilmEncodeResult> {
   const codec = await filmCodec()
   if (codec === null) throw new Error('this build cannot encode H.264 video')
-  const canvas = new OffscreenCanvas(FILM_SIZE.w, FILM_SIZE.h)
+  const canvas = new OffscreenCanvas(job.width, job.height)
   const ctx = canvas.getContext('2d')
   if (ctx === null) throw new Error('no 2D canvas to draw the film on')
-  const total = filmFrameCount(script)
-  const frameUs = 1_000_000 / script.fps
+  const total = job.total
+  const frameUs = 1_000_000 / job.fps
   const samples: Mp4Sample[] = []
   let avcC: Uint8Array | null = null
   let failure: Error | null = null
@@ -84,14 +112,13 @@ export async function encodeFilm(script: FilmScript, opts: FilmEncodeOptions = {
     },
     error: (e) => { failure = e instanceof Error ? e : new Error(String(e)) }
   })
-  encoder.configure({ codec, width: FILM_SIZE.w, height: FILM_SIZE.h, bitrate: BITRATE, framerate: script.fps, avc: { format: 'avc' } })
+  encoder.configure({ codec, width: job.width, height: job.height, bitrate: BITRATE, framerate: job.fps, avc: { format: 'avc' } })
   try {
     for (let i = 0; i < total; i += 1) {
       if (failure !== null) throw failure
-      const frame = filmFrame(script, (i * 1000) / script.fps, opts.clock)
-      paintFilmFrame(ctx as unknown as FilmContext, frame, script)
+      job.paint(ctx, i)
       const video = new VideoFrame(canvas, { timestamp: Math.round(i * frameUs), duration: Math.round(frameUs) })
-      encoder.encode(video, { keyFrame: i % (script.fps * KEY_EVERY_S) === 0 })
+      encoder.encode(video, { keyFrame: i % (job.fps * KEY_EVERY_S) === 0 })
       video.close()
       const waitFrom = performance.now()
       while (encoder.encodeQueueSize > QUEUE_MAX) {
@@ -99,7 +126,7 @@ export async function encodeFilm(script: FilmScript, opts: FilmEncodeOptions = {
         if (performance.now() - waitFrom > STALL_MS) throw new Error('the video encoder stopped responding')
         await yieldToUi()
       }
-      if (i % script.fps === 0) { opts.onProgress?.(i, total); await yieldToUi() }
+      if (i % job.fps === 0) { job.onProgress?.(i, total); await yieldToUi() }
     }
     await encoder.flush()
   } finally {
@@ -107,6 +134,6 @@ export async function encodeFilm(script: FilmScript, opts: FilmEncodeOptions = {
   }
   if (failure !== null) throw failure
   if (avcC === null) throw new Error('the encoder gave no decoder record')
-  opts.onProgress?.(total, total)
-  return { bytes: muxMp4({ width: FILM_SIZE.w, height: FILM_SIZE.h, timescale: script.fps * 1000, avcC, samples }), frames: samples.length, seconds: samples.length / script.fps, codec }
+  job.onProgress?.(total, total)
+  return { bytes: muxMp4({ width: job.width, height: job.height, timescale: job.fps * 1000, avcC, samples }), frames: samples.length, seconds: samples.length / job.fps, codec }
 }

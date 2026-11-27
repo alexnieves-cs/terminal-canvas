@@ -21,6 +21,29 @@ import type { PanelUsage } from '@shared/cost'
 const usage = new Map<PanelId, PanelUsage>()
 const listeners = new Map<PanelId, Set<() => void>>()
 
+/**
+ * M699. Every arrival, stamped, per panel: the fleet wall's spend over time
+ * (backlog #19's history half for a live session; M142's ledger is the
+ * week's). ITS OWN LISTENER SET, machine-cost-store's Round 7 rule: the
+ * per-panel listeners above are a panel's own readout, and a wall that
+ * subscribed there would make every panel's turn re-render every other
+ * panel's subscriber. Nothing subscribes here unless the wall is showing.
+ *
+ * Bounded twice, like the world journal it is drawn beside: the last hour,
+ * and at most HISTORY_MAX arrivals a panel (an arrival is one agent turn).
+ * The stored objects are main's, replaced and never mutated, so a point
+ * costs one reference.
+ */
+export interface UsageArrival { at: number; usage: PanelUsage }
+export const HISTORY_MAX = 720
+export const HISTORY_MAX_AGE_MS = 60 * 60_000
+let history: ReadonlyMap<PanelId, readonly UsageArrival[]> = new Map()
+const historyListeners = new Set<() => void>()
+
+function notifyHistory(): void {
+  for (const listener of historyListeners) listener()
+}
+
 function notify(panelId: PanelId): void {
   const set = listeners.get(panelId)
   if (!set) return
@@ -36,9 +59,18 @@ function notify(panelId: PanelId): void {
  * The object is REPLACED rather than mutated, which is what lets the hook hand
  * React a stable reference between arrivals.
  */
-export function applyUsage(panelId: PanelId, next: PanelUsage): void {
+export function applyUsage(panelId: PanelId, next: PanelUsage, at: number = Date.now()): void {
   usage.set(panelId, next)
   notify(panelId)
+  // M699. A NEW map each arrival: the wall's useSyncExternalStore compares by
+  // identity. One map of a few panels per agent turn is the whole cost.
+  const prev = history.get(panelId) ?? []
+  let start = Math.max(0, prev.length + 1 - HISTORY_MAX)
+  while (start < prev.length && at - prev[start]!.at > HISTORY_MAX_AGE_MS) start += 1
+  const grown = new Map(history)
+  grown.set(panelId, [...prev.slice(start), { at, usage: next }])
+  history = grown
+  notifyHistory()
 }
 
 /**
@@ -48,6 +80,14 @@ export function applyUsage(panelId: PanelId, next: PanelUsage): void {
  * clearLiveSession exist.
  */
 export function clearUsage(panelId: PanelId): void {
+  // M699. The history goes with the panel, for the reason above: a recycled
+  // id must not draw a dead panel's spend on the wall.
+  if (history.has(panelId)) {
+    const shrunk = new Map(history)
+    shrunk.delete(panelId)
+    history = shrunk
+    notifyHistory()
+  }
   if (!usage.has(panelId)) return
   usage.delete(panelId)
   notify(panelId)
@@ -82,5 +122,22 @@ export function useUsage(panelId: PanelId): PanelUsage | undefined {
     (listener) => subscribe(panelId, listener),
     () => usage.get(panelId),
     () => usage.get(panelId)
+  )
+}
+
+/** M699. Every panel's arrivals, for a plain read (the time-lapse film reads it once). */
+export function getUsageHistory(): ReadonlyMap<PanelId, readonly UsageArrival[]> {
+  return history
+}
+
+/** M699. The same map as a hook; a new identity only when an arrival lands or a panel goes. */
+export function useUsageHistory(): ReadonlyMap<PanelId, readonly UsageArrival[]> {
+  return useSyncExternalStore(
+    (listener) => {
+      historyListeners.add(listener)
+      return () => { historyListeners.delete(listener) }
+    },
+    () => history,
+    () => history
   )
 }

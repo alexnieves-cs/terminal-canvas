@@ -533,6 +533,8 @@ twelve was the one that printed the stack trace?"
 
 ## 19. Token and dollar accounting — landed in M17; aggregate totals landed in M46 (the context pane's no-selection summary); the open half is history, a second adapter and the un-pinned panel
 
+> **M699 drew the history.** The usage store now keeps an hour of each panel's usage, and the fleet wall (View ▸ Fleet wall) draws it as spend over time, one band per agent, beside a card per agent with a sparkline. An unpriced model stays in tokens only. It also draws a treemap of files touched, and a 24-second time-lapse export of the window. The week's record is still the M142 ledger rows below; the wall's history is in memory only. [Log](build-log/m699-fleet-wall.md)
+
 > **v7 Act II (M142) built the history half on #46's ledger, as this entry asked.** At every site that drops a panel's usage (kill, exit, a detach that forgets it) main appends ONE usage row — per-model token totals, the turn count, when it ended, never a price — and `ledger:usage` reads this week's rows back for the no-selection summary's `this week` line, priced in the renderer by the summary's own rule (three states: reading, nothing closed, a figure or `unpriced` with its count). Declined again by name: a second adapter (codex reports no cost, M90; copilot is unmeasured) and the un-pinned panel (a guess is worse than nothing). Per-workspace totals: not built — the accumulator is per panel and one workspace is on screen at a time; the canvas-wide figure is the one that changes what a person does.
 
 M17 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
