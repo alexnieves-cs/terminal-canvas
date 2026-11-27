@@ -84,12 +84,13 @@ export function planStatusSentence(stateWord: string, lastLine: string | null | 
 
 /**
  * M444. The minimap's header. A count of zero is not a number on the canvas:
- * the empty sentence lives in the body, and this line says MAP with no digit.
+ * the empty sentence lives in the body, and this line says Map with no digit.
+ * M700: sentence case, as every label is once Strip bay took the caps out.
  */
 export function minimapHeader(count: number): string {
-  if (!(count > 0)) return 'MAP'
-  if (count === 1) return 'MAP · 1 TASK'
-  return `MAP · ${count} TASKS`
+  if (!(count > 0)) return 'Map'
+  if (count === 1) return 'Map · 1 task'
+  return `Map · ${count} tasks`
 }
 
 /**

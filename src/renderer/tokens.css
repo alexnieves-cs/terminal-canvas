@@ -125,4 +125,93 @@
   --e-1: var(--drop-strip); --e-2: var(--drop-strip); --e-3: var(--lift); --e-4: var(--lift);
   --track-caps: 0;
   --dur-1: var(--dur-color); --dur-2: var(--dur-offset);
+
+  /* Step 2. The tints follow their hues: a selection tint is the text colour
+     at low strength, and a state's tint is that state's. */
+  --iris-dim: color-mix(in srgb, var(--text) 8%, transparent);
+  --blue-dim: color-mix(in srgb, var(--state-working) 14%, transparent);
+  --green-dim: color-mix(in srgb, var(--state-done) 14%, transparent);
+  --amber-dim: color-mix(in srgb, var(--state-needs) 16%, transparent);
+  --red-dim: color-mix(in srgb, var(--state-failed) 14%, transparent);
+  --violet-dim: color-mix(in srgb, var(--text-2) 12%, transparent);
 }
+
+/* Step 2. Where the old cyan meant "running", it was the working state, not
+   the accent. The accent is now the text colour, so these places take the
+   working hue back by scoping the old name to them, and every rule under
+   them keeps its var(--iris) unchanged. */
+:is(
+  .workflow-flow__block[data-lit],
+  .workflow-flow .react-flow__edge[data-lit],
+  .workflow-node__blockg[data-lit],
+  .workflow-node__arrow--lit,
+  .workflow-node__edgeg[data-lit],
+  .workflow-node__event[data-open],
+  .orch__platform[data-lit="working"],
+  .orch__edge[data-connected-live],
+  .orch-live__pip[data-state="working"],
+  .orch-live__legend i[data-k="working"],
+  .orch-live__live[data-on],
+  .orch-live__log li[data-log="run"],
+  .flagship__step[data-flagship-state='current']
+) {
+  --iris: var(--state-working);
+  --iris-dim: color-mix(in srgb, var(--state-working) 14%, transparent);
+}
+.workflow-node__edgeg[data-done] { --iris: var(--state-done); }
+
+/* Step 2. The caps are gone, and some labels were written in lower case
+   for the caps to lift. Their first letter is raised, so every label reads
+   in sentence case without touching the strings (a label that is inline
+   keeps its own case, which is why the sheet's labels are written whole). */
+:is(
+  .replay__section,
+  .shell__region-title,
+  .file-node__backlinks-head,
+  .memory-node__kind,
+  .inspector__badge,
+  .inspector__label,
+  .inspector__section-heading,
+  .inspector__links-label,
+  .canvas-group__header,
+  .reopen-notice__kicker,
+  .review-node__group-head,
+  .subagent-node__type,
+  .subagent-ambiguous__type,
+  .palette__section,
+  .toolbox-node__group-heading,
+  .chat__popup-head,
+  .teammates-pane__label,
+  .board-pane__heading,
+  .skills-pane__tab,
+  .skills-pane__heading,
+  .skill-node__heading,
+  .skill-editor__label,
+  .rail-heading,
+  .launcher__recents-label,
+  .file-node__editbar-word,
+  .skills-ws__group-title,
+  .skills-ws__section,
+  .skills-ws__facts dt,
+  .skills-ws__advanced summary,
+  .skill-badge,
+  .skill-state,
+  .orch__section-title,
+  .orch__list-table th,
+  .orch__brief-summary,
+  .resume-banner__kicker,
+  .orch__limit-kind,
+  .orch__eyebrow,
+  .orch__group-head,
+  .orch__needs-eyebrow,
+  .focus__next-label,
+  .fplan__facts dt,
+  .shape-inspector__label,
+  .welcome-back__kicker,
+  .palette__kind,
+  .palette__band,
+  .minimap__header,
+  .rd-settings__group,
+  .sessions-group td,
+  .rd-settings__section-title
+)::first-letter { text-transform: uppercase; }
