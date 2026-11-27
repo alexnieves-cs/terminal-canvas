@@ -26,6 +26,7 @@ import { createAccountWiring } from './bootstrap/account-handlers'
 import { createCanvasSyncWiring, createPresenceWiring, createShareDoors, createTeamReporterWiring, createTeamAskWiring, createTeamAskDoors, createTeamFlowDoors } from './bootstrap/presence-wiring'
 import { startWorldSimWiring } from './bootstrap/world-sim-wiring'
 import { createWorldFeedWiring } from './bootstrap/world-feed-wiring'
+import { createEventLogWiring } from './bootstrap/event-log-wiring'
 import type { WorldSim } from './world-sim'
 import { createShareControl } from './share-control'
 import { confirm } from './bootstrap/dialogs'
@@ -169,7 +170,13 @@ stores.ptyManager.ownerOf = () => account.currentUserId()
 // The world view's real feed: observes the agent runtime's fan-out and every
 // agent:state, and changes neither. Read at use through `state` (rule 1).
 state.worldFeed = createWorldFeedWiring(state, () => stores.ptyManager.resendStates())
-stores.ptyManager.onAgentState = (update, agent) => state.worldFeed?.terminal(update, agent)
+// M701. The opt-in local event log. Built here so its focus listeners exist
+// before the first window; it writes nothing while the setting is off.
+state.eventLog = createEventLogWiring(stores, app.getPath('userData'))
+stores.ptyManager.onAgentState = (update, agent) => {
+  state.worldFeed?.terminal(update, agent)
+  state.eventLog?.terminal(update, agent)
+}
 // Presence rides the account's identity; built here, started after the env probe.
 state.presence = createPresenceWiring(state, stores, account)
 // The shared canvas binds into the hub's rooms (bindCanvas reads this at use).
@@ -303,6 +310,8 @@ app.whenReady().then(async () => {
     writeStewardLayout(join(app.getPath('userData'), 'layout.json'), process.cwd())
   }
   stores.layoutStore.load()
+  // M701. After the store loads (the switch lives there) and after the gate.
+  state.eventLog?.app('start')
 
   // AFTER the store loads (the setting lives there) and BEFORE the window
   // exists (the renderer learns the decision as an argv flag, not a channel).
@@ -418,6 +427,7 @@ app.whenReady().then(async () => {
       canvasOp: (op) => state.canvasSync?.op(op) ?? { ok: true },
       canvasView: () => state.canvasSync?.view() ?? null,
       canvasSaved: (ack) => state.canvasSync?.saved(ack),
+      layoutSaved: (panels) => state.eventLog?.panels(panels),
       canvasActivated: () => state.canvasSync?.activated(),
       textOpen: (id) => state.canvasSync?.textOpen(id) ?? null,
       textClose: (id) => state.canvasSync?.textClose(id),
@@ -581,6 +591,10 @@ app.on('before-quit', () => {
   // -> shutdown() is kill-server on a socket the WINNER owns, while flushSync
   // writes a store this process never loaded. Both are total and silent.
   if (!hasInstanceLock) return
+
+  // M701. The quit record, written now: the process may be gone before a timer.
+  state.eventLog?.app('quit')
+  state.eventLog?.flushSync()
 
   // M54. Unlink the socket on the way out; a stale file is replaced at the
   // next listen anyway, but a clean quit should not leave a door on disk.

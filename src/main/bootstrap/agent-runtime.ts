@@ -290,6 +290,8 @@ export function startAgentRuntime(state: MainState, stores: Stores, tokens: Pane
     // The world view's feed. AFTER every send above, so nothing the runtime
     // does waits on it; it never throws (bootstrap/world-feed-wiring.ts).
     state.worldFeed?.session(event)
+    // M701. The opt-in local log, last for the same reason; a no-op while off.
+    state.eventLog?.session(event)
   })
 }
 

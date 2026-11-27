@@ -3238,6 +3238,15 @@ toggle. With no project address the plan is off BY NAME (`no-project-dsn`) and t
 description says nothing is sent. `verify:file telemetry.6` fails when the constant and that
 sentence disagree.
 
+**The usage log writes nothing while it is off, and never content while it is on (`main/event-log.ts`, `shared/event-log.ts`).**
+M701. `telemetry.localEventLog` is off by default, never `planWritable`, and read at every record:
+off creates no folder and drops the unflushed batch. A record carries only the fields in
+`shared/event-log.ts`'s union; panel and request ids are salted hashes and a tool is its built-in
+name or a class, because an MCP tool's name says which services a person uses. A repeat state is
+not a record (the PTY manager re-sends every state for the dock badge), a day's file stops at its
+cap, and files past 30 days go by name. Nothing in the log, its wiring, the report or the collector
+touches the network. `verify:event-log` writer.1, writer.2, writer.5, writer.6, writer.7, setting.1, wiring.2.
+
 **What was running when the window went away is RECORDED before the teardown, sealed by the quit, and read-and-deleted at the next boot (`main/last-exit.ts`, `shared/persistence.ts`, `shell/ReopenNotice.tsx`, `session:last-exit`).**
 Brief #20. On reopening, a reattached session, a kept session that died, and a process the quit
 stopped by design wear the same dormant card, and only the second is a problem — but the renderer
