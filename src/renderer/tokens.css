@@ -334,3 +334,38 @@
 .rail-list--panels .rail-row[data-strip-outside]:hover,
 .rail-list--panels .rail-row[data-strip-outside]:focus-within,
 .rail-list--panels .rail-row[data-strip-outside][data-needs-you="true"] { opacity: 1; }
+
+/* ───────────────────────────────────────────────────────────
+   M700 (Strip bay, step 4). REVIEW. A task that came back is a strip
+   too: the card, the radius and the 3px edge the bay draws, so a person
+   reads the Review page in the same shapes as the bay. Finished-with-
+   changes takes the done edge, a failed check the failed edge. The page
+   already lists tasks in the queue's own order (M605); only the paint
+   changes, and the grid areas stay as they were.
+   ─────────────────────────────────────────────────────────── */
+.review-host { background: var(--ground); }
+.review-host__list { gap: 6px; }
+.review-host__row {
+  position: relative;
+  max-width: 760px;
+  padding: 12px 14px 12px 18px;
+  border: 1px solid var(--rule); border-radius: var(--r-strip);
+  background: var(--card); box-shadow: var(--drop-strip);
+}
+.review-host__row::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 0 2px 2px 0; background: var(--state-done);
+}
+.review-host__row[data-review-kind="failed"]::before { background: var(--state-failed); }
+.review-host__why { color: var(--text-2); font-size: 12.5px; }
+.review-host__affects { color: var(--text-3); font-size: 11.5px; }
+
+/* ───────────────────────────────────────────────────────────
+   M700 (Strip bay, step 5). PARKED. A dormant panel on the canvas is
+   still a dashed ghost (dormant.1); it now draws on the card colour with
+   the strong rule, and its summary card takes the strip radius, so a
+   parked panel reads as a strip waiting in its frame. Paint only: no rule
+   here touches the frame box.
+   ─────────────────────────────────────────────────────────── */
+.panel[data-dormant] { border-color: var(--rule-strong); background: var(--card); }
+.panel__card-dormant { border-color: var(--rule); border-radius: var(--r-strip); background: var(--ground); }
