@@ -1,8 +1,8 @@
 # M700 — Strip bay
 
-**Branch:** `strip-bay` (local, off `main` at f68f720). **Proposal:** the Strip bay design
-proposal in the project files (`side-projects-build/redesign/strip-bay/`). **Status:** built,
-gate owed. Not pushed; nothing here is on `main`.
+**Branch:** `strip-bay`, off `main`. **Proposal:** the Strip bay design proposal in the
+project files (`side-projects-build/redesign/strip-bay/`). **Status:** built; the Mac gate
+(`npm run verify`) runs on its pull request, and goldens wait for the owner to look.
 
 ## What landed
 
