@@ -112,7 +112,8 @@ usage limit, and wait for you in the morning queue.
    Only do this because you have read the source or trust its author. The app runs whatever
    commands you give it.
 3. Install an agent CLI such as `claude` or `codex` and sign in to it once in a terminal.
-4. Optional: `brew install tmux`, so agents keep running through a reload or a quit.
+4. Optional: `brew install tmux`, so agents keep running through a reload, and through a quit if
+   you turn on *Keep agents running after quit* in Settings.
 
 Or install with Homebrew. The repository is its own tap, so the tap needs its URL:
 
