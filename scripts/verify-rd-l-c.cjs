@@ -208,9 +208,9 @@ ok('rd-l-c.sentence.1 the plan sentence is the last line, else the state word',
 }
 
 ok('rd-l-c.minimap.1 the header counts tasks and the empty canvas has no zero',
-  M.minimapHeader(5) === 'MAP · 5 TASKS' &&
-  M.minimapHeader(1) === 'MAP · 1 TASK' &&
-  M.minimapHeader(0) === 'MAP' &&
+  M.minimapHeader(5) === 'Map · 5 tasks' &&
+  M.minimapHeader(1) === 'Map · 1 task' &&
+  M.minimapHeader(0) === 'Map' &&
   !/\d/.test(M.minimapHeader(0)) &&
   M.emptyState('minimap').sentence === 'Nothing placed yet' &&
   /emptyState\('minimap'\)/.test(minimap) &&

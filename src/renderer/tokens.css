@@ -1,0 +1,372 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   M700 (Strip bay, step 1). The redesign's tokens, loaded AFTER styles.css
+   (main.tsx imports it last). Every block below uses the same selectors as
+   styles.css's own structure and theme blocks, so these values win by source
+   order at equal specificity, and a name this file leaves out (--t-xs,
+   --r-full, the layout constants, the world view's and the deck's colours)
+   keeps its styles.css value.
+
+   The alias block at the bottom points today's colour, radius, shadow and
+   duration NAMES at the new tokens, so every var() in styles.css still
+   resolves in step 1 and the stylesheet can move to the new names file by
+   file. Delete an alias once a search finds no use of the old name.
+
+   What changed, in one place (PRODUCT.md "Brand Commitments" has the why):
+   - Opaque graphite, one step lighter per layer, in place of glass over blur.
+   - State is the only colour: amber needs you, teal working, red failing,
+     green done. Selection and focus are the text colour, never a state hue.
+   - The radius grows with the size of the thing: 8 controls, 10 strips,
+     12 panels, 16 task frames, 18 dialogs, pills for buttons.
+   - Instrument Sans for the chrome, Geist Mono for code (fonts/fonts.css).
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Type. The scale keeps today's steps; the faces change. */
+  --font-ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Shape: the radius grows with the size of the thing. */
+  --r-ctl: 8px;     /* fields, menu rows, segmented controls */
+  --r-strip: 10px;  /* strips, and the sheet that unfolds under one */
+  --r-panel: 12px;  /* panels, the permission card, menus */
+  --r-frame: 16px;  /* task frames on the canvas */
+  --r-sheet: 18px;  /* the command palette and dialogs */
+  --r-pill: 999px;  /* buttons and the canvas toolbar */
+
+  /* Strip geometry. */
+  --strip-h: 52px; --strip-h-sm: 38px;
+  --edge-w: 3px; --strip-offset: 12px; --bay-w: 330px; --mark: 12px;
+
+  /* Motion: every duration names the thing it moves. */
+  --dur-color: 90ms;    /* colour changes: a state edge, a hover */
+  --dur-offset: 160ms;  /* a strip stepping out of line */
+  --dur-unfold: 200ms;  /* the ask band, the sheet */
+  --dur-file: 240ms;    /* a strip moving between groups in the bay */
+
+  /* Agent marks. The SHAPE says which kind of agent, so state stays the only
+     colour. Drawn as a mask and filled with --text-2. */
+  --g-claude: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Ccircle cx='6' cy='6' r='4.4' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3C/svg%3E");
+  --g-codex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 1.3L10.7 6 6 10.7 1.3 6z' fill='none' stroke='%23000' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --g-shell: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 3l3.2 3L2 9M6.6 9.4h3.6' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --g-other: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 1.6l4.6 8.2H1.4z' fill='none' stroke='%23000' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Light. Bare :root carries it too, as styles.css's light block does, so the
+   frame before useTheme stamps the attribute already has the new values. */
+:root,
+:root[data-theme="light"] {
+  --ground: #F4F4F3; --bay: #FAFAF9; --card: #FFFFFF; --raise: #FFFFFF; --term: #FFFFFF; --field: #FFFFFF;
+  --hover: #F0F0EE; --pressed: #EBEBE9;
+  --rule: #E3E3E0; --rule-strong: #D3D3CF; --grid-dot: #D9D9D5;
+  --text: #18181A; --text-2: #5D5D63; --text-3: #85858B;
+
+  --state-needs: #F5A524; --state-working: #34C3C9; --state-done: #3FBF7F;
+  --state-failed: #E5484D; --state-idle: #86868D;
+  /* Text tokens clear 4.5:1 on --bay and --hover. */
+  --state-needs-text: #8A4B00; --state-working-text: #0A6A6E;
+  --state-done-text: #1C6B42;  --state-failed-text: #B4282E;
+  --needs-line: rgba(214, 130, 0, .6);
+
+  --primary: #18181A; --on-primary: #FFFFFF;   /* the one filled button: a graphite pill */
+  --select: #18181A;  --on-select: #FFFFFF;
+
+  --drop-strip: 0 1px 2px rgba(24, 24, 26, .06);
+  --drop-offset: 0 8px 18px -8px rgba(24, 24, 26, .25);
+  --lift: 0 24px 48px -20px rgba(24, 24, 26, .28);
+  --scrim: rgba(24, 24, 26, .32);
+}
+
+:root[data-theme="dark"] {
+  --ground: #0B0B0C;   /* canvas */
+  --bay: #111113;      /* top bar, bay, side lists */
+  --card: #18181B;     /* strips, cards */
+  --raise: #1B1B1E;    /* palette, menus, the permission card */
+  --term: #0F0F11;     /* terminal wells, diffs */
+  --field: #161618;
+  --hover: #1F1F22; --pressed: #26262A;
+  --rule: #232326; --rule-strong: #323236; --grid-dot: #1E1E21;
+  --text: #EDEDEE; --text-2: #A0A0A6; --text-3: #717177;   /* --text-3: disabled only */
+
+  --state-needs: #F5A524; --state-working: #34C3C9; --state-done: #3FBF7F;
+  --state-failed: #E5484D; --state-idle: #86868D;
+  --state-needs-text: #F7B955; --state-working-text: #6ADCE0;
+  --state-done-text: #62D69A;  --state-failed-text: #F28B8E;
+  --needs-line: rgba(245, 165, 36, .55);
+
+  --primary: #EDEDEE; --on-primary: #111113;   /* a light pill */
+  --select: #EDEDEE;  --on-select: #111113;
+
+  --drop-strip: 0 1px 2px rgba(0, 0, 0, .35);
+  --drop-offset: 0 6px 16px -6px rgba(0, 0, 0, .6);
+  --lift: 0 28px 60px -24px rgba(0, 0, 0, .85);
+  --scrim: rgba(0, 0, 0, .6);
+}
+
+/* Step 1 aliases: today's name → the new token. Declared on both theme
+   selectors so they beat styles.css's dark block (0,2,0) by source order. */
+:root,
+:root[data-theme] {
+  --s-0: var(--ground); --s-1: var(--term); --s-2: var(--bay); --s-3: var(--raise);
+  --s-4: var(--hover); --s-5: var(--pressed); --well: var(--term);
+  --fg: var(--text); --fg-2: var(--text-2); --fg-3: var(--text-2); --fg-4: var(--text-3);
+  --muted: var(--text-2); --bg: var(--ground);
+  --line: var(--rule); --line-strong: var(--rule-strong); --border: var(--rule);
+  --frame-line: var(--rule-strong); --canvas-grid: var(--grid-dot); --nav-moat: var(--ground);
+  --glass-0: var(--bay); --glass-1: var(--term); --glass-2: var(--bay); --glass-3: var(--raise);
+  --panel-bg: var(--term); --chrome-bg: var(--bay); --blur: none;
+  --bubble: var(--hover); --edge-light: transparent; --bezel: var(--rule);
+  --amber: var(--state-needs); --green: var(--state-done); --red: var(--state-failed);
+  --blue: var(--state-working); --iris: var(--select); --focus: var(--select);
+  --state-select: var(--select); --on-iris: var(--on-select);
+  --violet: var(--text-2); --external: var(--text-2);
+  --glow-iris: 0 0 0 2px var(--select);
+  --font-display: var(--font-ui); --font-read: var(--font-ui);
+  --r-sm: var(--r-ctl); --r-md: var(--r-ctl); --r-lg: var(--r-panel); --r-region: var(--r-frame);
+  --e-1: var(--drop-strip); --e-2: var(--drop-strip); --e-3: var(--lift); --e-4: var(--lift);
+  --track-caps: 0;
+  --dur-1: var(--dur-color); --dur-2: var(--dur-offset);
+
+  /* Step 2. The tints follow their hues: a selection tint is the text colour
+     at low strength, and a state's tint is that state's. */
+  --iris-dim: color-mix(in srgb, var(--text) 8%, transparent);
+  --blue-dim: color-mix(in srgb, var(--state-working) 14%, transparent);
+  --green-dim: color-mix(in srgb, var(--state-done) 14%, transparent);
+  --amber-dim: color-mix(in srgb, var(--state-needs) 16%, transparent);
+  --red-dim: color-mix(in srgb, var(--state-failed) 14%, transparent);
+  --violet-dim: color-mix(in srgb, var(--text-2) 12%, transparent);
+}
+
+/* Step 2. Where the old cyan meant "running", it was the working state, not
+   the accent. The accent is now the text colour, so these places take the
+   working hue back by scoping the old name to them, and every rule under
+   them keeps its var(--iris) unchanged. */
+:is(
+  .workflow-flow__block[data-lit],
+  .workflow-flow .react-flow__edge[data-lit],
+  .workflow-node__blockg[data-lit],
+  .workflow-node__arrow--lit,
+  .workflow-node__edgeg[data-lit],
+  .workflow-node__event[data-open],
+  .orch__platform[data-lit="working"],
+  .orch__edge[data-connected-live],
+  .orch-live__pip[data-state="working"],
+  .orch-live__legend i[data-k="working"],
+  .orch-live__live[data-on],
+  .orch-live__log li[data-log="run"],
+  .flagship__step[data-flagship-state='current']
+) {
+  --iris: var(--state-working);
+  --iris-dim: color-mix(in srgb, var(--state-working) 14%, transparent);
+}
+.workflow-node__edgeg[data-done] { --iris: var(--state-done); }
+
+/* Step 2. The caps are gone, and some labels were written in lower case
+   for the caps to lift. Their first letter is raised, so every label reads
+   in sentence case without touching the strings (a label that is inline
+   keeps its own case, which is why the sheet's labels are written whole). */
+:is(
+  .replay__section,
+  .shell__region-title,
+  .file-node__backlinks-head,
+  .memory-node__kind,
+  .inspector__badge,
+  .inspector__label,
+  .inspector__section-heading,
+  .inspector__links-label,
+  .canvas-group__header,
+  .reopen-notice__kicker,
+  .review-node__group-head,
+  .subagent-node__type,
+  .subagent-ambiguous__type,
+  .palette__section,
+  .toolbox-node__group-heading,
+  .chat__popup-head,
+  .teammates-pane__label,
+  .board-pane__heading,
+  .skills-pane__tab,
+  .skills-pane__heading,
+  .skill-node__heading,
+  .skill-editor__label,
+  .rail-heading,
+  .launcher__recents-label,
+  .file-node__editbar-word,
+  .skills-ws__group-title,
+  .skills-ws__section,
+  .skills-ws__facts dt,
+  .skills-ws__advanced summary,
+  .skill-badge,
+  .skill-state,
+  .orch__section-title,
+  .orch__list-table th,
+  .orch__brief-summary,
+  .resume-banner__kicker,
+  .orch__limit-kind,
+  .orch__eyebrow,
+  .orch__group-head,
+  .orch__needs-eyebrow,
+  .focus__next-label,
+  .fplan__facts dt,
+  .shape-inspector__label,
+  .welcome-back__kicker,
+  .palette__kind,
+  .palette__band,
+  .minimap__header,
+  .rd-settings__group,
+  .sessions-group td,
+  .rd-settings__section-title
+)::first-letter { text-transform: uppercase; }
+
+/* ───────────────────────────────────────────────────────────
+   M700 (Strip bay, step 3). THE BAY. The Panels list's rows become strips:
+   a graphite card per panel with its state as a 3px edge (the tone block's
+   --tone, never a hue spelled here), the agent as a shape mark, and the
+   last line said under the name. A strip that needs you steps 12px out of
+   line with an amber rule and carries its question in an ask band; the
+   selected strip unfolds its sheet. Everything is scoped to
+   .rail-list--panels: workspace rows, runs and history keep their rows.
+   ─────────────────────────────────────────────────────────── */
+.shell__rail { background: var(--bay); }
+.rail-list--panels { display: flex; flex-direction: column; gap: 6px; padding: 0 var(--sp-4) var(--sp-5); }
+.rail-list--panels .rail-heading { margin: var(--sp-4) 0 2px; padding: 0 2px; min-height: 22px; color: var(--text-2); font-size: 12.5px; }
+.rail-list--panels .rail-heading:first-child { margin-top: var(--sp-2); }
+.rail-list--panels .rail-heading[data-rail-group="needs"] { color: var(--state-needs-text); }
+.rail-list--panels .rail-heading__button svg { opacity: .6; }
+
+.rail-list--panels .rail-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  min-height: var(--strip-h-sm);
+  padding: 3px 4px 3px calc(var(--edge-w) + 8px);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-strip);
+  background: var(--card);
+  box-shadow: var(--drop-strip);
+  transition: border-color var(--dur-color) var(--ease), background var(--dur-color) var(--ease), margin var(--dur-offset) var(--ease), box-shadow var(--dur-offset) var(--ease);
+}
+.rail-list--panels .rail-row::before {
+  content: "";
+  position: absolute;
+  left: 6px; top: 9px; bottom: 9px;
+  width: var(--edge-w);
+  border-radius: 2px;
+  background: var(--tone, transparent);
+  transition: background var(--dur-color) var(--ease);
+}
+.rail-list--panels .rail-row[data-tone="kind"]::before { background: var(--rule-strong); }
+.rail-list--panels .rail-row[data-asleep="true"]::before { opacity: .45; }
+.rail-list--panels .rail-row:hover { background: var(--hover); }
+.rail-list--panels .rail-row--selected,
+.rail-list--panels .rail-row--selected:hover { background: var(--card); border-color: var(--select); box-shadow: inset 0 0 0 .5px var(--select), var(--drop-strip); }
+
+/* Needs you: out of line, an amber rule, the drop of a thing lifted. */
+.rail-list--panels .rail-row[data-needs-you="true"] { margin-left: var(--strip-offset); background: var(--card); border-color: var(--needs-line); box-shadow: var(--drop-offset); }
+.rail-list--panels .rail-row[data-needs-you="true"].rail-row--selected { border-color: var(--state-needs); box-shadow: inset 0 0 0 .5px var(--state-needs), var(--drop-offset); }
+
+.rail-list--panels .rail-row__main { grid-column: 1; grid-row: 1; gap: 8px; padding: 6px 4px; color: var(--text); font-size: 13px; }
+.rail-list--panels .rail-row__start { grid-column: 2; grid-row: 1; }
+.rail-list--panels .rail-row__close { grid-column: 3; grid-row: 1; }
+.rail-list--panels .rail-row__kind[data-mark] {
+  width: var(--mark); height: var(--mark);
+  border-radius: 0;
+  background: var(--text-2);
+  -webkit-mask: var(--g-claude) center / contain no-repeat;
+  mask: var(--g-claude) center / contain no-repeat;
+}
+.rail-list--panels .rail-row__kind[data-mark="codex"] { -webkit-mask-image: var(--g-codex); mask-image: var(--g-codex); }
+.rail-list--panels .rail-row__kind[data-mark="shell"] { -webkit-mask-image: var(--g-shell); mask-image: var(--g-shell); }
+.rail-list--panels .rail-row__kind[data-mark="other"] { -webkit-mask-image: var(--g-other); mask-image: var(--g-other); }
+.rail-list--panels .rail-row__kind:not([data-mark]) { background: transparent; color: var(--text-2); }
+.strip__agent { flex: 0 0 auto; min-width: 46px; font-weight: 600; color: var(--text); }
+.rail-list--panels .rail-row__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.rail-list--panels .rail-row__state-dot { display: none; }
+.rail-list--panels .rail-row__last {
+  grid-column: 1 / -1; grid-row: 2;
+  margin-top: -5px; padding: 0 10px 6px calc(4px + var(--mark) + 8px);
+  color: var(--text-2); font-size: 12px;
+}
+
+/* The ask band: the question, then Deny and Allow once, Deny first. */
+.strip__ask {
+  grid-column: 1 / -1; grid-row: 3;
+  display: flex; align-items: center; gap: 8px;
+  margin: 2px 0 4px; padding: 8px 4px 2px calc(4px + var(--mark) + 8px);
+  border-top: 1px solid var(--rule);
+  font-size: 12.5px;
+  animation: strip-unfold var(--dur-unfold) var(--ease);
+}
+.strip__ask-q { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; white-space: nowrap; }
+.strip__ask-verb { flex: 0 0 auto; color: var(--text); }
+.strip__ask-arg { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); }
+.strip__ask-verbs { display: flex; gap: 6px; flex: 0 0 auto; }
+.strip__pill {
+  height: 26px; padding: 0 12px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-pill);
+  background: var(--card); color: var(--text);
+  font: 500 12px/1 var(--font-ui); cursor: pointer;
+  transition: background var(--dur-color) var(--ease), border-color var(--dur-color) var(--ease);
+}
+.strip__pill:hover { background: var(--hover); border-color: var(--text-3); }
+.strip__pill:focus-visible { outline: 2px solid var(--select); outline-offset: 2px; }
+.strip__pill--primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.strip__pill--primary:hover { background: var(--primary); border-color: var(--primary); opacity: .88; }
+
+/* The sheet: the selected strip unfolds what the inspector said first. */
+.strip__sheet {
+  grid-column: 1 / -1; grid-row: 4;
+  margin: 2px 0 4px; padding: 10px 6px 4px calc(4px + var(--mark) + 8px);
+  border-top: 1px solid var(--rule);
+  animation: strip-unfold var(--dur-unfold) var(--ease);
+}
+.strip__facts { display: grid; grid-template-columns: 58px minmax(0, 1fr); row-gap: 6px; margin: 0; font-size: 12px; }
+.strip__facts > div { display: contents; }
+.strip__facts dt { color: var(--text-2); }
+.strip__facts dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.strip__verbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+@keyframes strip-unfold { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .rail-list--panels .rail-row, .rail-list--panels .rail-row::before, .strip__pill { transition: none; }
+  .strip__ask, .strip__sheet { animation: none; }
+}
+/* A lit task lens: strips outside the task step back, never out of their group. */
+.rail-list--panels .rail-row[data-strip-outside] { opacity: .55; }
+.rail-list--panels .rail-row[data-strip-outside]:hover,
+.rail-list--panels .rail-row[data-strip-outside]:focus-within,
+.rail-list--panels .rail-row[data-strip-outside][data-needs-you="true"] { opacity: 1; }
+
+/* ───────────────────────────────────────────────────────────
+   M700 (Strip bay, step 4). REVIEW. A task that came back is a strip
+   too: the card, the radius and the 3px edge the bay draws, so a person
+   reads the Review page in the same shapes as the bay. Finished-with-
+   changes takes the done edge, a failed check the failed edge. The page
+   already lists tasks in the queue's own order (M605); only the paint
+   changes, and the grid areas stay as they were.
+   ─────────────────────────────────────────────────────────── */
+.review-host { background: var(--ground); }
+.review-host__list { gap: 6px; }
+.review-host__row {
+  position: relative;
+  max-width: 760px;
+  padding: 12px 14px 12px 18px;
+  border: 1px solid var(--rule); border-radius: var(--r-strip);
+  background: var(--card); box-shadow: var(--drop-strip);
+}
+.review-host__row::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 0 2px 2px 0; background: var(--state-done);
+}
+.review-host__row[data-review-kind="failed"]::before { background: var(--state-failed); }
+.review-host__why { color: var(--text-2); font-size: 12.5px; }
+.review-host__affects { color: var(--text-3); font-size: 11.5px; }
+
+/* ───────────────────────────────────────────────────────────
+   M700 (Strip bay, step 5). PARKED. A dormant panel on the canvas is
+   still a dashed ghost (dormant.1); it now draws the strong rule, and its
+   summary card takes the strip radius, so a parked panel reads as a strip
+   waiting in its frame. Its ground stays --panel-bg, the live panel's, so
+   waking it never flashes a second colour (verify:panels:agents theme.1).
+   Paint only: no rule here touches the frame box.
+   ─────────────────────────────────────────────────────────── */
+.panel[data-dormant] { border-color: var(--rule-strong); background: var(--panel-bg); }
+.panel__card-dormant { border-color: var(--rule); border-radius: var(--r-strip); background: var(--ground); }

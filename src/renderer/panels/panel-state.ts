@@ -63,6 +63,34 @@ export const PANEL_FILTERS = [
   { id: 'asleep', label: 'Asleep' }
 ] as const
 export type PanelFilter = typeof PANEL_FILTERS[number]['id']
+/**
+ * M700 (Strip bay). THE BAY'S GROUPS: the panel list grouped by what a panel
+ * needs from you, not by what it is. Here and not in the bay because the ids
+ * and labels are state words, and `verify:rail state.2` keeps every state word
+ * in this file. Order is the order the bay draws: what waits on you first,
+ * then what is running, then what is quiet, then what failed, then the
+ * sessionless objects (notes, files, reviews) that carry no state at all.
+ */
+export const BAY_GROUPS = [
+  { id: 'needs', label: 'Needs you' },
+  { id: 'working', label: 'Working' },
+  { id: 'idle', label: 'Idle' },
+  { id: 'failing', label: 'Failing' },
+  { id: 'canvas', label: 'On the canvas' }
+] as const
+export type BayGroupId = typeof BAY_GROUPS[number]['id']
+
+/** M700. A tone's bay group. A clean exit (`done`) is quiet, never failing. */
+export function bayGroupOf(tone: Tone): BayGroupId {
+  switch (tone) {
+    case 'needs-you': return 'needs'
+    case 'working': case 'starting': return 'working'
+    case 'exited': return 'failing'
+    case 'kind': return 'canvas'
+    default: return 'idle'
+  }
+}
+
 export function toneIsRunning(tone: Tone): boolean {
   return tone === 'working' || tone === 'idle' || tone === 'starting' || tone === 'needs-you'
 }

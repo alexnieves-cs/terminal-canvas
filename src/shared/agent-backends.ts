@@ -44,6 +44,11 @@ export interface BackendDef {
   label: string
   /** The binary main probes for on the login PATH. */
   binary: string
+  /**
+   * M700 (Strip bay). The shape a strip draws for this agent: the kind is a
+   * shape so state stays the only colour. Absent: the generic triangle.
+   */
+  mark?: 'claude' | 'codex'
   /** Whether a later spawn can name an earlier conversation (`--resume` / `exec resume`). */
   resumes: boolean
   /** Whether the CLI has an interrupt door. False means the only stop is a kill, named as such. */
@@ -118,6 +123,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     id: 'claude',
     label: 'claude',
     binary: 'claude',
+    mark: 'claude',
     resumes: true,
     interrupts: true,
     images: true,
@@ -148,6 +154,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     id: 'codex',
     label: 'codex',
     binary: 'codex',
+    mark: 'codex',
     resumes: true,
     interrupts: false,
     images: false,

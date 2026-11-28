@@ -1,6 +1,7 @@
 import { workflowWatchLabel } from '@renderer/workflow/workflow-diagram'
 import { isShapePanel, isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
+import { BACKENDS, backendOf, DEFAULT_BACKEND } from '@shared/agent-backends'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { WorkItemState } from '@shared/work-items'
@@ -44,6 +45,14 @@ export interface RailRow {
    * the literal for railSignature's key-order reason.
    */
   outcome?: string
+  /**
+   * M700 (Strip bay). The agent a panel runs, for the strip's shape mark.
+   * Absent for a conversation on the default backend (Claude) and for a plain
+   * shell, so those rows' shape and signature are unchanged; a terminal
+   * started as an agent says which (`claude`), and a conversation on another
+   * backend says that one.
+   */
+  agent?: 'claude' | 'codex' | 'other'
 }
 
 /**
@@ -245,8 +254,21 @@ export function buildRailRows(
     const state: StateInput = { kind: tailKind, status, dormant, ...(workState === undefined ? {} : { work: { state: workState } }) }
     // M92. The marks, absent unless set, so a plain row's shape is unchanged.
     const outcome = outcomeOf?.(id)
-    return { id, label: railLabel(panel, status, templateNameOf, teammateNameOf, names.get(id)), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}), ...(outcome === undefined ? {} : { outcome }) }
+    return { id, label: railLabel(panel, status, templateNameOf, teammateNameOf, names.get(id)), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}), ...(outcome === undefined ? {} : { outcome }), ...agentMark(panel) }
   })
+}
+
+/** M700. The agent a panel runs when its row can't take it as read, for the strip's shape mark. */
+function agentMark(panel: Panel): { agent?: 'claude' | 'codex' | 'other' } {
+  if (isTerminalPanel(panel)) {
+    const agent = panel.spec.agent
+    if (agent === undefined) return {}
+    return { agent: agent === 'claude-code' ? 'claude' : agent === 'codex' ? 'codex' : 'other' }
+  }
+  if (!isChatPanel(panel)) return {}
+  const backend = backendOf(panel.chat)
+  if (backend === DEFAULT_BACKEND) return {}
+  return { agent: BACKENDS[backend].mark ?? 'other' }
 }
 
 /**

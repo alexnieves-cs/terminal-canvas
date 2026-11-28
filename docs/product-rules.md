@@ -62,6 +62,15 @@ and 5.0 did not spend them.
   bubble, the assistant's is unboxed prose at a readable measure, a tool call is one collapsed
   row (verb, target, state) that expands on click. The composer is a rounded well with one
   filled primary control. A chat is never a terminal wearing a header.
+- **Material is Strip bay (M700), on a local branch until it merges.** Graphite on the ground
+  colour, no glass and no blur: the shell is opaque cards on `--bay`, each panel in the
+  Panels list is a strip with its state as a 3px edge, its agent as a shape mark, and a
+  strip that needs you steps 12px out of line. One filled primary control per surface is
+  still the rule, now a graphite pill (`--primary`). State is the only colour: needs amber,
+  working cyan, done green, failed red, idle grey, spelled once in `tokens.css`. Type is
+  Instrument Sans for the UI and Geist Mono for code, both bundled (the CSP is
+  `default-src 'self'`). The World view keeps its glass until a milestone specs it. The
+  rule below is the one Strip bay replaces; it stays here as history.
 - **Material comes from the Obsidian brief and is sharpened, not replaced**
   (`docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`): dark flagship, cyan as both
   the working state and the accent, glass over blur, 12px corners, system SF, one filled

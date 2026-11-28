@@ -1,11 +1,23 @@
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { useLastLine } from '@renderer/session/last-line-store'
-import { memo, type JSX } from 'react'
+import { memo, useEffect, type JSX } from 'react'
 import type { RailGroupId, RailRoleId, RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
 import { Close, KIND_GLYPH, Lock, Pin, KindTerminal } from '@renderer/icons'
-import { toneIsAsleep, toneIsRunning, toneNeedsYou } from '@renderer/panels/panel-state'
+import { bayGroupOf, toneIsAsleep, toneIsRunning, toneNeedsYou, type BayGroupId } from '@renderer/panels/panel-state'
 import { useShownState } from '@renderer/panels/useShownState'
+import { approvalHeadline } from '@renderer/chat/chat-model'
+import type { PendingApproval } from './rail-sections'
+import { dropBayGroup, reportBayGroup } from './bay-groups'
+
+/** M700 (Strip bay). The agent's shape mark: the kind is a SHAPE, never a colour (state owns colour). */
+type StripMark = 'claude' | 'codex' | 'shell' | 'other'
+const MARK_NAME: Record<StripMark, string> = { claude: 'Claude', codex: 'Codex', shell: 'Shell', other: 'Agent' }
+function stripMark(row: RailRow): StripMark | undefined {
+  if (row.state.kind === 'terminal') return row.agent ?? 'shell'
+  if (row.state.kind === 'chat') return row.agent ?? 'claude'
+  return undefined
+}
 
 /* M63. The rail's left column: a terminal's is its state dot, every other
    kind's is a glyph naming the kind — kind and state stop sharing a slot. */
@@ -17,8 +29,24 @@ export interface RailPanelRowProps {
   onClose: (id: string) => void
   /** M66. The merged view is read-only; its rows say so instead of starting. */
   merged?: boolean
-  groupId: RailGroupId | RailRoleId
+  groupId: RailGroupId | RailRoleId | BayGroupId
   hidden?: boolean
+  /**
+   * M700 (Strip bay). This conversation's waiting permission request, for the
+   * strip's ask band. Answered only ONCE from here (M308's rule for anything
+   * outside the queue's own detail): a session grant needs the detail, so the
+   * band never offers one, and a high-risk request offers Open instead of
+   * Allow so its whole action is read before it is allowed.
+   */
+  /** M700. A task lens is lit and this panel is not in that task: the strip steps back. */
+  outside?: boolean
+  ask?: PendingApproval
+  onAnswer?: (panelId: string, requestId: string, allow: boolean) => void
+  /** M700. The selected strip's sheet: its folder, and the inspector's verbs. */
+  folder?: string
+  onPause?: (id: string) => void
+  onHandOff?: (id: string) => void
+  onRestart?: (id: string) => void
 }
 
 /**
@@ -38,7 +66,8 @@ export interface RailPanelRowProps {
  * defensible answer about which one a click meant.
  */
 function RailPanelRowImpl({
-  row, selected, onGoTo, onStart, onClose, merged = false, groupId, hidden = false
+  row, selected, onGoTo, onStart, onClose, merged = false, groupId, hidden = false,
+  outside = false, ask, onAnswer, folder, onPause, onHandOff, onRestart
 }: RailPanelRowProps): JSX.Element {
   const last = useLastLine(row.id)
   // M63/M73/M84. The word and the tone, from the one vocabulary, with the
@@ -61,6 +90,16 @@ function RailPanelRowImpl({
   const needsYou = toneNeedsYou(shown.tone)
   const changed = last.unread || row.state.kind === 'review' || row.state.kind === 'github'
   const asleep = toneIsAsleep(shown.tone) || row.dormant
+  // M700 (Strip bay). The bay groups by state, and this row is the only thing
+  // that knows its live state: it reports its group, the list re-groups when
+  // a group CHANGES (bay-groups.ts), and a bell that keeps it in place moves
+  // nothing above it.
+  const bay = bayGroupOf(shown.tone)
+  useEffect(() => { reportBayGroup(row.id, bay) }, [row.id, bay])
+  useEffect(() => () => { dropBayGroup(row.id) }, [row.id])
+  const mark = stripMark(row)
+  const doing = row.outcome ?? (last.line === '' ? undefined : last.line)
+  const highRisk = ask?.risk === 'high'
   return (
     <li
       className={`rail-row${selected ? ' rail-row--selected' : ''}`}
@@ -70,6 +109,10 @@ function RailPanelRowImpl({
       data-needs-you={needsYou}
       data-changed={changed}
       data-asleep={asleep}
+      data-tone={shown.tone}
+      data-strip-mark={mark}
+      data-strip-ask={ask === undefined ? undefined : ''}
+      data-strip-outside={outside ? '' : undefined}
       hidden={hidden}
     >
       {/*
@@ -90,7 +133,11 @@ function RailPanelRowImpl({
           answer to "what is that agent doing" — the same split check 54
           already draws for the panel itself.
         */}
-        <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
+        {mark === undefined
+          ? <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
+          : <span className="rail-row__kind strip__mark" data-mark={mark} aria-hidden="true" />}
+        {/* The agent's name, unless the label already opens with it ("Claude — infra"): one name, never two. */}
+        {mark !== undefined && !row.label.toLowerCase().startsWith(MARK_NAME[mark].toLowerCase()) && <span className="strip__agent">{MARK_NAME[mark]}</span>}
         {/* M105. Unread: the turn ended while the user was elsewhere; cleared on focus. */}
         {last.unread && <span className="rail-row__unread" data-rail-unread title="finished while you were elsewhere" aria-label="unread" />}
         <span className="rail-row__label">{row.label}</span>
@@ -142,6 +189,48 @@ function RailPanelRowImpl({
       >
         <Close />
       </button>
+      {/* M700 (Strip bay). THE ASK BAND: the question and its two answers on
+          the strip, Deny first. Once only; a high-risk action is opened, read
+          and then answered where its whole text is shown. */}
+      {ask !== undefined && onAnswer !== undefined && (
+        <div className="strip__ask" data-strip-ask-band={ask.requestId}>
+          <span className="strip__ask-q" title={ask.action ?? ask.argument}>
+            <span className="strip__ask-verb">Wants to {approvalHeadline(ask.toolName)}</span>
+            {(ask.action ?? ask.argument) !== '' && <code className="strip__ask-arg">{ask.action ?? ask.argument}</code>}
+          </span>
+          <span className="strip__ask-verbs">
+            <button type="button" className="strip__pill" data-strip-deny {...shellControl(() => onAnswer(row.id, ask.requestId, false))}>Deny</button>
+            {highRisk
+              ? <button type="button" className="strip__pill strip__pill--primary" data-strip-open title="Read the whole action before allowing it" {...shellControl(() => onGoTo(row.id))}>Open</button>
+              : <button type="button" className="strip__pill strip__pill--primary" data-strip-allow {...shellControl(() => onAnswer(row.id, ask.requestId, true))}>Allow once</button>}
+          </span>
+        </div>
+      )}
+      {/* M700 (Strip bay). THE SHEET: the selected strip unfolds what the
+          inspector used to say first, and its verbs. The inspector is still
+          one toggle away for everything else. */}
+      {selected && (
+        <div className="strip__sheet" data-strip-sheet>
+          <dl className="strip__facts">
+            {doing !== undefined && <div><dt>Doing</dt><dd title={doing}>{doing}</dd></div>}
+            {folder !== undefined && folder !== '' && <div><dt>Folder</dt><dd title={folder}>{folder}</dd></div>}
+            {stateful && <div><dt>State</dt><dd>{shown.word}</dd></div>}
+          </dl>
+          {(onPause !== undefined || onHandOff !== undefined || onRestart !== undefined) && (
+            <div className="strip__verbs">
+              {onPause !== undefined && row.state.kind === 'chat' && running && (
+                <button type="button" className="strip__pill" data-strip-pause {...shellControl(() => onPause(row.id))}>Pause</button>
+              )}
+              {onHandOff !== undefined && mark !== undefined && (
+                <button type="button" className="strip__pill" data-strip-handoff {...shellControl(() => onHandOff(row.id))}>Hand off</button>
+              )}
+              {onRestart !== undefined && row.state.kind === 'terminal' && !row.dormant && !merged && (
+                <button type="button" className="strip__pill" data-strip-restart {...shellControl(() => onRestart(row.id))}>Restart</button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </li>
   )
 }

@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useState, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { RailRow } from './rail-rows'
 import type { RailWorkspace } from './rail-sections'
 import type { FileRow } from './file-tree-model'
@@ -14,10 +14,11 @@ import { BoardPane, type BoardPaneProps } from './BoardPane'
 import { SkillsPane, type SkillsPaneProps } from './SkillsPane'
 import { shellControl } from './shell-control'
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, Lanes, Grid, Layers } from '@renderer/icons'
-import { railGroups, railRoleOf } from './rail-rows'
 import type { TaskMemberReason } from '@renderer/canvas/task-members'
 import { EmptyState } from './EmptyState'
-import { PANEL_FILTERS, type PanelFilter } from '@renderer/panels/panel-state'
+import { BAY_GROUPS, PANEL_FILTERS, type PanelFilter } from '@renderer/panels/panel-state'
+import { bayGroups, useBayVersion } from './bay-groups'
+import type { RailAttention, PendingApproval } from './rail-sections'
 import { agoWords } from '@shared/time-ago'
 
 export interface NavigatorProps {
@@ -85,7 +86,21 @@ export interface NavigatorProps {
    * rather than by kind. Absent: kind groups (browser/memory still Files).
    */
   taskMemberReason?: (panelId: string) => TaskMemberReason | undefined
+  /**
+   * M700 (Strip bay). What waits on the person, by panel: a conversation's
+   * permission request becomes its strip's ask band. Memo'd upstream on its
+   * signature (useRailModels), so it moves only when a request does.
+   */
+  asks?: readonly RailAttention[]
+  onAnswer?: (panelId: string, requestId: string, allow: boolean) => void
+  /** M700. The selected panel's folder, for its strip's sheet. A string, so the memo holds. */
+  selectedFolder?: string
+  onHandOffPanel?: (id: string) => void
+  onRestartPanel?: (id: string) => void
 }
+
+/** M700. Pause is the palette's interrupt; a module function so the row's prop is stable. */
+const pauseAgent = (id: string): void => { void window.canvas.agentSession.interrupt(id) }
 
 /**
  * M46. The navigator: ONE pane at a time, the whole column tall.
@@ -116,13 +131,21 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const { navigator, onToggle } = props
   const [filter, setFilter] = useState<PanelFilter>('all')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // M700 (Strip bay). Moves only when a row changes bay group (bay-groups.ts),
+  // never on a bell that leaves every row where it was.
+  const bayVersion = useBayVersion()
+  const askOf = useMemo(() => {
+    const map = new Map<string, PendingApproval>()
+    for (const a of props.asks ?? []) if (a.approval !== undefined) map.set(a.id, a.approval)
+    return map
+  }, [props.asks])
   useEffect(() => {
     let live = true
     const read = (): void => {
       void window.canvas.settings.list().then((rows) => {
         if (!live) return
         const value = rows.find((row) => row.id === 'shell.collapsedRailGroups')?.value
-        const known = ['agents', 'files', 'reviews', 'work', 'workflows', 'capabilities', 'doing', 'review', 'watching', 'related', 'elsewhere']
+        const known: string[] = ['agents', 'files', 'reviews', 'work', 'workflows', 'capabilities', 'doing', 'review', 'watching', 'related', 'elsewhere', ...BAY_GROUPS.map((g) => g.id)]
         if (Array.isArray(value)) setCollapsed(new Set(value.filter((id): id is string => typeof id === 'string' && known.includes(id))))
       })
     }
@@ -299,9 +322,15 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                    M270: when a task lens is lit, headings are the panel's role
                    in that task — Doing this / Review / Files — never a
                    leftover Integrations bucket. */
-                const grouped = props.taskMemberReason === undefined
-                  ? railGroups(props.rows)
-                  : railGroups(props.rows, (r) => r.state.kind, (r) => railRoleOf(r.state.kind, props.taskMemberReason?.(r.id)))
+                /* M700 (Strip bay). The bay groups by STATE — Needs you,
+                   Working, Idle, Failing, then the sessionless objects — and
+                   each row reports its own group. A lit task lens no longer
+                   regroups the list by role (M270): a strip outside the task
+                   steps back instead, so what waits on you stays at the top
+                   whichever task is lit. */
+                void bayVersion
+                const lens = props.taskMemberReason
+                const grouped = bayGroups(props.rows)
                 return grouped.flatMap((group) => [
                   <li key={`h:${group.id}`} className="rail-heading" data-rail-group={group.id}><button type="button" className="rail-heading__button" aria-expanded={!collapsed.has(group.id)} {...shellControl(() => toggleGroup(group.id))}>{collapsed.has(group.id) ? <ChevronRight /> : <ChevronDown />}<span>{group.label} {group.rows.length}</span></button></li>,
                   ...group.rows.map((row) => (
@@ -315,6 +344,10 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                       onClose={props.onClosePanel}
                       groupId={group.id}
                       hidden={collapsed.has(group.id)}
+                      outside={lens !== undefined && lens(row.id) === undefined}
+                      ask={askOf.get(row.id)}
+                      onAnswer={props.onAnswer}
+                      {...(row.id === props.selectedId ? { folder: props.selectedFolder, onPause: pauseAgent, onHandOff: props.onHandOffPanel, onRestart: props.onRestartPanel } : {})}
                     />
                   ))
                 ])

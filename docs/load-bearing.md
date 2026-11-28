@@ -5808,3 +5808,12 @@ entry script's lock leaves only the proxy reachable; that a VM reaches the Mac a
 `container run` client and then `container stop` by name leaves no VM; that a uid-501 `agent` writes
 files the Mac user owns through the bind mount; that claude in the image honours `HTTPS_PROXY` with
 Basic credentials; and that `CLAUDE_CODE_OAUTH_TOKEN` signs it in with no Keychain.
+
+**The terminal face is awaited before the first render (M700, Strip bay).** `main.tsx` awaits
+`document.fonts.load` for Geist Mono, regular and bold, before `createRoot`, capped at 1.5s;
+`create-terminal.ts` names `"Geist Mono"` first and `tokens.css` sets `--font-mono` to the same
+list. xterm measures its cell grid once, at `open()`, so a face that swapped in afterwards would
+leave every open terminal on a stale cell width with no error, which is why M303 left
+`--font-mono` alone. The cap is what keeps a missing or slow font file from holding the window
+blank: the system mono stack stands instead. Geist Mono is `font-display: block` for the same
+reason; Instrument Sans, the chrome face, is `swap`.

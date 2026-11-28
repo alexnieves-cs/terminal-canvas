@@ -2,6 +2,8 @@ import { createRoot } from 'react-dom/client'
 import '@xterm/xterm/css/xterm.css'
 import './fonts/fonts.css'
 import './styles.css'
+// M700. The Strip bay tokens load LAST, so they win over styles.css by order.
+import './tokens.css'
 import type { CanvasState } from '@shared/layout-schema'
 import type { PresetTemplate } from '@shared/ipc-contract'
 import { DEFAULT_CAMERA } from '@shared/layout-schema'
@@ -185,6 +187,19 @@ async function boot(): Promise<void> {
     lastVersion,
     version: window.canvas.appVersion ?? ''
   }
+
+  // M700. xterm measures its cell grid once, at open(), against whatever face
+  // has loaded by then; Geist Mono swapping in afterwards would leave every
+  // open terminal on a stale cell width with no error. So the terminal face
+  // (regular and bold, the two weights xterm draws) is awaited before React
+  // mounts. A load that fails or stalls falls through after 1.5s to the
+  // fallback stack rather than holding the window blank.
+  try {
+    await Promise.race([
+      Promise.all([document.fonts.load('13px "Geist Mono"'), document.fonts.load('bold 13px "Geist Mono"')]),
+      new Promise((resolve) => setTimeout(resolve, 1500))
+    ])
+  } catch { /* the fallback stack stands */ }
 
   // Deliberately NOT wrapped in StrictMode. StrictMode double-invokes effects
   // in development, which for a terminal means spawning a PTY, killing it, and

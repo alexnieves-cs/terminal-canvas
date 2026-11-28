@@ -82,9 +82,11 @@ is one thing a panel can be.
 ## Brand Commitments
 
 - Name: **terminal canvas** (lowercase in the launcher).
-- Material from the Obsidian brief, sharpened not replaced: dark flagship, cyan accent,
-  glass over blur, 12px corners, system SF, one filled primary control per surface, one
-  resting shadow (`docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`).
+- Material is Strip bay (M700): graphite cards on the ground colour, no glass, the panel
+  list as strips grouped by state, state as the only colour, Instrument Sans and Geist
+  Mono bundled, one graphite primary pill per surface (`docs/build-log/m700-strip-bay.md`).
+  It replaces the Obsidian material (`docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`)
+  once the branch merges.
 - Voice: words, not codes — every empty state says what the surface is for and offers one
   verb; a control that cannot run is present and disabled with a reason naming the fix;
   never a bare zero or a bare ellipsis.
