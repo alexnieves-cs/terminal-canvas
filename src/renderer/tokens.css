@@ -362,10 +362,11 @@
 
 /* ───────────────────────────────────────────────────────────
    M700 (Strip bay, step 5). PARKED. A dormant panel on the canvas is
-   still a dashed ghost (dormant.1); it now draws on the card colour with
-   the strong rule, and its summary card takes the strip radius, so a
-   parked panel reads as a strip waiting in its frame. Paint only: no rule
-   here touches the frame box.
+   still a dashed ghost (dormant.1); it now draws the strong rule, and its
+   summary card takes the strip radius, so a parked panel reads as a strip
+   waiting in its frame. Its ground stays --panel-bg, the live panel's, so
+   waking it never flashes a second colour (verify:panels:agents theme.1).
+   Paint only: no rule here touches the frame box.
    ─────────────────────────────────────────────────────────── */
-.panel[data-dormant] { border-color: var(--rule-strong); background: var(--card); }
+.panel[data-dormant] { border-color: var(--rule-strong); background: var(--panel-bg); }
 .panel__card-dormant { border-color: var(--rule); border-radius: var(--r-strip); background: var(--ground); }

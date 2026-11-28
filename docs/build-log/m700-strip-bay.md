@@ -32,8 +32,10 @@ project files (`side-projects-build/redesign/strip-bay/`). **Status:** built; th
    - The dock is an icon column by default.
 4. **Review** (this commit). Review rows are strips: card, strip radius, done edge for
    finished work, failed edge for a failed check. The page already grouped by task (M605).
-5. **Parked panels** (this commit). A dormant panel stays a dashed ghost and now paints on the
-   card colour with the strong rule.
+5. **Parked panels** (this commit). A dormant panel stays a dashed ghost and now draws the
+   strong rule. Its ground stays `--panel-bg`, the live panel's, so waking it never flashes:
+   the first cut painted it on `--card`, which `verify:panels:agents theme.1` caught on the
+   Mac (dark card `#18181B` against the panel ground `#0F0F11`).
 6. **Docs** (this commit). The material rule in `docs/product-rules.md`, Brand Commitments in
    `PRODUCT.md`, this log and its milestone row.
 
