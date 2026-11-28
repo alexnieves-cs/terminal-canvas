@@ -119,8 +119,8 @@ export function buildPack(input: BuildInput): PackFile {
   const omitted: { what: string; why: string }[] = []
   if (input.presets.some((p) => p.env !== undefined)) omitted.push({ what: 'every preset\'s environment overrides', why: 'they hold values set on this machine, and a scrub that matched none of them would still send them' })
   if (input.hasRoutines === true) omitted.push({ what: 'every routine', why: 'a routine would schedule itself on the other machine and send messages there' })
-  omitted.push({ what: 'every skill', why: 'every agent reads a skill, so writing one is not inert — a pack names the tools it needs and installs none' })
-  omitted.push({ what: 'every credential', why: 'this app\'s credentials never leave its own encrypted store — the manifest names which ones the pack needs, never a value' })
+  omitted.push({ what: 'every skill', why: 'every agent reads a skill, so writing one is not inert. A pack names the tools it needs and installs none' })
+  omitted.push({ what: 'every credential', why: 'this app\'s credentials never leave its own encrypted store. The manifest names which ones the pack needs, never a value' })
   return { version: PACK_VERSION, kind: 'pack', createdAt: input.now, app: input.app, manifest, templates, prompts, presets, omitted, redacted: tally.n }
 }
 
@@ -132,12 +132,12 @@ export type PackParse =
 const isText = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
 
 function parseContents(raw: unknown, warnings: string[]): PackContent[] {
-  if (!Array.isArray(raw)) { warnings.push('the manifest\'s contents were not a list — nothing it names can be shown, so nothing unlisted will be added'); return [] }
+  if (!Array.isArray(raw)) { warnings.push('the manifest\'s contents were not a list, so nothing it names can be shown, so nothing unlisted will be added'); return [] }
   const out: PackContent[] = []
   for (const entry of raw) {
-    if (!isRecord(entry) || !isText(entry.id) || !isText(entry.name) || !isText(entry.kind)) { warnings.push('a contents entry was unreadable — left out'); continue }
+    if (!isRecord(entry) || !isText(entry.id) || !isText(entry.name) || !isText(entry.kind)) { warnings.push('a contents entry was unreadable and was left out'); continue }
     // UNKNOWN costs the entry, never the list: a kind a later version carries.
-    if (!(PACK_CONTENT_KINDS as readonly string[]).includes(entry.kind)) { warnings.push(`the manifest lists a ${entry.kind} "${entry.name}", which a pack from this version cannot carry — left out`); continue }
+    if (!(PACK_CONTENT_KINDS as readonly string[]).includes(entry.kind)) { warnings.push(`the manifest lists a ${entry.kind} "${entry.name}", which a pack from this version cannot carry, so it was left out`); continue }
     out.push({ kind: entry.kind as PackContentKind, id: entry.id, name: entry.name })
   }
   return out
@@ -150,17 +150,17 @@ function parseContents(raw: unknown, warnings: string[]): PackContent[] {
  */
 function parseCredentials(raw: unknown, warnings: string[]): PackCredential[] | undefined {
   if (raw === undefined) return undefined
-  if (!Array.isArray(raw)) { warnings.push('the manifest\'s credentials were not a list — none are named'); return undefined }
+  if (!Array.isArray(raw)) { warnings.push('the manifest\'s credentials were not a list, so none are named'); return undefined }
   const out: PackCredential[] = []
   for (const entry of raw) {
-    if (!isRecord(entry) || !isText(entry.service)) { warnings.push('a credential requirement was not an object naming its service — dropped'); continue }
+    if (!isRecord(entry) || !isText(entry.service)) { warnings.push('a credential requirement was not an object naming its service, so it was dropped'); continue }
     const fields: PackCredentialField[] = []
     if (!Array.isArray(entry.fields)) warnings.push(`credential ${entry.service}: its fields were not a list`)
     else for (const f of entry.fields) {
       if (!isRecord(f) || !isText(f.id) || !isText(f.label)) { warnings.push(`credential ${entry.service}: a field with no id or label was dropped`); continue }
       fields.push({ id: f.id, label: f.label })
     }
-    if (fields.length === 0) { warnings.push(`credential ${entry.service}: no readable field, so it cannot be named — dropped`); continue }
+    if (fields.length === 0) { warnings.push(`credential ${entry.service}: no readable field, so it cannot be named and was dropped`); continue }
     out.push({ service: entry.service, fields })
   }
   return out
@@ -168,12 +168,12 @@ function parseCredentials(raw: unknown, warnings: string[]): PackCredential[] | 
 
 function parseTools(raw: unknown, warnings: string[]): PackTool[] | undefined {
   if (raw === undefined) return undefined
-  if (!Array.isArray(raw)) { warnings.push('the manifest\'s tools were not a list — none are named'); return undefined }
+  if (!Array.isArray(raw)) { warnings.push('the manifest\'s tools were not a list, so none are named'); return undefined }
   const out: PackTool[] = []
   for (const entry of raw) {
-    if (!isRecord(entry) || typeof entry.command !== 'string') { warnings.push('a tool requirement named no command — dropped'); continue }
-    if (!TOOL_COMMAND.test(entry.command)) { warnings.push(`tool "${entry.command}" is not a plain command name — dropped`); continue }
-    if (entry.why !== undefined && typeof entry.why !== 'string') warnings.push(`tool ${entry.command}: why was not text — dropped`)
+    if (!isRecord(entry) || typeof entry.command !== 'string') { warnings.push('a tool requirement named no command, so it was dropped'); continue }
+    if (!TOOL_COMMAND.test(entry.command)) { warnings.push(`tool "${entry.command}" is not a plain command name, so it was dropped`); continue }
+    if (entry.why !== undefined && typeof entry.why !== 'string') warnings.push(`tool ${entry.command}: why was not text, so it was dropped`)
     out.push({ command: entry.command, ...(typeof entry.why === 'string' ? { why: entry.why } : {}) })
   }
   return out
@@ -182,23 +182,23 @@ function parseTools(raw: unknown, warnings: string[]): PackTool[] | undefined {
 /** Three answers, never two: not a pack (named), one from a future version, or one to read. */
 export function parsePack(text: string): PackParse {
   let raw: unknown
-  try { raw = JSON.parse(text) } catch { return { kind: 'not-a-pack', reason: 'that file is not JSON — a pack is written by Export pack and ends in .tcpack' } }
-  if (!isRecord(raw)) return { kind: 'not-a-pack', reason: 'that file holds no pack — it is JSON, but not a pack file' }
-  if (raw.kind === 'canvas' || raw.kind === 'workflow') return { kind: 'not-a-pack', reason: 'that is a canvas file, not a pack — use Import canvas' }
-  if (raw.kind !== 'pack' || typeof raw.version !== 'number') return { kind: 'not-a-pack', reason: 'that file names no pack version and kind — it was not written by Export pack' }
+  try { raw = JSON.parse(text) } catch { return { kind: 'not-a-pack', reason: 'that file is not JSON. A pack is written by Export pack and ends in .tcpack' } }
+  if (!isRecord(raw)) return { kind: 'not-a-pack', reason: 'that file holds no pack. It is JSON, but not a pack file' }
+  if (raw.kind === 'canvas' || raw.kind === 'workflow') return { kind: 'not-a-pack', reason: 'that is a canvas file, not a pack; use Import canvas' }
+  if (raw.kind !== 'pack' || typeof raw.version !== 'number') return { kind: 'not-a-pack', reason: 'that file names no pack version and kind, so it was not written by Export pack' }
   if (raw.version > PACK_VERSION) {
-    return { kind: 'unknown-version', found: raw.version, known: PACK_VERSION, reason: `that pack was written by a newer version of this app (pack version ${raw.version}, this app reads ${PACK_VERSION}) — update, or ask for it to be exported again` }
+    return { kind: 'unknown-version', found: raw.version, known: PACK_VERSION, reason: `that pack was written by a newer version of this app (pack version ${raw.version}, this app reads ${PACK_VERSION}). Update, or ask for it to be exported again` }
   }
   const m = raw.manifest
-  if (!isRecord(m)) return { kind: 'not-a-pack', reason: 'that file has no manifest — a pack says what it holds before anything is added' }
-  if (!isText(m.name)) return { kind: 'not-a-pack', reason: 'the manifest\'s name is missing or not text — a pack a person cannot name cannot be agreed to' }
+  if (!isRecord(m)) return { kind: 'not-a-pack', reason: 'that file has no manifest, and a pack says what it holds before anything is added' }
+  if (!isText(m.name)) return { kind: 'not-a-pack', reason: 'the manifest\'s name is missing or not text, and a pack a person cannot name cannot be agreed to' }
   // Never coerced: 3 is not "3.0.0", and guessing a version is how two packs
   // come to claim the same one.
-  if (typeof m.version !== 'string' || !SEMVER.test(m.version)) return { kind: 'not-a-pack', reason: `the manifest's version must be text like "1.0.0" — found ${JSON.stringify(m.version)}` }
+  if (typeof m.version !== 'string' || !SEMVER.test(m.version)) return { kind: 'not-a-pack', reason: `the manifest's version must be text like "1.0.0", but found ${JSON.stringify(m.version)}` }
 
   const warnings: string[] = []
-  for (const key of Object.keys(m)) if (!MANIFEST_KEYS.has(key)) warnings.push(`the manifest's "${key}" is not something this version reads — ignored`)
-  if (m.description !== undefined && typeof m.description !== 'string') warnings.push('the manifest\'s description was not text — dropped')
+  for (const key of Object.keys(m)) if (!MANIFEST_KEYS.has(key)) warnings.push(`the manifest's "${key}" is not something this version reads, so it was ignored`)
+  if (m.description !== undefined && typeof m.description !== 'string') warnings.push('the manifest\'s description was not text, so it was dropped')
   const listed = parseContents(m.contents, warnings)
   const credentials = parseCredentials(m.credentials, warnings)
   const tools = parseTools(m.tools, warnings)
@@ -207,7 +207,7 @@ export function parsePack(text: string): PackParse {
   // nothing the layout file would refuse — and a template's M190 mark reads
   // exactly as it does on disk.
   const payload = (key: string): unknown => {
-    if (raw.hasOwnProperty(key) && !Array.isArray(raw[key])) { warnings.push(`the file's ${key} were not a list — none were read`); return [] }
+    if (raw.hasOwnProperty(key) && !Array.isArray(raw[key])) { warnings.push(`the file's ${key} were not a list, so none were read`); return [] }
     return raw[key] ?? []
   }
   const templates = parseTemplates(payload('templates'), warnings)
@@ -221,12 +221,12 @@ export function parsePack(text: string): PackParse {
   const byKind: Record<PackContentKind, { id: string; name: string }[]> = { workflow: templates, prompt: prompts, preset: presets }
   const contents = listed.filter((c) => {
     const found = byKind[c.kind].some((o) => o.id === c.id)
-    if (!found) warnings.push(`the manifest lists ${c.kind} "${c.name}", which is not in the file — taken off the list`)
+    if (!found) warnings.push(`the manifest lists ${c.kind} "${c.name}", which is not in the file, so it was taken off the list`)
     return found
   })
   const isListed = (kind: PackContentKind) => (o: { id: string; name: string }): boolean => {
     const yes = contents.some((c) => c.kind === kind && c.id === o.id)
-    if (!yes) warnings.push(`the file carries ${kind} "${o.name}" that its manifest does not list — it will not be added`)
+    if (!yes) warnings.push(`the file carries ${kind} "${o.name}" that its manifest does not list, so it will not be added`)
     return yes
   }
   const manifest: PackManifest = {
@@ -276,17 +276,17 @@ export function packRequirements(manifest: PackManifest, metas: readonly Credent
     const meta = metas.find((x) => x.service === c.service)
     for (const f of c.fields) {
       const row = { service: c.service, field: f.id, label: f.label }
-      if (service === undefined) credentials.push({ ...row, state: 'unknown-service', sentence: `this app cannot hold a "${c.service}" credential yet — "${f.label}" cannot be connected` })
+      if (service === undefined) credentials.push({ ...row, state: 'unknown-service', sentence: `this app cannot hold a "${c.service}" credential yet, so "${f.label}" cannot be connected` })
       else if (meta === undefined) credentials.push({ ...row, state: 'not-connected', sentence: `${service.label} · ${f.label} — ${notConnectedReason(service.label)}` })
-      else if (meta.rejectedAt !== undefined) credentials.push({ ...row, state: 'rejected', sentence: `${service.label} · ${f.label} — the stored ${service.label} credential was rejected; replace it in ⌘K › Credentials` })
+      else if (meta.rejectedAt !== undefined) credentials.push({ ...row, state: 'rejected', sentence: `${service.label} · ${f.label}: the stored ${service.label} credential was rejected; replace it in ⌘K › Credentials` })
       else credentials.push({ ...row, state: 'connected' })
     }
   }
   const toolRows: ToolRequirement[] = (manifest.tools ?? []).map((t) => {
     const found = tools[t.command]
     if (found === true) return { command: t.command, state: 'found' }
-    if (found === false) return { command: t.command, state: 'missing', sentence: `${t.command} is not on this machine's PATH${t.why === undefined ? '' : ` — the pack uses it because it ${t.why}`}` }
-    return { command: t.command, state: 'unanswered', sentence: `could not check for ${t.command} — the probe did not run` }
+    if (found === false) return { command: t.command, state: 'missing', sentence: `${t.command} is not on this machine's PATH${t.why === undefined ? '' : `. The pack uses it because it ${t.why}`}` }
+    return { command: t.command, state: 'unanswered', sentence: `could not check for ${t.command}, because the probe did not run` }
   })
   return { credentials, tools: toolRows }
 }

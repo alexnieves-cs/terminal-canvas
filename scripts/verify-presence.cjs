@@ -247,9 +247,9 @@ const tick = () => new Promise((r) => setImmediate(r))
     const at = (connection, unsynced, reason) => ({ connection, ...(unsynced === undefined ? {} : { unsynced }), ...(reason === undefined ? {} : { reason }) })
     const table = [
       [L(at('connected'), true), null], [L(at('connected', 2), true), 'Syncing 2 changes…'],
-      [L(at('connecting'), true), 'Reconnecting…'], [L(at('connecting', 1), true), 'Reconnecting — 1 change waiting'],
-      [L(at('disconnected', 3), true), 'Offline — 3 changes waiting to sync'], [L(at('disconnected'), true), 'Offline — changes sync when the server is back'],
-      [L(at('off', undefined, 'not signed in'), true), 'Not syncing — not signed in'],
+      [L(at('connecting'), true), 'Reconnecting…'], [L(at('connecting', 1), true), 'Reconnecting, 1 change waiting'],
+      [L(at('disconnected', 3), true), 'Offline, 3 changes waiting to sync'], [L(at('disconnected'), true), 'Offline. Changes sync when the server is back'],
+      [L(at('off', undefined, 'not signed in'), true), 'Not syncing: not signed in'],
       [L(at('disconnected', 3), false), null], [L(undefined, true), null]
     ]
     const wrong = table.filter(([got, want]) => got !== want)

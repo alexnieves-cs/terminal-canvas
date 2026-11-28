@@ -84,7 +84,7 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
         </>
       )}
       {sent ? (
-        <p className="approval__sent" role="status">Answer sent — waiting for the agent</p>
+        <p className="approval__sent" role="status">Answer sent. Waiting for the agent</p>
       ) : (
         <div className="approval__verbs" role="group" aria-label={`Answer ${agent}'s ${approval.toolName} request`}>
           {isPlan ? (
@@ -99,13 +99,13 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
           ) : (
             <>
               <button type="button" className="approval__verb approval__verb--primary" data-approval-verb="once"
-                title={`Allow this one ${approval.toolName} call — the next one asks again`}
+                title={`Allow this one ${approval.toolName} call. The next one asks again`}
                 {...shellControl(() => decide(true))}>Allow once</button>
               {session && <button type="button" className="approval__verb" data-approval-verb="session"
-                title={`Allow every ${approval.toolName} call in this conversation until it closes — held in memory, so a relaunch asks again; revoke it in the inspector's Detail`}
+                title={`Allow every ${approval.toolName} call in this conversation until it closes. It is held in memory, so a relaunch asks again; revoke it in the inspector's Detail`}
                 {...shellControl(() => decide(true, 'session'))}>Allow {approval.toolName} for this session</button>}
               <button type="button" className="approval__verb approval__verb--deny" data-approval-verb="deny"
-                title={`Deny this ${approval.toolName} call — the agent is told it was denied`}
+                title={`Deny this ${approval.toolName} call. The agent is told it was denied`}
                 {...shellControl(() => decide(false))}>Deny</button>
             </>
           )}
@@ -120,7 +120,7 @@ function ApprovalDetailImpl({ approval, agent, task, onAnswer, sent = false }: A
       )}
       {!sent && !isPlan && session && (
         <p className="approval__scope" data-approval-scope>
-          Once answers only this call. For this session allows every {approval.toolName} call in this conversation until it closes — a relaunch asks again.
+          Once answers only this call. For this session allows every {approval.toolName} call in this conversation until it closes. A relaunch asks again.
         </p>
       )}
       {!sent && !isPlan && !session && <p className="approval__scope" data-approval-scope data-sv-risk-note>{HIGH_RISK_NOTE}</p>}

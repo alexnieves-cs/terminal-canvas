@@ -70,7 +70,7 @@ export function TournamentBracket(props: { run: (op: string, value?: string) => 
         {running && <button type="button" className="pf__verb pf__verb--word" data-tournament-stop disabled={busy} onClick={() => act('stop')}>Stop</button>}
         {/* M549. The judge and Combine, once the field is scored; each disabled by its own sentence. */}
         {scored && (() => { const why = judgeRefusal(status); return <button type="button" className="pf__verb pf__verb--word" data-tournament-judge disabled={busy || why !== null} title={why ?? 'a read-only claude chat compares the passing entrants'} aria-describedby={why === null ? undefined : `tn-judge-${status.id}`} onClick={() => act('judge')}>Judge</button> })()}
-        {scored && status.itemId !== undefined && <button type="button" className="pf__verb pf__verb--word" data-tournament-combine disabled={busy} title="open the task — its Combine tab puts lanes together and checks the result first" onClick={() => act('combine')}>Combine…</button>}
+        {scored && status.itemId !== undefined && <button type="button" className="pf__verb pf__verb--word" data-tournament-combine disabled={busy} title="open the task. Its Combine tab puts lanes together and checks the result first" onClick={() => act('combine')}>Combine…</button>}
         {!running && <button type="button" className="pf__verb pf__verb--word" data-tournament-hide onClick={() => setHidden(status.id)} title="put the bracket away until the next tournament">Hide</button>}
       </header>
       {/* M600. Why Judge is off, on the bracket and not only in a tooltip. */}

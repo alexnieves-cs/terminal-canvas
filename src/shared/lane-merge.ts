@@ -48,8 +48,8 @@ export function laneMergeOutcome(result: LaneMergeResult): string {
     case 'ready': return laneMergePlanSentence(result)
     case 'merged': return `Merged ${result.commits} commit${result.commits === 1 ? '' : 's'} from ${result.branch} into ${result.into} (${result.sha.slice(0, 7)}).`
     case 'refused': return result.reason
-    case 'moved': return 'The lane changed after you looked — review the new changes, then accept again.'
+    case 'moved': return 'The lane changed after you looked. Review the new changes, then accept again.'
     case 'conflict': return `The merge into ${result.into} conflicted in ${result.files.length === 0 ? 'some files' : result.files.slice(0, 3).join(', ') + (result.files.length > 3 ? ` and ${result.files.length - 3} more` : '')}, so nothing was merged. Send it back and ask the agent to bring its branch up to date.`
-    case 'failed': return `Nothing was merged — git said: ${result.detail}`
+    case 'failed': return `Nothing was merged. Git said: ${result.detail}`
   }
 }

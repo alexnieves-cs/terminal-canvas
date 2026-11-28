@@ -149,7 +149,7 @@ export function RichNoteEditor({ text, onChange, handleRef, onSave, onEscape }: 
     // The note moved under the edit (a reseed from disk): refuse rather than
     // write this block's typing over a different block.
     const current = parseBlocks(textRef.current)[p.index]
-    const result = current?.source !== p.source ? { kind: 'refused' as const, reason: 'the note changed while you were editing — look again' } : p.edit(textRef.current)
+    const result = current?.source !== p.source ? { kind: 'refused' as const, reason: 'the note changed while you were editing; look again' } : p.edit(textRef.current)
     if (result !== null && result.kind === 'refused') {
       setMessage(result.reason)
       // Reopen as SOURCE with what was typed, so nothing is lost: a person's
@@ -246,7 +246,7 @@ export function RichNoteEditor({ text, onChange, handleRef, onSave, onEscape }: 
     const current = textRef.current
     const block = parseBlocks(current)[link.index]
     setLink(null)
-    if (block === undefined || (block.kind !== 'paragraph' && block.kind !== 'heading')) { setMessage('the block for that link is gone — look again'); return }
+    if (block === undefined || (block.kind !== 'paragraph' && block.kind !== 'heading')) { setMessage('the block for that link is gone; look again'); return }
     const t = block.model.text
     const label = t.slice(link.start, link.end) || 'link'
     const next = `${t.slice(0, link.start)}[${label}](${mdImageDestination(link.url.trim())})${t.slice(link.end)}`
@@ -263,7 +263,7 @@ export function RichNoteEditor({ text, onChange, handleRef, onSave, onEscape }: 
     <div className="rich-note__tools" role="toolbar" aria-label="Rich note tools">
       <button type="button" disabled={!canLink} title={canLink ? 'Link the selected text' : 'place the caret in a paragraph or heading first'} data-rich-note-tool="link"
         onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); if (canLink) beginLink() }}>Link</button>
-      <button type="button" title="Insert a picture after this block — kept in this app's pictures" data-rich-note-tool="image"
+      <button type="button" title="Insert a picture after this block, kept in this app's pictures" data-rich-note-tool="image"
         onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); void insertImage() }}>Image</button>
       <button type="button" title="Add a paragraph after this block" data-rich-note-tool="paragraph"
         onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); addParagraph() }}>Paragraph</button>
@@ -277,7 +277,7 @@ export function RichNoteEditor({ text, onChange, handleRef, onSave, onEscape }: 
       </form>}
     </div>
     {message !== '' && <p className="pf__note rich-note__message" role="status" data-rich-note-message>{message}</p>}
-    {blocks.length === 0 && <p className="pf__note">An empty note — add a paragraph to begin.</p>}
+    {blocks.length === 0 && <p className="pf__note">An empty note. Add a paragraph to begin.</p>}
     {blocks.map((block, index) => {
       if (block.kind === 'blank') return null
       if (active?.index === index) {
@@ -289,7 +289,7 @@ export function RichNoteEditor({ text, onChange, handleRef, onSave, onEscape }: 
         </div>
       }
       const rawName = block.kind === 'raw' ? block.name : undefined
-      const refusal = rawName === undefined ? undefined : `${rawName} — edit as source`
+      const refusal = rawName === undefined ? undefined : `${rawName}: edit as source`
       return <div key={`${index}:${block.start}`} className={`rich-note__block${block.kind === 'raw' ? ' rich-note__block--raw' : ''}`} data-rich-note-block={block.kind}
         tabIndex={0} title={refusal ?? 'Click to edit'} onClick={() => open(index)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(index) } }}>
         <RestBlock block={block} />
@@ -413,7 +413,7 @@ function BlockEditor({ block, index, register, onDone, textRef }: { block: MdBlo
         {it.checked !== undefined && <input type="checkbox" aria-label={`Item ${k + 1} done`} checked={it.checked} onChange={(e) => setItems(items.map((x, j) => j === k ? { ...x, checked: e.target.checked } : x))} />}
         <input aria-label={`Item ${k + 1}`} autoFocus={k === 0} value={it.text} onChange={(e) => setItems(items.map((x, j) => j === k ? { ...x, text: e.target.value } : x))}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onDone() } }} />
-        <button type="button" disabled={items.length === 1} title={items.length === 1 ? 'a list keeps at least one item — remove the block instead' : 'Remove this item'} onClick={() => setItems(items.filter((_, j) => j !== k))}>Remove</button>
+        <button type="button" disabled={items.length === 1} title={items.length === 1 ? 'a list keeps at least one item; remove the block instead' : 'Remove this item'} onClick={() => setItems(items.filter((_, j) => j !== k))}>Remove</button>
       </div>)}
       <button type="button" onClick={() => setItems([...items, { text: '', ...(items[items.length - 1]?.checked === undefined ? {} : { checked: false }) }])}>Add item</button>
       <DoneButton onDone={onDone} />

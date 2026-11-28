@@ -96,7 +96,7 @@ export function taskRequirements(input: TaskNeedsInput): TaskRequirement[] {
   if (input.longRunning !== false && (input.lane === true || input.swarm === true)) out.push({ id: 'interrupt', level: 'wanted', why: 'a long task may need stopping mid-turn without losing the conversation' })
   if (input.lane === true || input.swarm === true) out.push({ id: 'resume', level: 'wanted', why: 'recovery after a restart continues the same conversation' })
   if (input.images === true) out.push({ id: 'images', level: 'wanted', why: 'the brief refers to an image or screenshot' })
-  if (input.budgetUsd !== undefined && input.budgetUsd > 0) out.push({ id: 'cost', level: 'wanted', why: `a $${input.budgetUsd.toFixed(2)} budget is set — it can only stop what reports a cost` })
+  if (input.budgetUsd !== undefined && input.budgetUsd > 0) out.push({ id: 'cost', level: 'wanted', why: `a $${input.budgetUsd.toFixed(2)} budget is set, and it can only stop what reports a cost` })
   if (input.windowPercent !== undefined && input.windowPercent > 0) out.push({ id: 'window', level: 'wanted', why: `a usage-window ceiling of ${input.windowPercent}% is set` })
   if (input.readOnly === true) out.push({ id: 'read-only', level: 'wanted', why: 'the task must not change the tree' })
   if (input.lane === true || input.swarm === true) out.push({ id: 'permissions', level: 'wanted', why: 'a person approves commands as they run' })
@@ -139,22 +139,22 @@ function rowLine(backend: AgentBackend, id: TaskRequirementId, available: boolea
       : { ok: false, line: row.reasons.noPrompt }
     case 'no-publish': return row.appendsPrompt
       ? { ok: true, line: `${row.label} is started with git push / merge and gh pr create / merge denied` }
-      : { ok: false, line: `${row.label} has no deny list here — "never push" is only asked in the first message` }
+      : { ok: false, line: `${row.label} has no deny list here, so "never push" is only asked in the first message` }
     case 'interrupt': return row.interrupts
       ? { ok: true, line: `Interrupt ends ${row.label}'s turn and keeps the conversation` }
-      : { ok: false, line: `${row.reasons.noInterrupt} — ending the process is the only stop` }
+      : { ok: false, line: `${row.reasons.noInterrupt}, so ending the process is the only stop` }
     case 'resume': return row.resumes
       ? { ok: true, line: `${row.label} resumes the same conversation after a restart` }
-      : { ok: false, line: `${row.label} cannot resume — a restart starts a new conversation` }
+      : { ok: false, line: `${row.label} cannot resume, so a restart starts a new conversation` }
     case 'images': return row.images
       ? { ok: true, line: `${row.label} takes an image in a message` }
       : { ok: false, line: row.reasons.noImages }
     case 'cost': return row.reportsCost
       ? { ok: true, line: `${row.label} reports a dollar figure, so the budget can stop it` }
-      : { ok: false, line: `${row.label} reports no cost — its spend is Unknown and the budget cannot stop it` }
+      : { ok: false, line: `${row.label} reports no cost, so its spend is Unknown and the budget cannot stop it` }
     case 'window': return REPORTS_WINDOW[backend]
       ? { ok: true, line: `${row.label} reports its usage windows, so the ceiling applies` }
-      : { ok: false, line: `${row.label} reports no usage window — the ceiling does not apply to it` }
+      : { ok: false, line: `${row.label} reports no usage window, so the ceiling does not apply to it` }
     case 'read-only': return row.sandboxArgs !== undefined
       ? { ok: true, line: `${row.label} has a read-only mode (the brief is still the only rule inside a lane)` }
       : { ok: false, line: row.reasons.noSandbox }
@@ -189,7 +189,7 @@ export function backendFit(backend: AgentBackend, requirements: readonly TaskReq
 /** The one-line summary a picker row carries: `fits`, or what it gives up. */
 export function fitSummary(fit: BackendFit): string {
   const label = BACKENDS[fit.backend].label
-  if (fit.verdict === 'refused') return `${label} cannot do this task — ${fit.refusal ?? 'a requirement is not met'}`
+  if (fit.verdict === 'refused') return `${label} cannot do this task: ${fit.refusal ?? 'a requirement is not met'}`
   const lost = fit.rows.filter((r) => !r.ok).map((r) => FIT_WORDS[r.id])
   return lost.length === 0 ? `${label} can do everything this task needs` : `${label} can do this task without ${lost.join(', ')}`
 }
@@ -227,22 +227,22 @@ export function stopOptions(backend: AgentBackend, state: { generating: boolean;
   const row = BACKENDS[backend]
   const interrupt: StopOption = row.interrupts
     ? state.generating
-      ? { kind: 'interrupt', label: 'Interrupt', available: true, effect: `ends the current turn — ${row.label} stays up, the conversation continues on the next message, and nothing already written is rolled back` }
-      : { kind: 'interrupt', label: 'Interrupt', available: false, effect: 'nothing is generating — there is no turn to interrupt' }
+      ? { kind: 'interrupt', label: 'Interrupt', available: true, effect: `ends the current turn. ${row.label} stays up, the conversation continues on the next message, and nothing already written is rolled back` }
+      : { kind: 'interrupt', label: 'Interrupt', available: false, effect: 'nothing is generating, so there is no turn to interrupt' }
     : { kind: 'interrupt', label: 'Interrupt', available: false, effect: row.reasons.noInterrupt }
   const cancel: StopOption = state.queued > 0
-    ? { kind: 'cancel', label: `Cancel ${state.queued} queued`, available: true, effect: `drops the ${state.queued === 1 ? 'message' : `${state.queued} messages`} waiting behind this turn — the turn in flight is not touched` }
+    ? { kind: 'cancel', label: `Cancel ${state.queued} queued`, available: true, effect: `drops the ${state.queued === 1 ? 'message' : `${state.queued} messages`} waiting behind this turn, and the turn in flight is not touched` }
     : { kind: 'cancel', label: 'Cancel queued', available: false, effect: 'nothing is queued behind this turn' }
   const terminate: StopOption = state.processUp === false ? {
     kind: 'terminate',
     label: 'End process',
     available: false,
-    effect: `${row.label} has no process running — the next message starts one`
+    effect: `${row.label} has no process running, and the next message starts one`
   } : {
     kind: 'terminate',
     label: 'End process',
     available: true,
-    effect: `kills ${row.label}'s process${state.generating ? ' mid-turn (the turn is lost; files it already wrote stay written)' : ''}; ${row.resumes ? 'the next message starts a new process on the same conversation' : 'the conversation cannot be resumed'} — child processes it started are not tracked and may survive`
+    effect: `kills ${row.label}'s process${state.generating ? ' mid-turn (the turn is lost; files it already wrote stay written)' : ''}; ${row.resumes ? 'the next message starts a new process on the same conversation' : 'the conversation cannot be resumed'}. Child processes it started are not tracked and may survive`
   }
   return [interrupt, cancel, terminate]
 }
@@ -283,9 +283,9 @@ export function resumeLostDetail(backend: AgentBackend, text: string | undefined
 export function exitSentence(backend: AgentBackend, exit: { code?: number | null; signal?: string; resumeLost?: string }): string {
   const row = BACKENDS[backend]
   const how = `${typeof exit.code === 'number' ? ` with ${exit.code}` : ''}${exit.signal ? ` (${exit.signal})` : ''}`
-  if (exit.resumeLost !== undefined) return `${row.label} could not resume this conversation — ${exit.resumeLost}. The next message starts a NEW conversation; nothing from before is in its context.`
-  if (!row.resumes) return `${row.label} exited${how} — the next message starts a new conversation`
-  return `${row.label} exited${how} — the next message resumes the conversation`
+  if (exit.resumeLost !== undefined) return `${row.label} could not resume this conversation: ${exit.resumeLost}. The next message starts a NEW conversation; nothing from before is in its context.`
+  if (!row.resumes) return `${row.label} exited${how}, and the next message starts a new conversation`
+  return `${row.label} exited${how}, and the next message resumes the conversation`
 }
 
 /* ── Continuing on a different backend ──────────────────────────────────── */
@@ -335,7 +335,7 @@ export function backendHandoff(input: BackendHandoffInput): BackendHandoff {
   const skipped = input.turns.filter((t) => t.text.trim() !== '').length - kept.length
   const clip = (s: string): string => (s.length > HANDOFF_TURN_CHARS ? `${s.slice(0, HANDOFF_TURN_CHARS)}… (cut)` : s)
   const lines: string[] = [
-    `You are continuing a task another agent (${fromRow.label}) started. Its conversation cannot be resumed here, so this is the context it had — check anything that matters against the files rather than trusting it.`,
+    `You are continuing a task another agent (${fromRow.label}) started. Its conversation cannot be resumed here, so this is the context it had. Check anything that matters against the files rather than trusting it.`,
     '',
     `## Task`,
     input.title.trim()
@@ -357,10 +357,10 @@ export function backendHandoff(input: BackendHandoffInput): BackendHandoff {
     'permission grants made for the earlier session'
   ]
   if (skipped > 0) dropped.push(`${skipped} earlier ${skipped === 1 ? 'message' : 'messages'}`)
-  if (fromRow.appendsPrompt && !toRow.appendsPrompt) dropped.push(`the appended system prompt — ${toRow.reasons.noPrompt}`)
-  if (fromRow.images && !toRow.images) dropped.push(`images — ${toRow.reasons.noImages}`)
-  if (fromRow.interrupts && !toRow.interrupts) dropped.push(`a graceful interrupt — ${toRow.reasons.noInterrupt}`)
-  if (fromRow.reportsCost && !toRow.reportsCost) dropped.push(`a known cost — ${toRow.label} reports none`)
+  if (fromRow.appendsPrompt && !toRow.appendsPrompt) dropped.push(`the appended system prompt (${toRow.reasons.noPrompt}`)
+  if (fromRow.images && !toRow.images) dropped.push(`images (${toRow.reasons.noImages})`)
+  if (fromRow.interrupts && !toRow.interrupts) dropped.push(`a graceful interrupt (${toRow.reasons.noInterrupt})`)
+  if (fromRow.reportsCost && !toRow.reportsCost) dropped.push(`a known cost (${toRow.label} reports none)`)
   const gated = outward(lines.join('\n'), `handoff ${fromRow.label} → ${toRow.label}`)
   return { text: gated.text, dropped, redacted: gated.redacted }
 }

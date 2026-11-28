@@ -128,7 +128,7 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
               labelled with its own current state is the one every review of
               this app has caught. */}
           <button type="button" className="pf__verb pf__verb--word" data-watcher-arm
-            title={armed ? `Stop watching — ${when}` : `Watch again — ${when}`} aria-label={armed ? 'Disarm' : 'Arm'}
+            title={armed ? `Stop watching (${when})` : `Watch again (${when})`} aria-label={armed ? 'Disarm' : 'Arm'}
             {...shellControl(() => props.onSetArmed(id, !armed))}>{armed ? 'Disarm' : 'Arm'}</button>
           {/* BOTH verbs, always, with the one that cannot act DISABLED and
               saying why: a control that disappears is indistinguishable from
@@ -166,9 +166,9 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
             pill reads as a watcher that is broken rather than one that is
             busy. */}
         {snapshot.status === 'not-started' ? (
-          <p className="pf__note" data-watcher-arm="never">{armed ? `has not run yet — it runs ${when}, or press Run now` : 'not watching — press Arm to watch again, or Run now to run it once'}</p>
+          <p className="pf__note" data-watcher-arm="never">{armed ? `has not run yet. It runs ${when}, or press Run now` : 'not watching. Press Arm to watch again, or Run now to run it once'}</p>
         ) : snapshot.tail === '' ? (
-          <p className="pf__note" data-watcher-arm="quiet">{running ? 'running — nothing printed yet' : 'that run printed nothing'}</p>
+          <p className="pf__note" data-watcher-arm="quiet">{running ? 'running, nothing printed yet' : 'that run printed nothing'}</p>
         ) : whole ? (
           <CheckRunOutput outputId={recordId} subject={`panel ${id}`} />
         ) : (
@@ -181,10 +181,10 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
         {snapshot.status !== 'not-started' && (
           <p className="watcher-node__last" data-watcher-last>
             {running
-              ? (snapshot.pending ? 'running — another run is queued' : 'running')
+              ? (snapshot.pending ? 'running, and another run is queued' : 'running')
               : snapshot.status === 'passed' ? 'last run passed'
                 : snapshot.signal !== undefined && snapshot.signal !== null ? `last run was stopped (${snapshot.signal})`
-                  : `last run failed — exit ${snapshot.exitCode ?? 0}`}
+                  : `last run failed with exit ${snapshot.exitCode ?? 0}`}
             {recordId !== undefined && (
               <button type="button" className="pf__verb pf__verb--word watcher-node__whole" data-watcher-whole
                 aria-pressed={whole}

@@ -197,7 +197,7 @@ export interface ReadStamp {
  * the fix, because "save failed" alone reads as work lost.
  */
 export function staleRefusal(): string {
-  return 'this file changed on disk since you opened it — reload to see it; your edit is still here'
+  return 'this file changed on disk since you opened it. Reload to see it; your edit is still here'
 }
 
 /**

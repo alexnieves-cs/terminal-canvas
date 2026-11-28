@@ -264,7 +264,7 @@ export function orchNextAction(input: {
   pendingTool?: string
 }): OrchNextAction {
   if (input.pendingTool !== undefined) return { verb: 'answer', label: `Answer the ${input.pendingTool} request` }
-  if (input.state === 'wants-you') return { verb: 'reply', label: 'Reply on canvas — it needs you' }
+  if (input.state === 'wants-you') return { verb: 'reply', label: 'Reply on canvas, it needs you' }
   if (input.state === 'busy' || input.state === 'starting' || input.state === 'running' || input.state === 'watching') return { verb: 'watch', label: 'Watch its output' }
   if (input.state === 'exited') return { verb: 'open', label: 'Open on canvas to restart or read it' }
   if (input.kind === 'chat' || input.kind === 'terminal') return { verb: 'review', label: 'Review its changes' }

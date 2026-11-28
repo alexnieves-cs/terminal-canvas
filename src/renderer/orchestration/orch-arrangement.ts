@@ -66,7 +66,7 @@ export interface ArrangementInput {
 
 /** The sentence the description carries about what a saved arrangement will NOT do. */
 export const ARRANGEMENT_INERT_LINE =
-  'Starting this arrangement opens its conversations with their first messages ready to send — it sends nothing and runs no commands.'
+  'Starting this arrangement opens its conversations with their first messages ready to send. It sends nothing and runs no commands.'
 
 /** The heading the validation commands sit under, so a reader can find them. */
 export const ARRANGEMENT_VALIDATION_HEADING = 'Validation commands (not run automatically):'

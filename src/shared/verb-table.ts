@@ -113,7 +113,7 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'share-role', label: 'Shared workspace: propose a role', args: [{ name: 'who', kind: 'value', optional: true }, { name: 'role', kind: 'value', optional: true }], destructive: false, actions: ['proposeShareRole'], target: 'canvas', hint: 'a GitHub login or user id, then editor, viewer or none; the owner applies it in the share dialog' },
   // M352. An agent's OWN caps (its chat's record, M351). Main enforces them; a
   // door (an agent, a workflow) may only lower one — planCapChange refuses the rest.
-  { id: 'cap-agent', label: 'Agent: set its own caps', args: [{ name: 'panel', kind: 'panel' }, { name: 'cap', kind: 'value' }], destructive: false, actions: ['capAgent'], target: 'panel', hint: '5usd for spend, 200k for context, 5usd,200k for both, none, or default (the Settings caps) — an agent or a workflow may only lower a cap' },
+  { id: 'cap-agent', label: 'Agent: set its own caps', args: [{ name: 'panel', kind: 'panel' }, { name: 'cap', kind: 'value' }], destructive: false, actions: ['capAgent'], target: 'panel', hint: '5usd for spend, 200k for context, 5usd,200k for both, none, or default (the Settings caps). An agent or a workflow may only lower a cap' },
   { id: 'check-readiness', label: 'Check engine readiness', args: [], destructive: false, actions: ['checkReadiness'], target: 'canvas', hint: 'ask discovery again; installation is not sign-in' },
   // M182. The template editor's operations as verbs — the same six functions the diagram's drag calls.
   { id: 'workflow-add', label: 'Workflow: add node', args: [{ name: 'template', kind: 'key' }, { name: 'kind', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'add a terminal, chat, pool, orchestrator or collect node to the draft' },
@@ -138,7 +138,7 @@ export const VERBS: readonly VerbDef[] = [
   // M251. NOT destructive, unlike export-canvas, and the difference is the
   // same reason: there is no path argument, so every export goes through the
   // save dialog and a person names the file — an agent line cannot overwrite.
-  { id: 'deck-export-pptx', label: 'Deck: export to PowerPoint', args: [panel()], destructive: false, actions: ['exportDeck'], target: 'panel', hint: 'write a Markdown deck as .pptx — headings, bullets, pictures and notes; secrets scrubbed and counted; anything left out is named' },
+  { id: 'deck-export-pptx', label: 'Deck: export to PowerPoint', args: [panel()], destructive: false, actions: ['exportDeck'], target: 'panel', hint: 'write a Markdown deck as .pptx: headings, bullets, pictures and notes; secrets scrubbed and counted; anything left out is named' },
   { id: 'import-canvas', label: 'Canvas: import', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importCanvas'], target: 'canvas', hint: 'read a portable file into a NEW workspace; nothing in it is started' },
   // M250. A .docx becomes a NEW note beside it, unreviewed until a person reads
   // it. Not destructive: the docx is only read and the note is created with
@@ -164,13 +164,13 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'import-pack', label: 'Pack: import', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importPack'], target: 'canvas', hint: 'read a pack and show its manifest; nothing is added until you choose Add' },
   // M188. Test one node, by template and (optionally) key: with no key it is
   // the block the person has selected on the diagram.
-  { id: 'node-test', label: 'Node: test', args: [{ name: 'template', kind: 'key' }, { name: 'node', kind: 'value', optional: true }], destructive: false, actions: ['testNode'], target: 'canvas', hint: 'run one block on its own — its neighbours are not started' },
+  { id: 'node-test', label: 'Node: test', args: [{ name: 'template', kind: 'key' }, { name: 'node', kind: 'value', optional: true }], destructive: false, actions: ['testNode'], target: 'canvas', hint: 'run one block on its own; its neighbours are not started' },
   // M187. The note's three. `note-add` takes the FORM first because it is the
   // thing a person chooses; the text is optional (an empty note is a real
   // thing to make and type into).
   { id: 'note-add', label: 'Note: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['addNote'], target: 'canvas', hint: 'a sticky note, free text, or a named region' },
   { id: 'note-set', label: 'Note: set the text', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text', rest: true }], destructive: false, actions: ['setNoteText'], target: 'panel', hint: 'replace a note\'s words' },
-  { id: 'note-tint', label: 'Note: set the tint', args: [{ name: 'panel', kind: 'panel' }, { name: 'tint', kind: 'value' }], destructive: false, actions: ['setNoteTint'], target: 'panel', hint: 'yellow, blue, green or pink — a sticky note only' },
+  { id: 'note-tint', label: 'Note: set the tint', args: [{ name: 'panel', kind: 'panel' }, { name: 'tint', kind: 'value' }], destructive: false, actions: ['setNoteTint'], target: 'panel', hint: 'yellow, blue, green or pink, on a sticky note only' },
   // M388. The flowchart shape's three. `shape-add` takes the FORM first, the
   // thing a person chooses; the label is optional (a junction usually has none).
   // A label and a path are the LAST argument and take the REST of the line
@@ -178,19 +178,19 @@ export const VERBS: readonly VerbDef[] = [
   // below (`shape-add decision Is it valid`) labelled the diamond "Is", and a
   // Mermaid file under a folder with a space was read as a path ending at the
   // space (verify:panels:flowchart flowchart.app.7).
-  { id: 'shape-add', label: 'Shape: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['addShape'], target: 'canvas', hint: 'a flowchart shape — process, decision, terminator, io, document, subprocess, junction or text — with an optional label' },
+  { id: 'shape-add', label: 'Shape: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['addShape'], target: 'canvas', hint: 'a flowchart shape: process, decision, terminator, io, document, subprocess, junction or text, with an optional label' },
   { id: 'shape-set', label: 'Shape: set the label', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text', rest: true }], destructive: false, actions: ['setShapeText', 'editShapeLabel'], target: 'panel', hint: 'replace a shape\'s label; \\n is a new line' },
-  { id: 'shape-style', label: 'Shape: restyle', args: [{ name: 'panel', kind: 'panel' }, { name: 'field', kind: 'value' }, { name: 'value', kind: 'value' }], destructive: false, actions: ['styleShape'], target: 'panel', hint: 'form, fill, line or text, then its value — e.g. shape-style sh1 fill yellow' },
+  { id: 'shape-style', label: 'Shape: restyle', args: [{ name: 'panel', kind: 'panel' }, { name: 'field', kind: 'value' }, { name: 'value', kind: 'value' }], destructive: false, actions: ['styleShape'], target: 'panel', hint: 'form, fill, line or text, then its value, for example shape-style sh1 fill yellow' },
   // M389–M391. Lines, arranging, and the diagram in and out. `objects` is a
   // space-separated id list; absent means the person's selection.
-  { id: 'connect', label: 'Connect: two objects', args: [{ name: 'from', kind: 'panel' }, { name: 'to', kind: 'panel' }, { name: 'label', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['connectObjects'], target: 'canvas', hint: 'a connector from one object to another, with an optional label — a line, never a handoff' },
+  { id: 'connect', label: 'Connect: two objects', args: [{ name: 'from', kind: 'panel' }, { name: 'to', kind: 'panel' }, { name: 'label', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['connectObjects'], target: 'canvas', hint: 'a connector from one object to another, with an optional label. It is a line, never a handoff' },
   { id: 'connector-style', label: 'Connector: restyle', args: [{ name: 'connector', kind: 'value' }, { name: 'field', kind: 'value' }, { name: 'value', kind: 'text', rest: true }], destructive: false, actions: ['styleConnector'], target: 'canvas', hint: 'route (orthogonal, straight, curved), arrows (end, start, both, none), line, dashed (on/off) or label' },
   { id: 'duplicate', label: 'Duplicate', args: [{ name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['duplicateObjects'], target: 'canvas', hint: 'shapes, notes and pictures, their connectors between them included' },
-  { id: 'align', label: 'Align', args: [{ name: 'edge', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['alignObjects'], target: 'canvas', hint: 'left, hcentre, right, top, vcentre or bottom — two or more objects' },
-  { id: 'distribute', label: 'Space evenly', args: [{ name: 'axis', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['distributeObjects'], target: 'canvas', hint: 'across or down — three or more objects, the outer two stay' },
-  { id: 'flowchart-layout', label: 'Flowchart: lay out', args: [{ name: 'direction', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['layoutFlowchart'], target: 'canvas', hint: 'down, right, up or left — one shape lays out its whole chart' },
+  { id: 'align', label: 'Align', args: [{ name: 'edge', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['alignObjects'], target: 'canvas', hint: 'left, hcentre, right, top, vcentre or bottom, for two or more objects' },
+  { id: 'distribute', label: 'Space evenly', args: [{ name: 'axis', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['distributeObjects'], target: 'canvas', hint: 'across or down, for three or more objects; the outer two stay' },
+  { id: 'flowchart-layout', label: 'Flowchart: lay out', args: [{ name: 'direction', kind: 'value' }, { name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['layoutFlowchart'], target: 'canvas', hint: 'down, right, up or left; one shape lays out its whole chart' },
   { id: 'flowchart-import', label: 'Flowchart: import Mermaid', args: [{ name: 'path', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['importFlowchart'], target: 'canvas', hint: 'a .mmd or .md file (an absolute path) becomes editable shapes; nothing in it runs' },
-  { id: 'flowchart-export', label: 'Flowchart: export', args: [{ name: 'format', kind: 'value' }], destructive: false, actions: ['exportFlowchart'], target: 'canvas', hint: 'mermaid or svg, through a save dialog — scrubbed, the count said' },
+  { id: 'flowchart-export', label: 'Flowchart: export', args: [{ name: 'format', kind: 'value' }], destructive: false, actions: ['exportFlowchart'], target: 'canvas', hint: 'mermaid or svg, through a save dialog, scrubbed, the count said' },
   // M394. Sketch → plan: opens the Start work sheet with the chart's steps as its plan — a person presses Start.
   { id: 'flowchart-plan', label: 'Flowchart: start work from this chart', args: [{ name: 'objects', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['planFromChart'], target: 'canvas', hint: 'each labelled step becomes a plan step in the Start work sheet; nothing runs until a person presses Start' },
   // M186. A picture in, and a picture repaired. Both take a path, and both go
@@ -201,13 +201,13 @@ export const VERBS: readonly VerbDef[] = [
   // teammate's plan cannot run it (plan.ts: it READS a path the caller names).
   { id: 'file-open', label: 'Open a file', args: [{ name: 'path', kind: 'text', rest: true }], destructive: false, actions: ['openFilePath'], target: 'canvas', hint: 'open a file by its absolute path as a file panel at the centre of the view' },
   { id: 'image-add', label: 'Image: add a picture', args: [{ name: 'path', kind: 'text' }], destructive: false, actions: ['addImage'], target: 'canvas', hint: 'take a PNG, JPEG, GIF or WebP into this canvas and place it' },
-  { id: 'image-replace', label: 'Image: replace a picture', args: [{ name: 'panel', kind: 'panel' }, { name: 'path', kind: 'text' }], destructive: false, actions: ['replaceImage'], target: 'panel', hint: 'point an existing picture panel at different bytes — the repair for a missing one' },
+  { id: 'image-replace', label: 'Image: replace a picture', args: [{ name: 'panel', kind: 'panel' }, { name: 'path', kind: 'text' }], destructive: false, actions: ['replaceImage'], target: 'panel', hint: 'point an existing picture panel at different bytes, the repair for a missing one' },
   // M185. The preview's four. `preview-open` takes an OPTIONAL url: with one
   // it points the pane, without one it asks discovery — which reads and runs
   // nothing, so the verb that opens a page and the verb that starts a server
   // are two verbs a person (or an agent) chooses between by name.
   { id: 'preview-open', label: 'Preview: open the project', args: [{ name: 'url', kind: 'text', optional: true }], destructive: false, actions: ['openPreview'], target: 'canvas', hint: 'open the page a process of the selected panel is serving, or the url you name' },
-  { id: 'preview-width', label: 'Preview: set the width', args: [{ name: 'device', kind: 'value' }], destructive: false, actions: ['setPreviewWidth'], target: 'canvas', hint: 'phone, tablet, laptop or full — the named widths, never a number' },
+  { id: 'preview-width', label: 'Preview: set the width', args: [{ name: 'device', kind: 'value' }], destructive: false, actions: ['setPreviewWidth'], target: 'canvas', hint: 'phone, tablet, laptop or full: the named widths, never a number' },
   { id: 'preview-capture', label: 'Preview: capture the page', args: [], destructive: false, actions: ['capturePreview'], target: 'canvas', hint: 'a real picture of the pane, written under this app\'s own directory and placed as an image' },
   // M195 (D03). The fifth preview verb: which WORK this pane is a preview of.
   // It takes NO argument on purpose. A path from an agent would be a folder
@@ -224,23 +224,23 @@ export const VERBS: readonly VerbDef[] = [
   // geometry, no selection, no session — so it is not on
   // TEAMMATE_REFUSED_VERBS, for `focus`'s reason: a teammate pointing a
   // person at the work it belongs to is doing the right thing.
-  { id: 'show-task', label: 'Task: show this task', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['showTask'], target: 'panel', hint: 'frame a task — its card, conversation, lane, reviews and links — from the card or any panel of it; nothing moves' },
+  { id: 'show-task', label: 'Task: show this task', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['showTask'], target: 'panel', hint: 'frame a task (its card, conversation, lane, reviews and links) from the card or any panel of it; nothing moves' },
   // M204 (D08). The lens is PAINT and arrange is one undo: neither starts a
   // session or changes a setting, so neither is refused for a teammate —
   // `tidy`, which arrange is a scoped copy of, is not either.
-  { id: 'show-related', label: 'Task: show related', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['showRelated'], target: 'panel', hint: 'ring a task\'s panels and dim the rest — nothing moves; the same verb on the same task turns it off' },
-  { id: 'arrange-task', label: 'Task: arrange this task', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['arrangeTask'], target: 'panel', hint: 'compact a task\'s panels in reading order, clear of everything else — one undo; locked panels stay' },
+  { id: 'show-related', label: 'Task: show related', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['showRelated'], target: 'panel', hint: 'ring a task\'s panels and dim the rest. Nothing moves, and the same verb on the same task turns it off' },
+  { id: 'arrange-task', label: 'Task: arrange this task', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['arrangeTask'], target: 'panel', hint: 'compact a task\'s panels in reading order, clear of everything else. One undo puts it back; locked panels stay' },
   // M361. CROSS-AGENT REVIEW. A comment pinned to a diff line, one verb for
   // every door: a person's writes the person's comment; an agent's or a
   // workflow's writes a PROPOSAL (M360) the person keeps or discards, so a
   // second reviewer can object on the line without speaking for the person.
-  { id: 'review-comment', label: 'Review: comment on a line', args: [{ name: 'panel', kind: 'panel' }, { name: 'place', kind: 'value' }, { name: 'comment', kind: 'text', rest: true }], destructive: false, actions: ['reviewComment'], target: 'panel', hint: 'path:line (path:line:old for a removed line), then the comment — from an agent or a workflow it is a proposal the person keeps or discards' },
+  { id: 'review-comment', label: 'Review: comment on a line', args: [{ name: 'panel', kind: 'panel' }, { name: 'place', kind: 'value' }, { name: 'comment', kind: 'text', rest: true }], destructive: false, actions: ['reviewComment'], target: 'panel', hint: 'path:line (path:line:old for a removed line), then the comment. From an agent or a workflow it is a proposal the person keeps or discards' },
   { id: 'review-task', label: 'Task: review the lane', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['reviewTask'], target: 'panel', hint: 'open the review for a work card\'s lane, beside the task and its conversation' },
   // M454, R-080. The canvas gesture and the Sessions row already call viewInWorld. This is the verb those doors name.
   { id: 'view-in-world', label: 'View in World', args: [panel()], destructive: false, actions: ['viewInWorld'], target: 'panel', hint: 'open the World on this panel, or on its task when it has one' },
   { id: 'preview-dev', label: 'Preview: start the dev server', args: [{ name: 'script', kind: 'value', optional: true }], destructive: false, actions: ['startDevServer'], target: 'canvas', hint: 'run the project\'s dev script in a terminal panel you can see and stop' },
-  { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name — a built-in workflow\'s only save' },
-  { id: 'workflow-run', label: 'Workflow: run', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['runWorkflowNow'], target: 'canvas', hint: 'run the shape on the diagram — the draft when there is one' },
+  { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name, which is the only way to save a built-in workflow' },
+  { id: 'workflow-run', label: 'Workflow: run', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['runWorkflowNow'], target: 'canvas', hint: 'run the shape on the diagram, the draft when there is one' },
   { id: 'workflow-stop', label: 'Workflow: stop', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['stopWorkflow'], target: 'canvas', hint: 'interrupt what this workflow started; nothing is killed' },
   { id: 'starter', label: 'Open the starter canvas', args: [], destructive: false, actions: ['openStarter'], target: 'canvas', hint: 'the agent and one captioned example of each kind; only what was never applied' },
   { id: 'new-chat', label: 'Start a conversation', args: [{ name: 'backend', kind: 'key', optional: true }], destructive: false, actions: ['newChat'], target: 'canvas', hint: 'open an available conversation engine; optionally claude or codex' },
@@ -249,25 +249,25 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'spawn', label: 'Spawn', args: [{ name: 'preset', kind: 'preset' }], destructive: false, actions: ['spawnPreset'], target: 'canvas', hint: 'a new panel from a preset' },
   // Guardrail 3 and 4: `type` never carries a control byte and never lands in
   // a plain shell — the plan builder refuses both, by name.
-  { id: 'type', label: 'Type', args: [panel(), { name: 'text', kind: 'text', rest: true }], destructive: false, actions: [], target: 'agent', hint: 'type into an agent — never a plain shell; Enter is `submit`' },
+  { id: 'type', label: 'Type', args: [panel(), { name: 'text', kind: 'text', rest: true }], destructive: false, actions: [], target: 'agent', hint: 'type into an agent, never a plain shell. Enter is `submit`' },
   { id: 'submit', label: 'Submit', args: [panel()], destructive: false, actions: [], target: 'agent', hint: 'press Enter in an agent terminal' },
   { id: 'send', label: 'Send', args: [panel(), { name: 'text', kind: 'text', rest: true }], destructive: false, actions: [], target: 'agent', hint: 'send a message to a chat' },
   { id: 'interrupt', label: 'Interrupt', args: [panel()], destructive: false, actions: [], target: 'agent', hint: 'interrupt the turn in flight' },
   { id: 'restart', label: 'Restart', args: [panel()], destructive: false, actions: ['restartPanel'], target: 'panel', hint: 'restart the panel\'s process in place' },
   // Guardrail 2: what `read` hands back has passed the outward gate.
-  { id: 'read', label: 'Read', args: [panel()], destructive: false, actions: [], target: 'panel', hint: 'the panel\'s recent output — or a browser panel\'s page text — secrets redacted' },
+  { id: 'read', label: 'Read', args: [panel()], destructive: false, actions: [], target: 'panel', hint: 'the panel\'s recent output, or a browser panel\'s page text, with secrets redacted' },
   // Guardrail 1: the closed list of settings a plan may write.
-  { id: 'set-setting', label: 'Set setting', args: [{ name: 'setting', kind: 'setting' }, { name: 'value', kind: 'value' }], destructive: false, actions: ['toggleSetting'], target: 'setting', hint: 'a cosmetic or attention setting — never a ceiling' },
+  { id: 'set-setting', label: 'Set setting', args: [{ name: 'setting', kind: 'setting' }, { name: 'value', kind: 'value' }], destructive: false, actions: ['toggleSetting'], target: 'setting', hint: 'a cosmetic or attention setting, never a ceiling' },
   { id: 'lock', label: 'Lock', args: [panel()], destructive: false, actions: ['lockPanel'], target: 'panel', hint: 'keep the panel where it is' },
   { id: 'unlock', label: 'Unlock', args: [panel()], destructive: false, actions: ['unlockPanel'], target: 'panel', hint: 'let the panel move again' },
   { id: 'pin', label: 'Pin', args: [panel()], destructive: false, actions: ['pinPanel'], target: 'panel', hint: 'keep the panel live wherever the camera is' },
   { id: 'unpin', label: 'Unpin', args: [panel()], destructive: false, actions: ['unpinPanel'], target: 'panel', hint: 'let tiering decide again' },
   { id: 'maximise', label: 'Maximise', args: [panel()], destructive: false, actions: ['maximisePanel'], target: 'panel', hint: 'fill the window with the panel' },
   { id: 'restore', label: 'Restore', args: [panel()], destructive: false, actions: ['restorePanel'], target: 'panel', hint: 'put a maximised panel back' },
-  { id: 'tidy', label: 'Tidy', args: [], destructive: false, actions: ['tidyPanels'], target: 'canvas', hint: 'compact without reordering — one undo' },
+  { id: 'tidy', label: 'Tidy', args: [], destructive: false, actions: ['tidyPanels'], target: 'canvas', hint: 'compact without reordering; one undo puts it back' },
   { id: 'zoom-fit', label: 'Zoom to fit', args: [], destructive: false, actions: ['zoomToFit'], target: 'canvas', hint: 'the selected panels, or every panel, in view' },
   // M258. Fit task: the ACTIVE task's panels — the lens's task, else the selected panel's one task. Distinct from zoom-fit (the selection or everything).
-  { id: 'fit-task', label: 'Fit task', args: [], destructive: false, actions: ['fitTask'], target: 'canvas', hint: 'frame the active task — the one Show related lit, else the selected panel\'s task' },
+  { id: 'fit-task', label: 'Fit task', args: [], destructive: false, actions: ['fitTask'], target: 'canvas', hint: 'frame the active task: the one Show related lit, else the selected panel\'s task' },
   // M480. TONIGHT. Not destructive, for `dispatch`'s reason: it opens nothing
   // and writes nothing outward — each task is an auto run on a conversation
   // that already exists, bounded by its turn limit, its check and the usage
@@ -276,7 +276,7 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'tournament', label: 'Run as a tournament', args: [{ name: 'op', kind: 'value' }, { name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['runTournament'], target: 'canvas', hint: 'one task on several agents, each in its own worktree, and its check picks the winner: `tournament <task> [agent:model …]`, `tournament stop`, `tournament pick [entrant]` (keeps the winner as the task\'s lane and closes the others\' chats; their worktrees stay), `tournament judge` (a read-only comparison), `tournament combine` (the task\'s Combine tab)' },
   { id: 'cloud-send', label: 'Task: send to a cloud agent', args: [{ name: 'panel', kind: 'panel' }, { name: 'provider', kind: 'value' }], destructive: false, actions: ['sendToCloud'], target: 'panel', hint: 'hand a work card\'s task to a cloud agent (`copilot` or `claude-action`); it comes back as a pull request, and you are asked before anything is sent' },
   { id: 'cloud-merge', label: 'Task: merge the cloud pull request', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['mergeCloud'], target: 'panel', hint: 'squash-merge a work card\'s cloud lane once its checks pass; main re-checks it now and asks you first' },
-  { id: 'tonight', label: 'Run tonight', args: [{ name: 'op', kind: 'value', optional: true }], destructive: false, actions: ['runTonight'], target: 'canvas', hint: 'run the open tasks one at a time while you are away — paused at usage limits, Mac kept awake; `tonight stop` ends the batch' },
+  { id: 'tonight', label: 'Run tonight', args: [{ name: 'op', kind: 'value', optional: true }], destructive: false, actions: ['runTonight'], target: 'canvas', hint: 'run the open tasks one at a time while you are away. Runs pause at usage limits and the Mac stays awake; `tonight stop` ends the batch' },
   { id: 'workspace-from-template', label: 'New workspace from template', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['workspaceFromTemplate'], target: 'canvas', hint: 'a fresh workspace holding the shape' },
   { id: 'zoom-reset', label: 'Reset zoom', args: [], destructive: false, actions: ['resetZoom'], target: 'canvas', hint: 'the initial camera' },
   { id: 'workspace', label: 'Switch workspace', args: [{ name: 'workspace', kind: 'key' }], destructive: false, actions: ['switchWorkspace'], target: 'canvas', hint: 'switch to a workspace by id' },
@@ -302,7 +302,7 @@ export const VERBS: readonly VerbDef[] = [
   // `TEAMMATE_REFUSED_VERBS` (plan.ts), where `dispatch` already is and for
   // four times the reason: a place-bounded teammate opening five sessions
   // through a plan is exactly the fold the Places gate exists to refuse.
-  { id: 'swarm', label: 'Swarm', args: [{ name: 'item', kind: 'key' }, { name: 'teammate', kind: 'key' }, { name: 'arrangement', kind: 'key' }], destructive: false, actions: ['startSwarm'], target: 'canvas', hint: 'start a task as an explore, implement, test or review arrangement — a supervisor, workers with roles, and the handoff edges between them' }
+  { id: 'swarm', label: 'Swarm', args: [{ name: 'item', kind: 'key' }, { name: 'teammate', kind: 'key' }, { name: 'arrangement', kind: 'key' }], destructive: false, actions: ['startSwarm'], target: 'canvas', hint: 'start a task as an explore, implement, test or review arrangement: a supervisor, workers with roles, and the handoff edges between them' }
 ]
 
 /**

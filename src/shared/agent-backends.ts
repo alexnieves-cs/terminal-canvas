@@ -135,11 +135,11 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     // Plan mode: read-only, no edits, no shell writes — the one flag that makes a chat with no folder safe.
     sandboxArgs: ['--permission-mode', 'plan'],
     reasons: {
-      noCli: 'claude was not found on the login PATH — install it, or check the environment report',
-      noInterrupt: 'nothing is answering — there is no turn to interrupt',
-      noImages: 'claude takes images — this message could not be decoded',
+      noCli: 'claude was not found on the login PATH; install it, or check the environment report',
+      noInterrupt: 'nothing is answering, so there is no turn to interrupt',
+      noImages: 'claude takes images, but this message could not be decoded',
       noTerminal: 'a claude chat continues in a terminal as claude --resume',
-      noPermissions: 'claude asks before a tool runs — a grant answers that question for the session',
+      noPermissions: 'claude asks before a tool runs, and a grant answers that question for the session',
       noPrompt: 'claude takes an appended prompt',
       noSandbox: 'claude has plan mode'
     }
@@ -164,12 +164,12 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     forksTurns: false,
     sandboxArgs: ['--sandbox', 'read-only'],
     reasons: {
-      noCli: 'codex was not found on the login PATH — install it, or check the environment report',
-      noInterrupt: 'codex has no interrupt — close the panel to stop it',
-      noImages: 'codex takes no images here — reference a file by its path instead',
-      noTerminal: 'a codex chat continues only here — the terminal door is claude --resume',
-      noPermissions: 'codex asks no permission here — its sandbox policy decides',
-      noPrompt: 'codex takes no appended prompt — a supervisor, a routine or a dispatched lane would silently not be one',
+      noCli: 'codex was not found on the login PATH; install it, or check the environment report',
+      noInterrupt: 'codex has no interrupt; close the panel to stop it',
+      noImages: 'codex takes no images here; reference a file by its path instead',
+      noTerminal: 'a codex chat continues only here, and the terminal door is claude --resume',
+      noPermissions: 'codex asks no permission here; its sandbox policy decides',
+      noPrompt: 'codex takes no appended prompt, so a supervisor, a routine or a dispatched lane would silently not be one',
       noSandbox: 'codex has a read-only sandbox'
     }
   },
@@ -189,7 +189,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     images: false,
     reportsCost: false,
     asksPermission: false,
-    pastesImagePath: 'unmeasured — a pasted path is plain text to it until someone checks',
+    pastesImagePath: 'unmeasured: a pasted path is plain text to it until someone checks',
     terminalDoor: false,
     oneProcessPerTurn: true,
     closeStdin: true,
@@ -203,12 +203,12 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     // The fixtures' own `availableModels`; `auto` (the CLI's router) is what NO `--model` means, so it is the empty choice, not a second row.
     models: ['claude-haiku-4.5', 'gpt-5-mini', 'mai-code-1.1-flash'],
     reasons: {
-      noCli: 'copilot was not found on the login PATH — install it, or check the environment report',
-      noInterrupt: 'copilot has no interrupt — close the panel to stop it',
-      noImages: 'copilot takes an image only as a file path — reference it by its path instead',
-      noTerminal: 'a copilot chat continues only here — the terminal door is claude --resume',
-      noPermissions: 'copilot asks no permission here — every tool runs on its own policy (--allow-all-tools is required headless)',
-      noPrompt: 'copilot takes no appended prompt — a supervisor, a routine or a dispatched lane would silently not be one',
+      noCli: 'copilot was not found on the login PATH; install it, or check the environment report',
+      noInterrupt: 'copilot has no interrupt; close the panel to stop it',
+      noImages: 'copilot takes an image only as a file path; reference it by its path instead',
+      noTerminal: 'a copilot chat continues only here, and the terminal door is claude --resume',
+      noPermissions: 'copilot asks no permission here; every tool runs on its own policy (--allow-all-tools is required headless)',
+      noPrompt: 'copilot takes no appended prompt, so a supervisor, a routine or a dispatched lane would silently not be one',
       noSandbox: 'copilot can deny its shell and write tools'
     }
   },
@@ -229,7 +229,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     images: true,
     reportsCost: false,
     asksPermission: true,
-    pastesImagePath: 'unmeasured — the ACP door has no image-path measurement yet',
+    pastesImagePath: 'unmeasured: the ACP door has no image-path measurement yet',
     terminalDoor: false,
     oneProcessPerTurn: false,
     closeStdin: false,
@@ -239,13 +239,13 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     batchesReads: false,
     forksTurns: false,
     reasons: {
-      noCli: 'copilot was not found on the login PATH — install it, or check the environment report',
-      noInterrupt: 'nothing is answering — there is no turn to cancel',
-      noImages: 'copilot (acp) takes images — this message could not be decoded',
-      noTerminal: 'a copilot (acp) chat continues only here — the terminal door is claude --resume',
-      noPermissions: 'copilot (acp) asks before a command runs — a grant answers allow_always for the session',
-      noPrompt: 'copilot (acp) takes no appended prompt — a supervisor, a routine or a dispatched lane would silently not be one',
-      noSandbox: 'copilot (acp) has no read-only mode to run a chat with no folder in — use the copilot row instead'
+      noCli: 'copilot was not found on the login PATH; install it, or check the environment report',
+      noInterrupt: 'nothing is answering, so there is no turn to cancel',
+      noImages: 'copilot (acp) takes images, but this message could not be decoded',
+      noTerminal: 'a copilot (acp) chat continues only here, and the terminal door is claude --resume',
+      noPermissions: 'copilot (acp) asks before a command runs, and a grant answers allow_always for the session',
+      noPrompt: 'copilot (acp) takes no appended prompt, so a supervisor, a routine or a dispatched lane would silently not be one',
+      noSandbox: 'copilot (acp) has no read-only mode to run a chat with no folder in; use the copilot row instead'
     }
   }
 }

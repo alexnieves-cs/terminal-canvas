@@ -85,10 +85,10 @@ export function workflowBlockRefusal(template: PersistedTemplate): string | unde
   // main cannot read a file nobody named, and a pool with nothing to pull
   // would mint workers for no items.
   const bare = template.nodes.find((n) => n.kind === 'pool' && n.list.trim() === '')
-  if (bare !== undefined) return `${bare.key} is a pool block that names no work list — save the template with a list file`
+  if (bare !== undefined) return `${bare.key} is a pool block that names no work list; save the template with a list file`
   // An orchestrator with nothing to say is an ordinary chat wearing the name.
   const mute = template.nodes.find((n) => n.kind === 'orchestrator' && n.prompt.trim() === '')
-  if (mute !== undefined) return `${mute.key} is an orchestrator block with no prompt — give it its instructions`
+  if (mute !== undefined) return `${mute.key} is an orchestrator block with no prompt; give it its instructions`
   // An edge INTO a pool block is the diagram's own shape (M133's fixture draws
   // `sweep → pool`): the pool starts with the run, and the edge is drawn, not
   // acted on — its workers are minted by the run, so nothing hands off into
@@ -108,7 +108,7 @@ export function templateRefusal(
   const blocked = workflowBlockRefusal(template)
   if (blocked !== undefined) return blocked
   const missing = template.nodes.find((n) => n.kind === 'terminal' && n.presetId !== undefined && !presets.some((p) => p.id === n.presetId))
-  if (missing !== undefined) return `${missing.key} names a preset that no longer exists — save the template again`
+  if (missing !== undefined) return `${missing.key} names a preset that no longer exists; save the template again`
   const bare = template.nodes.find((n) => n.kind === 'terminal' && n.presetId === undefined && (n.command ?? '') === '')
   if (bare !== undefined) return `${bare.key} names neither a preset nor a command`
   // A cycle is refused by `setLinkAutomation` at the last moment and silently
@@ -127,9 +127,9 @@ export function templateRefusal(
     seen.add(key)
     return false
   }
-  if (template.nodes.some((n) => cycles(n.key))) return 'its edges make a loop — a handoff graph cannot cycle'
+  if (template.nodes.some((n) => cycles(n.key))) return 'its edges make a loop, and a handoff graph cannot cycle'
   if (!claudeAvailable && template.nodes.some((n) => n.kind === 'chat')) {
-    return 'claude was not found on the login PATH — install it, or check the environment report'
+    return 'claude was not found on the login PATH; install it, or check the environment report'
   }
   return undefined
 }

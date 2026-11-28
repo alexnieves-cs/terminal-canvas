@@ -224,7 +224,7 @@ const ShapeNode = memo(function ShapeNode(props: ShapeNodeProps): JSX.Element {
         // Whose it is, in their colour — the one fact a placeholder's header
         // carried, kept without a header (the frame rule's test: removing it
         // would hide information). Absolutely positioned, so it takes no layout.
-        <span className="shape__owner" data-shape-owner={id} style={outlineCorner(shape.form, rect.w, rect.h, 'left')} title={`${peerWho ?? 'a teammate'}’s — only they change its words`} aria-hidden="true" />
+        <span className="shape__owner" data-shape-owner={id} style={outlineCorner(shape.form, rect.w, rect.h, 'left')} title={`${peerWho ?? 'a teammate'}’s, and only they change its words`} aria-hidden="true" />
       )}
       {peer && peerRemovable === true && onPeerRemove !== undefined && (
         <button type="button" className="shape__remove" data-shape-remove={id} tabIndex={-1} style={outlineCorner(shape.form, rect.w, rect.h, 'right')}

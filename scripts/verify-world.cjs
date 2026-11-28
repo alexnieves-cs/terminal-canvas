@@ -1393,7 +1393,7 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
     H(rec('waiting_approval', editing), { approval: { toolName: 'Bash' } }).text === 'Asks to run Bash' && H(rec('waiting_approval', [])).text === 'Waiting on you' &&
       H(rec('error', [at(1, 'error', { message: 'rate limited' })])).text === 'Stopped: rate limited' &&
       H(rec('working', failed)).text === 'Failed: 1 failed' && H(rec('working', failed), { now: 1002 + ST.FAILED_MS + 1 }).tone !== 'stop' &&
-      H(rec('working', editing), { partners: { file: 'b.ts', others: ['z'] }, partnerName: () => 'Zed' }).text === 'b.ts — also being written by Zed' &&
+      H(rec('working', editing), { partners: { file: 'b.ts', others: ['z'] }, partnerName: () => 'Zed' }).text === 'b.ts, also being written by Zed' &&
       H(rec('working', editing)).text === 'Editing b.ts' && H(rec('working', [], 0), { activity: 'quiet', now: 5 * 60_000 }).text === 'Quiet for 5 min' &&
       H(rec('thinking', [])).text === 'my words' && H(rec('thinking', [])).tone === 'said')
   const retried = [...failed, at(3, 'tool_call', { tool: 'Bash', summary: 'npm test', status: 'started', callId: 'y' }), at(4, 'tool_result', { tool: 'Bash', summary: 'npm test', status: 'done', callId: 'y' })]

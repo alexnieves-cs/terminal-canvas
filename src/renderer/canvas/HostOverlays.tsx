@@ -335,7 +335,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
         the mode it describes is still armed. */}
     {linkMode.from !== null && (
       <div className="link-banner" role="status" data-screen-control="">
-        Linking from <strong>{linkSourceName}</strong> — click a panel, or press Escape
+        Linking from <strong>{linkSourceName}</strong>. Click a panel, or press Escape
       </div>
     )}
     {/* M93. The annotate strip: LOUD, with its exit on it (M40's rule). */}
@@ -346,7 +346,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
       <div className="link-banner link-banner--annotate" role="status" data-screen-control="" data-annotate-strip onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}>
         <strong>Annotating</strong> — {annotateTool === 'draw' ? 'drag to draw, on a panel or the canvas' : 'click to place a note, on a panel or the canvas'}; Escape to stop
         {/* M155. The cap, said before it bites: ink reaches it in ordinary use where labels never did. */}
-        {annotations.length >= ANNOTATIONS_MAX && <span className="link-banner__note" data-annotate-cap> · at the cap of {ANNOTATIONS_MAX} — the oldest goes next</span>}
+        {annotations.length >= ANNOTATIONS_MAX && <span className="link-banner__note" data-annotate-cap> · at the cap of {ANNOTATIONS_MAX}, so the oldest goes next</span>}
         {/* M155. The two tools, pressed state as data: `draw` inks a drag, `label` is M93's note. */}
         <span className="link-banner__tools" role="group" aria-label="Annotate tool">
           <button type="button" className={`link-banner__tool${annotateTool === 'label' ? ' link-banner__tool--on' : ''}`} data-annotate-tool="label" aria-pressed={annotateTool === 'label'} {...shellControl(() => setAnnotateTool('label'))}>label</button>
@@ -459,7 +459,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
       // over the same inputs had already drifted once (the Act III
       // critic, hints.ts's header).
       const launcherHintsLeft = hintsLoaded ? hintsLeft(hintsSeen, 'launcher') : []
-      const starterReasonForLauncher = starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent; install one and Check again' : null
+      const starterReasonForLauncher = starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered. The starter begins with an agent, so install one and Check again' : null
       return (
       <Launcher
         presets={presetRows}
@@ -488,7 +488,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
         onOpenSheet={paletteActions.beginSpawnSheet}
         onOpenFile={paletteActions.openFile}
         onNewNote={paletteActions.newNote}
-        noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}
+        noteReason={noteRoot === null ? 'select a panel first, because a note is saved in its directory' : null}
         onNewChat={paletteActions.newChat}
         // M205. The starter is an OPTIONAL line; the primary never lays it out.
         onOpenStarter={() => { void paletteActions.openStarter() }}
@@ -533,7 +533,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
               {jobRecovery !== null && <JobRecoveryNotice model={jobRecovery} />}
               {envProblem && envReport !== null && (
                 <div className="env-banner" data-env-banner role="status">
-                  Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
+                  Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}), so CLIs installed
                   through your shell's rc files may not be found.{' '}
                   {/* The UX pass. The fix is a button, not a sentence pointing at ⌘K. */}
                   <button type="button" className="pf__verb pf__verb--word env-banner__check" data-env-banner-check {...shellControl(() => palette.openPalette('environment'))}>Check environment</button>
@@ -568,7 +568,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
           <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="frame" title="Frame every panel of this task"
             {...shellControl(() => act(frameItem(lens.itemId)))}>Frame</button>
           <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="arrange" disabled={merged}
-            title={merged ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'}
+            title={merged ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else. One undo puts it back'}
             {...shellControl(() => { if (!merged) act(arrangeItem(lens.itemId)) })}>Arrange</button>
           <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="stop" title="Stop showing what is related" {...shellControl(() => setRelatedItemId(null))}>Stop</button>
         </div>
@@ -608,7 +608,7 @@ export function renderHostOverlays(ctx: RenderHostOverlaysContext): JSX.Element 
         credentials={credentialRows}
         worktrees={worktreeRows}
         envReport={envReport}
-        starterReason={starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent' : starter === undefined && panels.length > 0 ? 'the starter lays out on an empty canvas — reset the canvas or make a new workspace for it' : null}
+        starterReason={starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered, and the starter begins with an agent' : starter === undefined && panels.length > 0 ? 'the starter lays out on an empty canvas; reset the canvas or make a new workspace for it' : null}
         update={updateState}
         workflowTemplateOf={(panelId) => { const p = panelsRef.current.find((x) => x.rect.id === panelId); return p !== undefined && isWorkflowPanel(p) ? p.workflow.templateId : undefined }}
         bookmarks={bookmarkRows}

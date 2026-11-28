@@ -78,7 +78,7 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     const ids = [...(selectedIdsRef.current ?? [])]
     if (ids.length !== 1) return { reason: 'select the one draft file to publish first' }
     const panel = (panelsRef.current ?? []).find((p) => p.rect.id === ids[0])
-    if (panel === undefined || !isFilePanel(panel)) return { reason: 'the selected panel is not a file — select the draft (RELEASE_NOTES.md, PR_COMMENT.md…) to publish it' }
+    if (panel === undefined || !isFilePanel(panel)) return { reason: 'the selected panel is not a file. Select the draft (RELEASE_NOTES.md, PR_COMMENT.md…) to publish it' }
     return panel.source.path
   }
   /** M255. One publish, its three answers kept three: published, cancelled (never a refusal), refused by name. */
@@ -142,7 +142,7 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     },
     exportCanvasPng: () => {
       void window.canvas.export.canvasPng().then((r) => {
-        if (r.kind === 'failed') { console.warn(`[export] canvas png — ${r.reason}`); notifyFailed("Couldn't export the canvas", r.reason); return }
+        if (r.kind === 'failed') { console.warn(`[export] canvas png: ${r.reason}`); notifyFailed("Couldn't export the canvas", r.reason); return }
         if (r.kind !== 'cancelled') notifyDone('Exported the canvas as a picture', 'path' in r ? r.path : undefined)
       })
     },
@@ -155,8 +155,8 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     exportDeck: async (panelId) => {
       const panel = panelsRef.current.find((p) => p.rect.id === panelId)
       if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
-      if (panel.kind !== 'file') return { kind: 'refused', reason: `${panelId} is not a file panel — a deck is a Markdown file` }
-      if (!/\.(md|markdown)$/i.test(panel.source.path)) return { kind: 'refused', reason: `${panel.source.path} is not Markdown — a deck is a .md file with --- between slides` }
+      if (panel.kind !== 'file') return { kind: 'refused', reason: `${panelId} is not a file panel, and a deck is a Markdown file` }
+      if (!/\.(md|markdown)$/i.test(panel.source.path)) return { kind: 'refused', reason: `${panel.source.path} is not Markdown. A deck is a .md file with --- between slides` }
       const r = await window.canvas.export.deckPptx({ path: panel.source.path })
       return r.kind === 'written' || r.kind === 'cancelled' ? { kind: 'ran', note: deckExportSentence(r) } : { kind: 'refused', reason: deckExportSentence(r) }
     },
@@ -172,7 +172,7 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     beginPublish: (kind) => {
       const path = selectedDraftPath()
       if (typeof path !== 'string') { self.say(path.reason); return }
-      const label = kind === 'release' ? 'Publish as a release — the tag (e.g. v1.2.0)…' : kind === 'comment' ? 'Comment on pull request number…' : 'Post as a Discussion in category…'
+      const label = kind === 'release' ? 'Publish as a release: the tag (e.g. v1.2.0)…' : kind === 'comment' ? 'Comment on pull request number…' : 'Post as a Discussion in category…'
       setInputMode({
         kind: 'text',
         label,
@@ -192,7 +192,7 @@ export function objectsActions(ctx: ActionCtx): ObjectsActions {
     // the app was launched, never the shell that asked (`tc view` resolves it).
     openFilePath: (path) => {
       const p = path.trim()
-      if (!p.startsWith('/')) return { kind: 'refused', reason: 'file-open takes an absolute path — tc view resolves one from your shell' }
+      if (!p.startsWith('/')) return { kind: 'refused', reason: 'file-open takes an absolute path, and tc view resolves one from your shell' }
       openFilePanel(p, worldCentre())
       return { kind: 'ran', note: `opened ${p}` }
     },

@@ -1001,7 +1001,7 @@ export function OrchestrationLive({ model: liveModel, islands, primaryIslandId, 
       </div>
       <div className="orch-live__tools" role="toolbar" aria-label="Watch view controls">
         <button type="button" className="orch-live__tool" aria-pressed={paused} data-orch-live-pause
-          title={paused ? 'Resume the view — show what the sessions did meanwhile' : 'Pause the view only — sessions keep running (to stop a session, use Interrupt on it)'}
+          title={paused ? 'Resume the view and show what the sessions did meanwhile' : 'Pause the view only. Sessions keep running (to stop a session, use Interrupt on it)'}
           {...shellControl(togglePause)}>{paused ? 'Resume view' : 'Pause view'}</button>
         <button type="button" className="orch-live__tool" aria-pressed={follow} data-orch-live-follow title="Follow the session doing the latest work" {...shellControl(() => setFollow((v) => !v))}>Follow</button>
         <button type="button" className="orch-live__tool" data-orch-live-reset title="Reset the camera" {...shellControl(() => setReset((n) => n + 1))}>Reset</button>
@@ -1029,7 +1029,7 @@ export function OrchestrationLive({ model: liveModel, islands, primaryIslandId, 
                 <code>{f.name}</code>
                 <span>{f.contended
                   ? `${f.writers.map(titleOf).join(' and ')} write it in one checkout`
-                  : `also changed in ${f.alsoIn} other ${f.alsoIn === 1 ? 'lane' : 'lanes'} — separate checkouts`}</span>
+                  : `also changed in ${f.alsoIn} other ${f.alsoIn === 1 ? 'lane' : 'lanes'}, in separate checkouts`}</span>
                 {onFileAction !== undefined && (
                   <button type="button" className="orch-live__tool" data-orch-live-shared-verb={f.contended ? 'review' : 'combine'}
                     {...shellControl(() => onFileAction(f.contended ? 'contended' : 'overlap', f))}>{f.contended ? 'Review the file' : 'Plan the combine'}</button>
@@ -1053,7 +1053,7 @@ export function OrchestrationLive({ model: liveModel, islands, primaryIslandId, 
             ))}
         </ol>
       )}
-      {model.sessions.length === 0 && <p className="orch-live__empty">No sessions to watch yet — start one and its work shows up here.</p>}
+      {model.sessions.length === 0 && <p className="orch-live__empty">No sessions to watch yet. Start one and its work shows up here.</p>}
     </div>
   )
 }

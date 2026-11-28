@@ -193,16 +193,16 @@ export function buildPortable(input: BuildInput): PortableFile {
   // directory is not the terminal that was exported), they are scrubbed only
   // for things that look like secrets, and a person sending this file to
   // someone else is sending their folder names.
-  if (kept.length > 0) omitted.push({ what: 'nothing of the paths', why: 'folder and file paths travel as text — they are part of each object\'s shape, and they name your own directories' })
+  if (kept.length > 0) omitted.push({ what: 'nothing of the paths', why: 'folder and file paths travel as text, because they are part of each object\'s shape, and they name your own directories' })
   const images = input.images ?? []
   const pictures = kept.filter((p) => (p as unknown as { kind?: string }).kind === 'image').length
   if (pictures > 0 && images.length === 0) {
     // NEVER "redacted": a picture cannot be scrubbed, and saying it was would
     // be the most dangerous sentence in this file.
-    omitted.push({ what: `the pixels of ${pictures} picture${pictures === 1 ? '' : 's'}`, why: 'a picture cannot be scrubbed by machine — including one is a choice a person makes by looking at it' })
+    omitted.push({ what: `the pixels of ${pictures} picture${pictures === 1 ? '' : 's'}`, why: 'a picture cannot be scrubbed by machine, so including one is a choice a person makes by looking at it' })
   }
   if (input.hasRoutines === true) omitted.push({ what: 'every routine', why: 'a routine would schedule itself on the other machine and send messages there' })
-  omitted.push({ what: 'every credential', why: 'this app\'s credentials never leave its own encrypted store — there is nothing of them in this file' })
+  omitted.push({ what: 'every credential', why: 'this app\'s credentials never leave its own encrypted store, so there is nothing of them in this file' })
   const templates = input.templates.map((t) => JSON.parse(scrub(JSON.stringify(t), tally)) as PersistedTemplate)
   return {
     version: PORTABLE_VERSION,
@@ -225,19 +225,19 @@ export type PortableParse =
 /** Three answers, never two: not one of these files, one from a future version, or one to read. */
 export function parsePortable(text: string): PortableParse {
   let raw: unknown
-  try { raw = JSON.parse(text) } catch { return { kind: 'not-portable', reason: 'that file is not JSON — a canvas file is written by Export and ends in .tccanvas' } }
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { kind: 'not-portable', reason: 'that file holds no canvas — it is JSON, but not a canvas file' }
+  try { raw = JSON.parse(text) } catch { return { kind: 'not-portable', reason: 'that file is not JSON. A canvas file is written by Export and ends in .tccanvas' } }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { kind: 'not-portable', reason: 'that file holds no canvas. It is JSON, but not a canvas file' }
   const r = raw as Record<string, unknown>
   if (typeof r.version !== 'number' || !PORTABLE_KINDS.includes(r.kind as PortableKind)) {
-    return { kind: 'not-portable', reason: 'that file names no canvas version and kind — it was not written by Export' }
+    return { kind: 'not-portable', reason: 'that file names no canvas version and kind, so it was not written by Export' }
   }
   if (r.version > PORTABLE_VERSION) {
-    return { kind: 'unknown-version', found: r.version, known: PORTABLE_VERSION, reason: `that file was written by a newer version of this app (file version ${r.version}, this app reads ${PORTABLE_VERSION}) — update, or ask for it to be exported again` }
+    return { kind: 'unknown-version', found: r.version, known: PORTABLE_VERSION, reason: `that file was written by a newer version of this app (file version ${r.version}, this app reads ${PORTABLE_VERSION}). Update, or ask for it to be exported again` }
   }
   const warnings: string[] = []
   const workspace = r.workspace as { name?: unknown; panels?: unknown } | undefined
   const panels = Array.isArray(workspace?.panels) ? (workspace?.panels as PersistedPanel[]) : []
-  if (!Array.isArray(workspace?.panels)) warnings.push('the file names no panels — an empty workspace is what it will make')
+  if (!Array.isArray(workspace?.panels)) warnings.push('the file names no panels, so an empty workspace is what it will make')
   // Round 6. The workflows in this file were written by somebody else's app.
   // Until now this arm cast them — an `Array.isArray` and nothing more — so
   // any object at all reached the template library and the LAYOUT reader was

@@ -97,7 +97,7 @@ export function replayAt(turns: readonly TranscriptTurn[], at: number): ReplayFr
       if (content === undefined) break
       if (!content.includes(p.oldText) || p.oldText === '') {
         content = undefined
-        why = 'an edit\'s old text was not in what the replay held — the file had changed in a way the transcript does not show'
+        why = 'an edit\'s old text was not in what the replay held, so the file had changed in a way the transcript does not show'
         break
       }
       content = p.all ? content.split(p.oldText).join(p.newText) : content.replace(p.oldText, () => p.newText)
@@ -173,12 +173,12 @@ export function fileStateWords(f: ReplayFile): string {
 export function compareWords(row: { a?: ReplayFile; b?: ReplayFile; same: boolean | null }, first: string, second: string): string {
   if (row.a === undefined) return `only ${second} changed it`
   if (row.b === undefined) return `only ${first} changed it`
-  return row.same === true ? 'the same' : row.same === false ? 'different' : 'cannot tell — one side is not known whole'
+  return row.same === true ? 'the same' : row.same === false ? 'different' : 'cannot tell, because one side is not known whole'
 }
 
 /** M383. The frame's shell note, or null with none: what may have changed files the replay cannot see. */
 export function shellWords(n: number): string | null {
-  return n === 0 ? null : `${n} shell command${n === 1 ? '' : 's'} had run by then — they may have changed files this replay cannot see`
+  return n === 0 ? null : `${n} shell command${n === 1 ? '' : 's'} had run by then, and they may have changed files this replay cannot see`
 }
 
 /** M383. A path under the conversation's folder, shown from it; anything else whole. */

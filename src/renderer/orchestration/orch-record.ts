@@ -90,7 +90,8 @@ export function runOfTask(itemId: string): string | undefined {
  * left on disk — never seeded back either.
  */
 export function isSettledHandoff(sentence: string): boolean {
-  return !sentence.startsWith('queued —') && !sentence.startsWith('waiting for')
+  // `queued:` since M647; `queued —` is what older builds left on disk.
+  return !/^queued(:| —)/.test(sentence) && !sentence.startsWith('waiting for')
 }
 
 export interface OrchEventInput {

@@ -61,12 +61,12 @@ function ApprovalPromptImpl({ requestId, toolName, risk, sentence, label, onAllo
       <div className="chat__permission-verbs">
         <button type="button" className="chat__verb chat__verb--allow" data-chat-allow
           aria-keyshortcuts={shortcuts ? 'A' : undefined}
-          title="Allow this one tool call — the next one asks again" {...shellControl(() => onAllow('once'))}>Allow once</button>
+          title="Allow this one tool call. The next one asks again" {...shellControl(() => onAllow('once'))}>Allow once</button>
         {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. M670: never for high risk. */}
         {session && (
           <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session
             aria-keyshortcuts={shortcuts ? 'Shift+A' : undefined}
-            title={`Allow ${toolName} for the rest of this session — it will not ask again`} {...shellControl(() => onAllow('session'))}>Allow for session</button>
+            title={`Allow ${toolName} for the rest of this session. It will not ask again`} {...shellControl(() => onAllow('session'))}>Allow for session</button>
         )}
         <button type="button" className="chat__verb chat__verb--deny" data-chat-deny
           aria-keyshortcuts={shortcuts ? 'D' : undefined}

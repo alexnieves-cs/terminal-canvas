@@ -119,6 +119,6 @@ export function buildUsageSeries (rows: readonly UsageRow[], now: number, days: 
 /** The chart's own caption. Says what the shape cannot: the window, and whether money is missing from it. */
 export function usageSeriesWord (series: UsageSeries): string {
   if (series.empty) return 'nothing closed this week'
-  if (!series.priced) return 'tokens by day — spend is incomplete (a model without a list price)'
+  if (!series.priced) return 'tokens by day. Spend is incomplete (a model without a list price)'
   return 'spend and tokens by day, this week'
 }

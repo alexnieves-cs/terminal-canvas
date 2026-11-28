@@ -192,7 +192,7 @@ export function useRuns(deps: RunsDeps): RunsApi {
     const open = openRef.current.get(runId) as OpenRun
     openRef.current.delete(runId)
     // M475. `passed` is a check's word: a done the agent only claimed says so.
-    const outcome = status.state === 'done' ? (autoVerdictOf(status) === 'checked' ? 'passed' : AUTO_CLAIMED_OUTCOME) : status.state === 'stopped' ? 'stopped' : `stuck — ${status.reason ?? 'no reason given'}`
+    const outcome = status.state === 'done' ? (autoVerdictOf(status) === 'checked' ? 'passed' : AUTO_CLAIMED_OUTCOME) : status.state === 'stopped' ? 'stopped' : `stuck: ${status.reason ?? 'no reason given'}`
     const next = current.map((r) => {
       if (r.id !== runId) return r
       const sealedEntries = r.entries.map((e) => (e.panelId === panelId && e.endedAt === undefined ? { ...e, endedAt: at, outcome } : e))
@@ -214,7 +214,7 @@ export function useRuns(deps: RunsDeps): RunsApi {
     for (const id of roots) {
       const p = panels.find((x) => x.rect.id === id)
       if (!p) { skipped.push(`${id} is gone`); continue }
-      if (isChatPanel(p)) { skipped.push(`${railLabel(p, undefined)} is a chat — re-run it by sending a message`); continue }
+      if (isChatPanel(p)) { skipped.push(`${railLabel(p, undefined)} is a chat; re-run it by sending a message`); continue }
       if (!isTerminalPanel(p)) { skipped.push(`${railLabel(p, undefined)} has no process`); continue }
       restartWithSpec(id, p.spec)
       restarted += 1
@@ -233,7 +233,7 @@ export function useRuns(deps: RunsDeps): RunsApi {
     for (const id of mid) {
       const p = panels.find((x) => x.rect.id === id)
       if (!p) { skipped.push(`${id} is gone`); continue }
-      if (isChatPanel(p)) { skipped.push(`${railLabel(p, undefined)} is a chat — continue it by sending a message`); continue }
+      if (isChatPanel(p)) { skipped.push(`${railLabel(p, undefined)} is a chat; continue it by sending a message`); continue }
       if (!isTerminalPanel(p)) { skipped.push(`${railLabel(p, undefined)} has no process`); continue }
       restartWithSpec(id, p.spec)
       restarted += 1

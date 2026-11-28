@@ -182,7 +182,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // is every canvas that has never opened this page.
     id: 'agents.maxConcurrent',
     label: 'Agents working at once',
-    description: 'how many agents may work at once — a send past this queues with its reason; 0 is no ceiling',
+    description: 'how many agents may work at once; a send past this queues with its reason; 0 is no ceiling',
     keywords: ['concurrency', 'limit', 'ceiling', 'parallel', 'queue', 'at once', 'budget'],
     type: 'number',
     default: 0,
@@ -205,7 +205,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'agents.budgetUsd',
     label: 'Budget for this canvas',
-    description: 'stop this canvas\'s agents when their reported cost reaches this many dollars — a send past this is refused by name; 0 is no ceiling',
+    description: 'stop this canvas\'s agents when their reported cost reaches this many dollars; a send past this is refused by name; 0 is no ceiling',
     keywords: ['budget', 'cost', 'dollars', 'spend', 'ceiling', 'limit', 'money'],
     type: 'number',
     default: 0,
@@ -220,7 +220,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // sandboxed run per task; nothing becomes sandboxed by this switch alone.
     id: 'vm.lanes',
     label: 'Sandboxed lanes',
-    description: 'let Tonight and auto mode run a task in a throwaway Linux VM with prompts off — only its folder is shared, and the network is an allowlist',
+    description: 'let Tonight and auto mode run a task in a throwaway Linux VM with prompts off; only its folder is shared, and the network is an allowlist',
     keywords: ['sandbox', 'sandboxed', 'vm', 'virtual machine', 'container', 'docker', 'orbstack', 'yolo', 'prompts off', 'isolation'],
     type: 'boolean',
     default: false,
@@ -251,7 +251,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'vm.image',
     label: 'Sandboxed lane image',
-    description: 'the image a sandboxed lane boots — build it from docs/streams/vm-lane/ (it carries claude and the network lock)',
+    description: 'the image a sandboxed lane boots; build it from docs/streams/vm-lane/ (it carries claude and the network lock)',
     keywords: ['sandbox', 'vm', 'image', 'container', 'docker'],
     type: 'text',
     default: 'terminal-canvas/lane:1',
@@ -261,7 +261,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // Comma-separated, beyond the model's own hosts, which are always allowed.
     id: 'vm.allowHosts',
     label: 'Sandboxed lane network allowlist',
-    description: 'hosts a sandboxed lane may reach besides Claude\'s own, comma-separated (a leading *. allows subdomains) — e.g. registry.npmjs.org; every host here is a way out for what the agent reads, so avoid wide wildcards like *.amazonaws.com',
+    description: 'hosts a sandboxed lane may reach besides Claude\'s own, comma-separated (a leading *. allows subdomains), such as registry.npmjs.org; every host here is a way out for what the agent reads, so avoid wide wildcards like *.amazonaws.com',
     keywords: ['sandbox', 'vm', 'network', 'allowlist', 'egress', 'hosts', 'proxy', 'firewall'],
     type: 'text',
     default: '',
@@ -272,7 +272,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // from rate_limit_event (max of the 5-hour and weekly windows).
     id: 'agents.budgetWindowPercent',
     label: 'Stop at this % of the usage window',
-    description: 'stop this canvas\'s agents when the binding Claude usage window (5-hour or weekly, whichever is higher) reaches this percent — for subscribers; 0 is no ceiling',
+    description: 'stop this canvas\'s agents when the binding Claude usage window (5-hour or weekly, whichever is higher) reaches this percent, for subscribers; 0 is no ceiling',
     keywords: ['budget', 'window', 'percent', 'rate', 'limit', 'subscriber', 'five hour', 'weekly', 'ceiling'],
     type: 'number',
     default: 0,
@@ -286,7 +286,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // enforces both, outside the agent loop; 0 is no cap.
     id: 'agents.nodeCapUsd',
     label: 'Spend cap for each agent',
-    description: 'hold an agent when its own reported cost reaches this many dollars — across every process it has run; a send to it is refused by name until raised; 0 is no cap',
+    description: 'hold an agent when its own reported cost reaches this many dollars, across every process it has run; a send to it is refused by name until raised; 0 is no cap',
     keywords: ['cap', 'spend', 'cost', 'dollars', 'budget', 'per agent', 'node', 'limit', 'ceiling', 'hold'],
     type: 'number',
     default: 0,
@@ -297,7 +297,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'agents.nodeCapContextK',
     label: 'Context cap for each agent (thousands of tokens)',
-    description: 'stop an agent\'s turn when its conversation reaches this many thousand tokens, and hold it until raised — measured on every message, so the turn that crosses it is the one stopped; 0 is no cap',
+    description: 'stop an agent\'s turn when its conversation reaches this many thousand tokens, and hold it until raised; it is measured on every message, so the turn that crosses it is the one stopped; 0 is no cap',
     keywords: ['cap', 'context', 'tokens', 'window', 'per agent', 'node', 'limit', 'ceiling', 'hold', 'compact'],
     type: 'number',
     default: 0,
@@ -310,7 +310,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // command runs it on THIS machine — sharing a canvas is not consent to it.
     id: 'agents.teamAsks',
     label: 'Ask the team to approve on a shared canvas',
-    description: 'on a shared canvas, send each of your agents\' permission requests to the team as well: anyone who may edit the canvas can allow it once or deny it, and you can still answer here — plans and credential writes stay yours alone',
+    description: 'on a shared canvas, send each of your agents\' permission requests to the team as well: anyone who may edit the canvas can allow it once or deny it, and you can still answer here; plans and credential writes stay yours alone',
     keywords: ['team', 'approve', 'approval', 'permission', 'queue', 'shared', 'teammate', 'ask', 'allow', 'deny'],
     type: 'boolean',
     default: false,
@@ -319,7 +319,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'agents.teamEscalateUsd',
     label: 'Two approvers past this spend',
-    description: 'once an agent\'s own reported cost reaches this many dollars, a request sent to the team needs two different people to allow it — your answer here is one of them; 0 is always one',
+    description: 'once an agent\'s own reported cost reaches this many dollars, a request sent to the team needs two different people to allow it, and your answer here is one of them; 0 is always one',
     keywords: ['team', 'approve', 'approval', 'escalate', 'two', 'second', 'spend', 'threshold', 'dollars', 'cost'],
     type: 'number',
     default: 0,
@@ -342,7 +342,7 @@ export const SETTINGS: readonly SettingDef[] = [
     id: 'agent.bell',
     planWritable: true,
     label: 'Detect the terminal bell',
-    description: 'treat a bell as “this panel wants you” — your CLI must be set to ring it; Claude Code’s notification channel defaults to auto',
+    description: 'treat a bell as “this panel wants you”; your CLI must be set to ring it; Claude Code’s notification channel defaults to auto',
     keywords: ['bell', 'alert', 'notify', 'notification', 'attention', 'ping', 'sound'],
     type: 'boolean',
     default: true,
@@ -362,7 +362,7 @@ export const SETTINGS: readonly SettingDef[] = [
     id: 'attention.sound',
     planWritable: true,
     label: 'Play a sound when a panel needs me',
-    description: 'ring the system alert sound when a panel wants you — off by default; it uses your own alert sound and volume, and works when this window is hidden',
+    description: 'ring the system alert sound when a panel wants you; it is off by default and uses your own alert sound and volume, and works when this window is hidden',
     keywords: ['sound', 'beep', 'alert', 'audio', 'attention', 'ping', 'chime'],
     type: 'boolean',
     default: false,
@@ -371,7 +371,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'accessibility.screenReaderMode',
     label: 'Screen reader mode',
-    description: 'let a screen reader read each live terminal by keeping a text mirror of its buffer — off by default; the mirror is costly, and a carded or off-screen panel has none to read',
+    description: 'let a screen reader read each live terminal by keeping a text mirror of its buffer; it is off by default, because the mirror is costly, and a carded or off-screen panel has none to read',
     keywords: ['screen', 'reader', 'accessibility', 'a11y', 'voiceover', 'aria', 'blind', 'sr'],
     type: 'boolean',
     default: false,
@@ -380,7 +380,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'accessibility.highContrast',
     label: 'High contrast',
-    description: 'stronger borders and less translucency, independent of light or dark — off by default',
+    description: 'stronger borders and less translucency, independent of light or dark; it is off by default',
     keywords: ['contrast', 'accessibility', 'a11y', 'wcag', 'borders', 'translucency', 'glass'],
     type: 'boolean',
     default: false,
@@ -472,7 +472,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // the way back. `unset` = this class has never been left: inherit.
     id: 'shell.layout.wide',
     label: 'Wide-window panel arrangement',
-    description: 'which side panes the wide window had open when it last narrowed — restored when it is wide again',
+    description: 'which side panes the wide window had open when it last narrowed, restored when it is wide again',
     keywords: ['layout', 'arrangement', 'wide', 'window', 'rail', 'inspector', 'remember', 'shell'],
     type: 'enum',
     values: ['unset', 'none', 'rail', 'inspector', 'both'],
@@ -482,7 +482,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.layout.narrow',
     label: 'Narrow-window panel arrangement',
-    description: 'which side panes a narrower window had open when it last widened — restored when it narrows again',
+    description: 'which side panes a narrower window had open when it last widened, restored when it narrows again',
     keywords: ['layout', 'arrangement', 'narrow', 'compact', 'small', 'window', 'rail', 'inspector', 'remember', 'shell'],
     type: 'enum',
     values: ['unset', 'none', 'rail', 'inspector', 'both'],
@@ -525,7 +525,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // disappear on a small window.
     id: 'shell.inspectorWidth',
     label: 'Inspector width',
-    description: 'how wide the right inspector opens — drag its left edge, or set a number here',
+    description: 'how wide the right inspector opens; drag its left edge, or set a number here',
     keywords: ['inspector', 'width', 'resize', 'wide', 'panel', 'sidebar', 'shell'],
     type: 'number',
     default: 260,
@@ -540,7 +540,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // is the inspector's own ceiling, for the same reason it has one.
     id: 'shell.navWidth',
     label: 'Navigator width',
-    description: 'how wide the left navigator opens — drag its right edge, or set a number here',
+    description: 'how wide the left navigator opens; drag its right edge, or set a number here',
     keywords: ['navigator', 'rail', 'width', 'resize', 'wide', 'sidebar', 'shell'],
     type: 'number',
     default: 300,
@@ -687,7 +687,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // Says what it DOES and what it NEEDS. The direct backend has no sessions
     // to keep, and a toggle that is silently ignored is worse than one that
     // names its precondition.
-    description: 'keep every panel’s process running after you quit, and reattach on the next launch; needs tmux — without it processes end with the app either way',
+    description: 'keep every panel’s process running after you quit, and reattach on the next launch; needs tmux, and without it processes end with the app either way',
     keywords: ['quit', 'keep', 'running', 'survive', 'outlive', 'detach', 'reattach', 'tmux', 'background', 'agents', 'exit'],
     type: 'boolean',
     // OFF by default, and decided rather than defaulted into (M38's spec): a
@@ -703,7 +703,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // The cap and the caveat, both: the cap is what bounds the disk, and the
     // caveat is backlog #31's rule stated where the switch is — agents print
     // secrets, and this is the honest reason a user would turn it off.
-    description: 'keep each panel’s recent output on disk (up to 2 MB per panel) so a restored panel can show it and search can find it; agents print secrets — turn this off if that worries you',
+    description: 'keep each panel’s recent output on disk (up to 2 MB per panel) so a restored panel can show it and search can find it; agents print secrets, so turn this off if that worries you',
     keywords: ['scrollback', 'history', 'log', 'output', 'persist', 'disk', 'search', 'secrets', 'restore'],
     type: 'boolean',
     // ON by default: a restored canvas whose every panel shows nothing is the
@@ -718,7 +718,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // which the description says.
     id: 'telemetry.sentryDsn',
     label: 'Sentry DSN',
-    description: 'send crash reports and errors to a Sentry project you own — nothing is sent until a DSN is here; takes effect on next launch',
+    description: 'send crash reports and errors to a Sentry project you own; nothing is sent until a DSN is here; takes effect on next launch',
     keywords: ['sentry', 'telemetry', 'crash', 'errors', 'reporting', 'privacy', 'dsn'],
     type: 'text',
     default: '',
@@ -732,7 +732,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // `verify:file telemetry.6` fails if that clause and the constant disagree.
     id: 'telemetry.crashReports',
     label: 'Send crash reports to the maintainers',
-    description: 'when the app hits an error, send the error’s name, its message and where in the code it happened — tokens and paths under your home folder are removed first, and terminal output, file contents and prompts are never included; your own Sentry DSN above takes its place when set; takes effect on next launch; this build has no reporting address yet, so nothing is sent',
+    description: 'when the app hits an error, send the error’s name, its message and where in the code it happened; tokens and paths under your home folder are removed first, and terminal output, file contents and prompts are never included; your own Sentry DSN above takes its place when set; takes effect on next launch; this build has no reporting address yet, so nothing is sent',
     keywords: ['crash', 'report', 'telemetry', 'errors', 'privacy', 'maintainers', 'opt in', 'sentry'],
     type: 'boolean',
     default: false,
@@ -762,7 +762,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // panel that skips `tc` is one (the token refusal only stops an accident).
     id: 'remote.mcpWrites',
     label: 'Let MCP clients answer approvals and accept work',
-    description: 'allow or deny a chat\'s permission request and merge a task\'s lane through tc mcp — while on, any program you run on this Mac can do this, including an agent in a panel that talks to the control socket directly; each answer goes on the decision record',
+    description: 'allow or deny a chat\'s permission request and merge a task\'s lane through tc mcp; while it is on, any program you run on this Mac can do this, including an agent in a panel that talks to the control socket directly; each answer goes on the decision record',
     keywords: ['mcp', 'remote', 'approve', 'approval', 'permission', 'accept', 'merge', 'claude code', 'client', 'write'],
     type: 'boolean',
     default: false,
@@ -776,7 +776,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // this app sends words.
     id: 'remote.ntfyTopic',
     label: 'Phone alerts: ntfy topic',
-    description: 'when an agent is waiting on you and you are away from your Mac, push its name and question to this ntfy topic — subscribe to the same topic in the ntfy app; anyone who knows the name can read it, so make it long and random; empty is off',
+    description: 'when an agent is waiting on you and you are away from your Mac, push its name and question to this ntfy topic; subscribe to the same topic in the ntfy app; anyone who knows the name can read it, so make it long and random; empty is off',
     keywords: ['phone', 'ntfy', 'push', 'alert', 'notification', 'mobile', 'away', 'remote', 'topic'],
     type: 'text',
     default: '',
@@ -785,7 +785,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'remote.ntfyServer',
     label: 'Phone alerts: ntfy server',
-    description: 'the ntfy server to push through — the free public one, or your own; https only',
+    description: 'the ntfy server to push through: the free public one, or your own; https only',
     keywords: ['phone', 'ntfy', 'server', 'self-hosted', 'push', 'alert'],
     type: 'text',
     default: 'https://ntfy.sh',
@@ -798,7 +798,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // Not planWritable: an agent never turns on a door that answers agents.
     id: 'remote.phoneAnswers',
     label: 'Phone alerts: answer from the phone',
-    description: 'add Allow once and Deny buttons to a phone alert for an agent asking permission — the alert names the tool, not its command; each button works once and expires after 10 minutes; anyone who knows the topic, and the ntfy server itself, could press them, so the topic must be at least 20 random characters',
+    description: 'add Allow once and Deny buttons to a phone alert for an agent asking permission; the alert names the tool, not its command; each button works once and expires after 10 minutes; anyone who knows the topic, and the ntfy server itself, could press them, so the topic must be at least 20 random characters',
     keywords: ['phone', 'ntfy', 'approve', 'allow', 'deny', 'answer', 'remote', 'button'],
     type: 'boolean',
     default: false,
@@ -821,7 +821,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // is process memory, which no scrubber reads.
     id: 'telemetry.nativeCrashes',
     label: 'Include native crash dumps',
-    description: 'a dump is process memory and can contain what a terminal showed or a token this app held — off unless you accept that',
+    description: 'a dump is process memory and can contain what a terminal showed or a token this app held, so it is off unless you accept that',
     keywords: ['minidump', 'crash', 'native', 'node-pty', 'telemetry', 'privacy'],
     type: 'boolean',
     default: false,
@@ -837,7 +837,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // downloaded or installed.
     id: 'update.checkOnLaunch',
     label: 'Check for updates at launch',
-    description: 'ask GitHub once at launch whether a newer release exists — nothing is downloaded or installed; the notice says where',
+    description: 'ask GitHub once at launch whether a newer release exists; nothing is downloaded or installed; the notice says where',
     keywords: ['update', 'release', 'version', 'github', 'launch', 'newer', 'check'],
     type: 'boolean',
     default: true,
@@ -873,7 +873,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'labs.accounts',
     label: 'Show accounts and sharing',
-    description: 'show the account menu, the People page and the sign-in and share rows — they need a configured accounts server',
+    description: 'show the account menu, the People page and the sign-in and share rows, which need a configured accounts server',
     keywords: ['account', 'sign in', 'login', 'share', 'team', 'people', 'presence', 'supabase', 'labs'],
     type: 'boolean',
     default: false,

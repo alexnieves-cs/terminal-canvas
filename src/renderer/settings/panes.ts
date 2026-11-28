@@ -77,7 +77,7 @@ export const SETTINGS_PANES: readonly SettingsPane[] = [
   {
     id: 'keyboard',
     label: 'Keyboard',
-    purpose: 'Canvas shortcuts always use ⌘ — every bare key belongs to the terminal you\'re typing in.',
+    purpose: 'Canvas shortcuts always use ⌘, because every bare key belongs to the terminal you\'re typing in.',
     categories: []
   },
   {

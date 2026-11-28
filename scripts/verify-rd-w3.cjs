@@ -138,7 +138,7 @@ const near = (a, b) => Math.abs(a - b) < 1e-6
   const live = M.verbsForRoom(false, [{ id: 'open', label: 'Open' }])
   const time = read('src/renderer/world/WorldTime.tsx')
   ok('rd-world.past.1 a past room disables every verb with one reason, and the scrubber says that reason',
-    M.PAST_ROOM_REASON === 'past room — go Live to act' &&
+    M.PAST_ROOM_REASON === 'past room; go Live to act' &&
     past.every((v) => v.disabled === true && v.reason === M.PAST_ROOM_REASON) &&
     live[0].disabled === false && live[0].reason === null && live[0].label === 'Open' &&
     time.includes('PAST_ROOM_REASON') && time.includes('verbsForRoom'),

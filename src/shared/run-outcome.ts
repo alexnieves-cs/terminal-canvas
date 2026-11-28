@@ -67,30 +67,30 @@ export function projectSession(panelId: string, fact: RunLiveFact): RunNodeSuper
     if (approval !== undefined) return {
       panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', approval,
       // M359. A plan waits to be approved; it is not a tool asking to be used.
-      blocker: { kind: 'approval', subject: approval.toolName }, detail: approval.toolName === PLAN_TOOL ? `a plan waits for your approval — ${approval.argument}` : `${approval.toolName} asks to use ${approval.argument}`
+      blocker: { kind: 'approval', subject: approval.toolName }, detail: approval.toolName === PLAN_TOOL ? `a plan waits for your approval: ${approval.argument}` : `${approval.toolName} asks to use ${approval.argument}`
     }
     // M367. A HELD agent is not waiting at its keyboard: it asked nothing, and
     // an answer typed into it is refused. Its blocker is the cap, in the
     // hold's own words, and its fix is the queue's Allow or its Work tab.
     if (fact.hold !== undefined) return {
       panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you',
-      blocker: { kind: 'cap', subject: panelId }, detail: `the agent ${holdWords(fact.hold)} — allow it more from Needs you, or stop it`
+      blocker: { kind: 'cap', subject: panelId }, detail: `the agent ${holdWords(fact.hold)}. Allow it more from Needs you, or stop it`
     }
-    return { panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', blocker: { kind: 'keyboard', subject: panelId }, detail: 'this session needs you at its keyboard — open it to answer' }
+    return { panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', blocker: { kind: 'keyboard', subject: panelId }, detail: 'this session needs you at its keyboard; open it to answer' }
   }
   if ((fact.queued ?? 0) > 0) {
     const reason = fact.queuedReason ?? 'in-flight'
     return { panelId, execution: 'queued', result: 'none', word: 'queued', tone: 'starting', queueReason: reason,
       detail: reason === 'concurrency'
-        ? `queued — ${fact.queued} message${fact.queued === 1 ? '' : 's'} waiting for the canvas concurrency ceiling`
-        : `queued — ${fact.queued} message${fact.queued === 1 ? '' : 's'} waiting for the current turn to end` }
+        ? `queued: ${fact.queued} message${fact.queued === 1 ? '' : 's'} waiting for the canvas concurrency ceiling`
+        : `queued: ${fact.queued} message${fact.queued === 1 ? '' : 's'} waiting for the current turn to end` }
   }
   if (fact.status === 'disposed') return { panelId, execution: 'ended', result: 'stopped', word: 'stopped', tone: 'asleep', detail: 'execution stopped; the task disposition is unchanged' }
   if (fact.status === 'exited') {
-    if (fact.exitCode === 0) return { panelId, execution: 'ended', result: 'passed', word: 'exit 0', tone: 'none', detail: 'execution result — the process exited 0; the task disposition is unchanged' }
-    return { panelId, execution: 'ended', result: 'failed', word: 'failed', tone: 'exited', detail: `execution failed${fact.exitCode == null ? '' : ` — exit ${fact.exitCode}`}${fact.exitSignal === undefined ? '' : ` (${fact.exitSignal})`}; the task disposition is unchanged` }
+    if (fact.exitCode === 0) return { panelId, execution: 'ended', result: 'passed', word: 'exit 0', tone: 'none', detail: 'execution result: the process exited 0; the task disposition is unchanged' }
+    return { panelId, execution: 'ended', result: 'failed', word: 'failed', tone: 'exited', detail: `execution failed${fact.exitCode == null ? '' : ` with exit ${fact.exitCode}`}${fact.exitSignal === undefined ? '' : ` (${fact.exitSignal})`}; the task disposition is unchanged` }
   }
-  if (fact.status === 'ready' && (fact.turns ?? 0) > 0) return { panelId, execution: 'ended', result: 'turn-complete', word: 'turn complete', tone: 'none', detail: 'execution result — one agent turn completed; the task disposition is unchanged' }
+  if (fact.status === 'ready' && (fact.turns ?? 0) > 0) return { panelId, execution: 'ended', result: 'turn-complete', word: 'turn complete', tone: 'none', detail: 'execution result: one agent turn completed; the task disposition is unchanged' }
   if (fact.status === 'ready') return { panelId, execution: 'running', result: 'none', word: 'ready', tone: 'idle', detail: 'the conversation is ready; no task result has been reviewed' }
   if (fact.status === 'starting') return { panelId, execution: 'running', result: 'none', word: 'starting', tone: 'starting', detail: 'the conversation is starting' }
   if (fact.status === 'streaming') return { panelId, execution: 'running', result: 'none', word: 'working', tone: 'working', detail: 'execution is in progress' }
@@ -111,12 +111,12 @@ export interface RunNodeSupervision {
 }
 
 function historical(outcome: string): Pick<RunNodeSupervision, 'execution' | 'result' | 'word' | 'tone' | 'detail'> {
-  if (outcome === 'a turn') return { execution: 'ended', result: 'turn-complete', word: 'turn complete', tone: 'none', detail: 'execution result — one agent turn completed; the task disposition is unchanged' }
-  if (outcome === 'exit 0') return { execution: 'ended', result: 'passed', word: 'exit 0', tone: 'none', detail: 'execution result — the process exited 0; the task disposition is unchanged' }
-  if (outcome === 'passed' || outcome.startsWith('handed off')) return { execution: 'ended', result: 'passed', word: outcome === 'passed' ? 'passed' : 'handed off', tone: 'none', detail: `execution result — ${outcome}; the task disposition is unchanged` }
+  if (outcome === 'a turn') return { execution: 'ended', result: 'turn-complete', word: 'turn complete', tone: 'none', detail: 'execution result: one agent turn completed; the task disposition is unchanged' }
+  if (outcome === 'exit 0') return { execution: 'ended', result: 'passed', word: 'exit 0', tone: 'none', detail: 'execution result: the process exited 0; the task disposition is unchanged' }
+  if (outcome === 'passed' || outcome.startsWith('handed off')) return { execution: 'ended', result: 'passed', word: outcome === 'passed' ? 'passed' : 'handed off', tone: 'none', detail: `execution result: ${outcome}; the task disposition is unchanged` }
   if (outcome.startsWith('skipped')) return { execution: 'ended', result: 'skipped', word: 'skipped', tone: 'asleep', detail: outcome }
   if (outcome.startsWith('stopped')) return { execution: 'ended', result: 'stopped', word: 'stopped', tone: 'asleep', detail: outcome }
-  return { execution: 'ended', result: 'failed', word: 'failed', tone: 'exited', detail: `execution result — ${outcome}` }
+  return { execution: 'ended', result: 'failed', word: 'failed', tone: 'exited', detail: `execution result: ${outcome}` }
 }
 
 /**
@@ -135,7 +135,7 @@ export function projectRun(run: PersistedRun, live: Readonly<Record<string, RunL
     }
     const entry = run.entries.find((e) => e.panelId === panelId)
     if (entry === undefined) {
-      out[node.key] = { panelId, execution: 'queued', result: 'none', word: 'queued', tone: 'starting', queueReason: 'upstream', detail: 'queued — waiting for upstream work to reach this node' }
+      out[node.key] = { panelId, execution: 'queued', result: 'none', word: 'queued', tone: 'starting', queueReason: 'upstream', detail: 'queued: waiting for upstream work to reach this node' }
       continue
     }
     if (entry.outcome !== undefined) {

@@ -2373,7 +2373,7 @@ const session = (id, over = {}) => ({
   const branch = m.fields.find((f) => f.key === 'worktree')
   const path = m.fields.find((f) => f.key === 'worktree-path')
   ok('worktree.2 a refused worktree renders one row carrying the refusal and no path',
-    branch !== undefined && /^refused — /.test(branch.value) && branch.value.includes('not inside a git repository') &&
+    branch !== undefined && /^refused: /.test(branch.value) && branch.value.includes('not inside a git repository') &&
       path === undefined,
     JSON.stringify(m.fields))
 }
@@ -2591,7 +2591,7 @@ const session = (id, over = {}) => ({
     planAction.action === plan && planAction.code === false && planAction.rest === undefined &&
       R.toolArgument({ plan }) === 'Add rate limiting' && head('ExitPlanMode') === 'start on this plan' &&
       /present it again before you start/.test(R.denyMessageFor('ExitPlanMode')) && R.denyMessageFor('Bash') === R.DENY_MESSAGE && R.denyMessageFor(undefined) === R.DENY_MESSAGE &&
-      R.reasonChatPending('claude', 'ExitPlanMode') === 'claude has a plan waiting — approve it or keep planning above' && /allow or deny above/.test(R.reasonChatPending('claude', 'Bash')),
+      R.reasonChatPending('claude', 'ExitPlanMode') === 'claude has a plan waiting; approve it or keep planning above' && /allow or deny above/.test(R.reasonChatPending('claude', 'Bash')),
     JSON.stringify({ planAction, arg: R.toolArgument({ plan }), deny: R.denyMessageFor('ExitPlanMode') }))
 }
 
@@ -3438,8 +3438,8 @@ console.log('\n' + '='.repeat(60))
   const held = R.buildInspectorModel(chat({ caps: { usd: 2 } }), undefined, undefined, [], undefined, undefined, undefined, false,
     { ...base, meter: { spentUsd: 2.1, held: { unit: 'usd', spent: 2.1, limit: 2, own: true }, caps: { usd: 2, context: 0, ownUsd: true, ownContext: false } } })
   ok('caps.field.1 the chat inspector carries Caps lines in main\'s figures and whose cap each is, "not reported yet" rather than $0.00, "no cap" rather than a zero, a hold in its own sentence naming its own fix, and the record\'s figures for the form',
-    bare.caps && bare.caps.spend === 'not reported yet — no spend cap' && bare.caps.context === 'not measured yet — no context cap' && bare.caps.held === undefined && bare.caps.own === undefined &&
-      capped.caps.spend === '$0.42 of $2.00 — this agent\'s cap' && capped.caps.context === '118k tokens of 150k — Settings cap' && capped.caps.own.usd === 2 &&
+    bare.caps && bare.caps.spend === 'not reported yet, no spend cap' && bare.caps.context === 'not measured yet, no context cap' && bare.caps.held === undefined && bare.caps.own === undefined &&
+      capped.caps.spend === '$0.42 of $2.00, this agent\'s cap' && capped.caps.context === '118k tokens of 150k, Settings cap' && capped.caps.own.usd === 2 &&
       held.caps.held && /\$2\.00 spend cap/.test(held.caps.held) && /its own cap/.test(held.caps.held) && !/agents\.nodeCapUsd/.test(held.caps.held),
     JSON.stringify({ bare: bare.caps, capped: capped.caps, held: held.caps }))
 }
@@ -3460,9 +3460,9 @@ console.log('\n' + '='.repeat(60))
   const unpriced = R.cacheReturnWords(pu({ 'claude-sonnet-5': { input: 1, output: 1, cacheWrite: 1, cacheRead: 1 }, 'gpt-9': { input: 1, output: 1, cacheWrite: 1, cacheRead: 1 } }))
   const untouched = R.cacheReturnWords(pu({ 'claude-sonnet-5': { input: 10, output: 10, cacheWrite: 0, cacheRead: 0 } }))
   ok('burn.1 the Work tab says what is left of the window the CLI reported ("76k of 200k left — 62% used" under Window) and nothing without one; caching\'s return is a saving or a cost at list price, and absent for an unpriced model or an untouched cache',
-    withWindow.caps.window === '76k of 200k left — 62% used' && noWindow.caps.window === undefined &&
-      saved === 'caching saved $1.75 — $1.80 not paid as fresh input, less $0.05 more for writing it' &&
-      cost === 'caching cost $0.50 more than it saved — $0.00 saved, $0.50 more for writing it' && unpriced === undefined && untouched === undefined,
+    withWindow.caps.window === '76k of 200k left, 62% used' && noWindow.caps.window === undefined &&
+      saved === 'caching saved $1.75: $1.80 not paid as fresh input, less $0.05 more for writing it' &&
+      cost === 'caching cost $0.50 more than it saved: $0.00 saved, $0.50 more for writing it' && unpriced === undefined && untouched === undefined,
     JSON.stringify({ window: withWindow.caps.window, saved, cost, unpriced, untouched }))
 }
 
@@ -3752,7 +3752,7 @@ console.log('\n' + '='.repeat(60))
   const { readFileSync } = require('node:fs')
   const src = readFileSync(join(__dirname, '..', 'src', 'renderer', 'shell', 'BoardPane.tsx'), 'utf8')
   ok('board.empty.1 an empty board column carries a sentence — a drop target for a user-set column, the runtime rule for working and review — under data-board-empty',
-    /data-board-empty=\{state\}/.test(src) && /drop a card/.test(src) && /set when a dispatched lane starts/.test(src) && /set when a lane opens its pull request/.test(src),
+    /data-board-empty=\{state\}/.test(src) && /drop a card/i.test(src) && /set when a dispatched lane starts/.test(src) && /set when a lane opens its pull request/.test(src),
     JSON.stringify({ attr: /data-board-empty/.test(src), words: [/drop a card/.test(src), /dispatched lane/.test(src), /pull request/.test(src)] }))
 }
 
@@ -4210,7 +4210,7 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
   const kept = R.rememberDecisions([], capInbox, () => 'T4', new Set(['q:chatD']))
   ok('queue.cap.1 a held agent is a blocked cap decision under its task, ahead of that task\'s review, saying what raising the cap does; it is remembered across a relaunch and parsed back',
     t4.decisions.map((d) => d.kind).join() === 'cap,review' && t4.severity === 'blocked' &&
-      t4.why === 'Stopped — designer is held at its $2.00 spend cap ($2.10 reported).' && t4.next.label === 'Raise designer\'s cap' &&
+      t4.why === 'Stopped: designer is held at its $2.00 spend cap ($2.10 reported).' && t4.next.label === 'Raise designer\'s cap' &&
       /stays held, spending nothing more/.test(t4.after) && /until its cap is raised/.test(t4.decisions[0].affects) &&
       kept.length === 1 && kept[0].kind === 'cap' && R.parseRemembered(kept).length === 1,
     JSON.stringify({ kinds: t4.decisions.map((d) => d.kind), why: t4.why, next: t4.next.label, after: t4.after, kept }))
@@ -4223,7 +4223,7 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
   const t1 = pq.groups.find((x) => x.itemId === 'T1')
   ok('plan.queue.1 a plan request is "has a plan to approve — <its first line>", its task is stopped on a plan waiting for approval, the next step reads the plan, and it affects everything the agent does next',
     planInbox.items[0].kind === 'permission' && planInbox.items[0].blocker === 'has a plan to approve — Add rate limiting' &&
-      t1.why === 'Stopped — builder has a plan waiting for your approval.' && t1.next.label === 'Read builder\'s plan' &&
+      t1.why === 'Stopped: builder has a plan waiting for your approval.' && t1.next.label === 'Read builder\'s plan' &&
       /keep planning and it revises the plan/.test(t1.after) && /starts nothing until its plan is approved/.test(t1.decisions[0].affects),
     JSON.stringify({ blocker: planInbox.items[0].blocker, why: t1.why, next: t1.next.label, after: t1.after, affects: t1.decisions[0].affects }))
   ok('queue.2 order: an agent stopped on you first (the one more tasks wait on ahead), then a failed check, then a review; each group says why, the next step and where it goes, what happens after — naming the tasks that wait on it — and the headline counts each',
@@ -4288,7 +4288,7 @@ ok('presence.1 an absence of AWAY_MS or more returns the last-seen time as the b
     /^Affects Bash `npm install left-pad` in api — builder's turn waits on it\.$/.test(d('p:r1')?.affects ?? '') &&
       /writer's next turn/.test(d('q:chatQ')?.affects ?? '') &&
       /API rewrite can be verified.*`npm run lint`/.test(d('check:T1:npm run lint')?.affects ?? '') &&
-      /2 changed files — nothing lands on your branch until you accept/.test(d('review:T2')?.affects ?? '') &&
+      /2 changed files\. Nothing lands on your branch until you accept/.test(d('review:T2')?.affects ?? '') &&
       q.groups.every((g) => g.decisions.every((x) => typeof x.affects === 'string' && x.affects !== '')),
     JSON.stringify(q.groups.flatMap((g) => g.decisions.map((x) => [x.key, x.affects]))))
   const h = q.history.T1 ?? []

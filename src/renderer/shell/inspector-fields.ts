@@ -281,12 +281,12 @@ export function historyWord(h: UsageHistory | undefined | null): string {
   if (h === null) return 'the ledger could not be read'
   if (h.sessions === 0) return 'nothing closed this week'
   const sessions = `${h.sessions} session${h.sessions === 1 ? '' : 's'}`
-  if (h.costUsd === undefined) return `${sessions}, ${h.tokens.toLocaleString()} tokens — unpriced (a model without a list price)`
+  if (h.costUsd === undefined) return `${sessions}, ${h.tokens.toLocaleString()} tokens, unpriced (a model without a list price)`
   return `$${h.costUsd.toFixed(2)} across ${sessions}`
 }
 
 /** Rendered when the spec asked for nothing and main has not answered yet. */
-const NO_SPEC_COMMAND = 'none — the login shell'
+const NO_SPEC_COMMAND = 'none, the login shell'
 
 
 /**
@@ -510,7 +510,7 @@ export function buildUsageFields(
     turns: usage.turns,
     subagentTurns: usage.subagentTurns,
     ...(cost !== undefined
-      ? { cost, costLabel: 'API list price — not what a subscription is charged' }
+      ? { cost, costLabel: 'API list price, not what a subscription is charged' }
       : {}),
     ...(() => { const r = cacheReturnWords(usage); return r === undefined ? {} : { cacheReturn: r } })()
   }
@@ -532,8 +532,8 @@ export function cacheReturnWords(usage: PanelUsage): string | undefined {
   }
   const net = saved - premium
   return net >= 0
-    ? `caching saved $${net.toFixed(2)} — $${saved.toFixed(2)} not paid as fresh input, less $${premium.toFixed(2)} more for writing it`
-    : `caching cost $${(-net).toFixed(2)} more than it saved — $${saved.toFixed(2)} saved, $${premium.toFixed(2)} more for writing it`
+    ? `caching saved $${net.toFixed(2)}: $${saved.toFixed(2)} not paid as fresh input, less $${premium.toFixed(2)} more for writing it`
+    : `caching cost $${(-net).toFixed(2)} more than it saved: $${saved.toFixed(2)} saved, $${premium.toFixed(2)} more for writing it`
 }
 
 /** A review node has no process, so it can have no spend, and the section
@@ -590,7 +590,7 @@ export type GrantsField =
   | { kind: 'some'; tools: string[]; revoke: { enabled: true } }
   | { kind: 'cannot'; reason: string; revoke: { enabled: false; reason: string } }
 
-export const REASON_NO_GRANTS = 'nothing granted this session — Allow for session on a request adds one'
+export const REASON_NO_GRANTS = 'nothing granted this session. Allow for session on a request adds one'
 
 function chatGrantsField(chat: { backend?: AgentBackend }, input: ChatInspectorInput | undefined): GrantsField {
   const row = BACKENDS[backendOf(chat)]
@@ -644,9 +644,9 @@ export function capsField(meter: NodeMeter | undefined, own: AgentCaps | undefin
   const caps = meter?.caps
   const whose = (isOwn: boolean | undefined): string => (isOwn === true ? 'this agent\'s cap' : 'Settings cap')
   const spentWord = meter?.spentUsd === undefined ? 'not reported yet' : `$${meter.spentUsd.toFixed(2)}`
-  const spend = caps !== undefined && caps.usd > 0 ? `${spentWord} of $${caps.usd.toFixed(2)} — ${whose(caps.ownUsd)}` : `${spentWord} — no spend cap`
+  const spend = caps !== undefined && caps.usd > 0 ? `${spentWord} of $${caps.usd.toFixed(2)}, ${whose(caps.ownUsd)}` : `${spentWord}, no spend cap`
   const ctxWord = meter?.context === undefined ? 'not measured yet' : `${kTokens(meter.context)} tokens`
-  const context = caps !== undefined && caps.context > 0 ? `${ctxWord} of ${kTokens(caps.context)} — ${whose(caps.ownContext)}` : `${ctxWord} — no context cap`
+  const context = caps !== undefined && caps.context > 0 ? `${ctxWord} of ${kTokens(caps.context)}, ${whose(caps.ownContext)}` : `${ctxWord}, no context cap`
   const window = meter?.context !== undefined && meter.window !== undefined && meter.window > 0 ? windowWords(meter.context, meter.window) : undefined
   return { spend, context, ...(window === undefined ? {} : { window }), ...(meter?.held === undefined ? {} : { held: capSentence(meter.held) }), own }
 }
@@ -654,7 +654,7 @@ export function capsField(meter: NodeMeter | undefined, own: AgentCaps | undefin
 /** M380. "76k of 200k left — 62% used", under its `Window` label (which is why the value does not repeat the word). */
 export function windowWords(context: number, window: number): string {
   const used = contextUsedPct(context, window)
-  return `${kTokens(Math.max(0, window - context))} of ${kTokens(window)} left — ${used}% used`
+  return `${kTokens(Math.max(0, window - context))} of ${kTokens(window)} left, ${used}% used`
 }
 
 /**
@@ -673,7 +673,7 @@ export function captureProvenanceFields(
     { key: 'artifact-source', label: 'captured from', value: artifact.url },
     { key: 'artifact-at', label: 'captured', value: new Date(artifact.capturedAt).toLocaleString() },
     ...(artifact.taskId === undefined ? []
-      : [{ key: 'artifact-task', label: 'task', value: task?.title ?? 'no longer on this canvas — the capture keeps its page and time' }]),
+      : [{ key: 'artifact-task', label: 'task', value: task?.title ?? 'no longer on this canvas, but the capture keeps its page and time' }]),
     ...(artifact.sourcePanelId === undefined ? []
       : [{ key: 'artifact-pane', label: 'preview pane', value: pane === undefined ? 'closed since the capture' : railLabel(pane, undefined) }]),
     { key: 'artifact-id', label: 'capture', value: artifact.id }
@@ -984,7 +984,7 @@ export function buildInspectorModelBare(
         { key: 'tool-reach-commands', label: 'runs', value: lines.commands },
         { key: 'tool-reach-network', label: 'reaches', value: lines.network },
         { key: 'tool-reach-files', label: 'works in', value: lines.files },
-        ...(record.reviewed === false ? [{ key: 'tool-read', label: 'read', value: 'not yet — its action blocks are refused until you choose I\'ve read this on the panel' }] : [])
+        ...(record.reviewed === false ? [{ key: 'tool-read', label: 'read', value: 'not yet. Its action blocks are refused until you choose I\'ve read this on the panel' }] : [])
       ]
     })()
     return { kind: 'workflow', reviewable: false, state: { kind: 'workflow', status: undefined, dormant: false }, id: panel.rect.id, templateId: panel.workflow.templateId, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'template', label: 'template', value: panel.workflow.templateId }, ...reachFields] }
@@ -1021,7 +1021,7 @@ export function buildInspectorModelBare(
         { key: 'tool-reach-files', label: 'works in', value: lines.files },
         { key: 'tool-reach-network', label: 'reaches', value: lines.network },
         { key: 'tool-reach-commands', label: 'asks to run', value: lines.commands },
-        { key: 'tool-read', label: 'read', value: panel.preview?.reviewed === false ? 'not yet — nothing of it runs until you choose I\'ve read this on the pane' : 'yes' }
+        { key: 'tool-read', label: 'read', value: panel.preview?.reviewed === false ? 'not yet. Nothing of it runs until you choose I\'ve read this on the pane' : 'yes' }
       ]
     })()
     return { kind: 'browser', reviewable: false, state: { kind: 'browser', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
@@ -1038,7 +1038,7 @@ export function buildInspectorModelBare(
   // the one fact the heading cannot carry, so it alone keeps a row.
   if (isShapePanel(panel)) {
     return { kind: 'shape', shape: panel.shape, reviewable: false, state: { kind: 'shape', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), restartable: false, reattached: false, links, usage: NO_USAGE, fields: panel.shape.text === ''
-      ? [{ key: 'text', label: 'label', value: `empty — double-click the ${shapeFormWord(panel.shape.form)} to write one` }]
+      ? [{ key: 'text', label: 'label', value: `empty. Double-click the ${shapeFormWord(panel.shape.form)} to write one` }]
       : [] }
   }
   // M187. The sixteenth kind: what it IS and what changes it — its form, its
@@ -1047,7 +1047,7 @@ export function buildInspectorModelBare(
   if (isNotePanel(panel)) {
     return { kind: 'note', reviewable: false, state: { kind: 'note', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
       { key: 'form', label: 'form', value: panel.note.form },
-      { key: 'text', label: 'text', value: panel.note.text === '' ? 'empty — click the note to write in it' : noteSummary(panel.note.text, panel.note.form, 60) },
+      { key: 'text', label: 'text', value: panel.note.text === '' ? 'empty. Click the note to write in it' : noteSummary(panel.note.text, panel.note.form, 60) },
       ...(panel.note.tint === undefined ? [] : [{ key: 'tint', label: 'tint', value: panel.note.tint }])
     ] }
   }
@@ -1074,7 +1074,7 @@ export function buildInspectorModelBare(
       fields.push({ key: 'worktree', label: 'worktree', value: running.worktree.branch })
       fields.push({ key: 'worktree-path', label: 'worktree path', value: running.worktree.path })
     } else {
-      fields.push({ key: 'worktree', label: 'worktree', value: `refused — ${running.worktree.reason}` })
+      fields.push({ key: 'worktree', label: 'worktree', value: `refused: ${running.worktree.reason}` })
     }
   }
   // The agent knobs, each rendered only when SET. An absent knob renders no
@@ -1338,7 +1338,7 @@ function buildReviewFieldsInner(result: ReviewResult | undefined): ReviewFieldMo
     return {
       hidden: false,
       summary: 'unavailable',
-      note: `git could not open this repository — ${result.detail}`,
+      note: `git could not open this repository: ${result.detail}`,
       files: [],
       more: 0
     }
@@ -1359,7 +1359,7 @@ function buildReviewFieldsInner(result: ReviewResult | undefined): ReviewFieldMo
     return {
       hidden: false,
       summary: 'unattributable',
-      note: 'this repository could not be read against its baseline — restart the panel to start a new one',
+      note: 'this repository could not be read against its baseline; restart the panel to start a new one',
       files: [],
       more: 0
     }

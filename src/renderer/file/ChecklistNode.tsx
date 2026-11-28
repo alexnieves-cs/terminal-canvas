@@ -81,7 +81,7 @@ export function ChecklistNode(props: FileNodeProps & {
         const item = doc.items.find((i) => i.line === line), snapshot = getChat(target).snapshot
         if (!item || !item.text.trim()) return { kind: 'refused', reason: 'choose a nonempty task' }
         if (!agentsRef.current.some((a) => a.id === target) || !snapshot) return { kind: 'refused', reason: 'choose an open agent or teammate conversation' }
-        if (!['not-started', 'ready', 'exited'].includes(snapshot.status) || snapshot.pending.length) return { kind: 'refused', reason: 'that conversation is busy or waiting for approval — wait for it to finish' }
+        if (!['not-started', 'ready', 'exited'].includes(snapshot.status) || snapshot.pending.length) return { kind: 'refused', reason: 'that conversation is busy or waiting for approval; wait for it to finish' }
         const answer = await window.canvas.agentSession.send(target, item.text)
         const refusal = sendRefusalSentence(answer)
         if (refusal) return { kind: 'refused', reason: refusal }
@@ -122,7 +122,7 @@ export function ChecklistNode(props: FileNodeProps & {
         <button type="button" onClick={() => setReviewOpen(!reviewOpen)}>{reviewOpen ? 'Hide draft' : 'Review draft'}</button>
         {reviewOpen && <><pre data-checklist-draft>{disk.content}</pre><button type="button" disabled={readOnly || state.busy || !!disk.truncatedLines} onClick={() => { void session.accept().then((ok) => { if (ok) setReviewOpen(false) }) }}>Accept reviewed draft</button></>}
       </section>}
-      {disk === undefined ? <p>Reading checklist…</p> : disk.kind !== 'text' ? <p role="status">{disk.kind === 'unreadable' ? disk.detail : `File ${disk.kind} — restore the Markdown file, then refresh.`}</p> : disk.truncatedLines > 0 ? <p>File exceeds the viewing limit; editing is disabled.</p> : null}
+      {disk === undefined ? <p>Reading checklist…</p> : disk.kind !== 'text' ? <p role="status">{disk.kind === 'unreadable' ? disk.detail : `File ${disk.kind}. Restore the Markdown file, then refresh.`}</p> : disk.truncatedLines > 0 ? <p>File exceeds the viewing limit; editing is disabled.</p> : null}
       {/* M256. Completion as a PROGRESSION: a bar and the count it fills to,
           above the list it measures. Absent with no items — "0 of 0" is a
           zero-value statement. */}

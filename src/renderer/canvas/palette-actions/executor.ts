@@ -104,7 +104,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       // A plan must NAME the document: with no path the import opens the
       // system's chooser, and a modal nobody asked for in front of the
       // person is not a plan's to open. The chooser is the palette row's.
-      case 'import-docx': return a.path ? self.importDocx(a.path) : { kind: 'refused', reason: 'name the .docx to import — import-docx <path>; choosing one is the palette row\'s' }
+      case 'import-docx': return a.path ? self.importDocx(a.path) : { kind: 'refused', reason: 'name the .docx to import, as import-docx <path>. Choosing one is the palette row\'s' }
       case 'export-pack': return self.exportPack(a.path)
       case 'import-pack': return self.importPack(a.path)
       case 'sample-pack': return self.importSamplePack()
@@ -150,7 +150,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'workflow-add': {
         const kind = String(a.kind ?? '')
         // M183. The library's default for the kind, placed where a drop would land (to the right of the rightmost block).
-        if (!LIBRARY.some((e) => e.kind === kind)) return { kind: 'refused', reason: `${kind} is not a node kind — ${LIBRARY.map((e) => e.kind).join(', ')}` }
+        if (!LIBRARY.some((e) => e.kind === kind)) return { kind: 'refused', reason: `${kind} is not a node kind. Try ${LIBRARY.map((e) => e.kind).join(', ')}` }
         const saved = allTemplates(templateRowsRef.current).find((t) => t.id === a.template)
         const base = getDraft(a.template!)?.template ?? saved
         const at = base === undefined ? { dx: 0, dy: 0 } : placementFor(base)
@@ -174,7 +174,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'workflow-remove': { const r = self.editWorkflow(a.template!, { type: 'remove', key: String(a.key) }); return r.kind === 'ok' ? { kind: 'ran' } : r }
       case 'workflow-edge': {
         const trigger = String(a.trigger ?? '')
-        if (!(HANDOFF_TRIGGERS as readonly string[]).includes(trigger)) return { kind: 'refused', reason: `${trigger} is not a trigger — ${HANDOFF_TRIGGERS.join(', ')}` }
+        if (!(HANDOFF_TRIGGERS as readonly string[]).includes(trigger)) return { kind: 'refused', reason: `${trigger} is not a trigger. Try ${HANDOFF_TRIGGERS.join(', ')}` }
         const r = self.editWorkflow(a.template!, { type: 'edge', from: String(a.from), to: String(a.to), trigger: trigger as HandoffTrigger })
         return r.kind === 'ok' ? { kind: 'ran' } : r
       }
@@ -186,19 +186,19 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       case 'new-chat': {
         if (a.backend !== undefined && !isFirstLaunchBackend(a.backend)) return { kind: 'refused', reason: `choose one of ${Object.keys(FIRST_LAUNCH_ENGINES).join(' or ')}` }
         const readiness = onboardingReadiness(await window.canvas.env.report(), a.backend)
-        if (readiness.preferred === undefined) return { kind: 'refused', reason: 'no conversation engine is available — check readiness in the launcher' }
-        if (a.backend !== undefined && readiness.preferred !== a.backend) return { kind: 'refused', reason: `${a.backend} is not available — check readiness` }
+        if (readiness.preferred === undefined) return { kind: 'refused', reason: 'no conversation engine is available; check readiness in the launcher' }
+        if (a.backend !== undefined && readiness.preferred !== a.backend) return { kind: 'refused', reason: `${a.backend} is not available; check readiness` }
         const result = await beginNewChat({ backend: readiness.preferred })
         return result.kind === 'refused' ? result : { kind: 'ran', note: result.id ?? 'conversation opened' }
       }
       case 'focus': selectAndRaise(a.panel!); { const p = panelOf(a.panel!); if (p) centreOn(p.rect) } return { kind: 'ran' }
       case 'start': onSelectPanel(a.panel!); return { kind: 'ran' }
-      case 'spawn': { const row = presetRows.find((p) => p.id === a.preset); if (!row?.available) return { kind: 'refused', reason: `${a.preset} is not available — ${row === undefined ? 'no such preset' : 'its command is not on the PATH'}` }; return window.canvas.preset.spawnById(a.preset!).then((refusal) => (refusal === null ? { kind: 'ran' as const } : { kind: 'refused' as const, reason: refusal })) }
+      case 'spawn': { const row = presetRows.find((p) => p.id === a.preset); if (!row?.available) return { kind: 'refused', reason: `${a.preset} is not available: ${row === undefined ? 'no such preset' : 'its command is not on the PATH'}` }; return window.canvas.preset.spawnById(a.preset!).then((refusal) => (refusal === null ? { kind: 'ran' as const } : { kind: 'refused' as const, reason: refusal })) }
       case 'type': {
         const p = panelOf(a.panel!)
         if (p && isChatPanel(p)) { insertIntoComposer(p.rect.id, a.text ?? ''); return { kind: 'ran', note: 'inserted into the composer' } }
         const h = registry.get(a.panel!)?.handle
-        if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
+        if (!h) return { kind: 'refused', reason: `${a.panel} has no live session; start it first` }
         // paste, not write: bracketed paste is the one handoff an agent
         // TUI treats as text rather than keystrokes (the Jira rule).
         h.paste(a.text ?? '')
@@ -206,16 +206,16 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       }
       case 'submit': {
         const p = panelOf(a.panel!)
-        if (p && isChatPanel(p)) return { kind: 'refused', reason: 'a chat sends with `send <panel> <text>` — submit is for an agent terminal' }
+        if (p && isChatPanel(p)) return { kind: 'refused', reason: 'a chat sends with `send <panel> <text>`, and submit is for an agent terminal' }
         const h = registry.get(a.panel!)?.handle
-        if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
+        if (!h) return { kind: 'refused', reason: `${a.panel} has no live session; start it first` }
         h.write('\r')
         return { kind: 'ran' }
       }
       case 'send': {
         const answer = await window.canvas.agentSession.send(a.panel!, a.text ?? '')
         if (typeof answer === 'object') return { kind: 'refused', reason: answer.refused }
-        if (answer === 'no-session') return { kind: 'refused', reason: `${a.panel} has no chat session yet — open it first` }
+        if (answer === 'no-session') return { kind: 'refused', reason: `${a.panel} has no chat session yet; open it first` }
         if (answer.startsWith('refused')) return { kind: 'refused', reason: `the send was refused: ${answer}` }
         return { kind: 'ran', note: answer }
       }
@@ -279,7 +279,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
         // ledger). One setPanels, one history entry, locked panels stay, and
         // the same pack toward the view's shape as the palette row.
         const chosen = panelsRef.current.filter((p) => p.locked !== true)
-        if (chosen.length < 2) return { kind: 'refused', reason: 'nothing to tidy — fewer than two unlocked panels' }
+        if (chosen.length < 2) return { kind: 'refused', reason: 'nothing to tidy: fewer than two unlocked panels' }
         self.tidyPanels(chosen.map((p) => p.rect.id))
         return { kind: 'ran' }
       }
@@ -300,7 +300,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       // the workspace verb. Each binds by KEY and refuses by name.
       case 'dispatch': {
         const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
-        if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
+        if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item}; name one by its id or key` }
         const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
         if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${a.teammate}` }
         // M197. AWAITED. Before this the verb was called and `ran` was
@@ -321,18 +321,18 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
       // the choice, rather than picking one.
       case 'swarm': {
         const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
-        if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
+        if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item}; name one by its id or key` }
         const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
         if (mate === undefined) return { kind: 'refused', reason: `no agent profile is called ${a.teammate}` }
         const presetId = parseSwarmPresetId(a.arrangement)
-        if (presetId === null) return { kind: 'refused', reason: `no arrangement is called ${a.arrangement} — one of ${SWARM_PRESET_IDS.join(', ')}` }
+        if (presetId === null) return { kind: 'refused', reason: `no arrangement is called ${a.arrangement}. Try one of ${SWARM_PRESET_IDS.join(', ')}` }
         const answer = await window.canvas.board.repositories({ teammateId: mate.id })
         const repos: readonly StartWorkRepo[] = answer.kind === 'repos' ? answer.repos : []
         const wanted = item.key === undefined ? null : repoOfKey(item.key)
         const resolved = resolveRepository(repos, wanted)
         if (resolved.kind !== 'auto') {
           const needs = startWorkNeeds({ title: item.title, teammateId: mate.id }, { teammates: teammatesRef.current ?? [], repos, wanted })
-          return { kind: 'refused', reason: needs[0]?.why ?? `choose which of ${mate.name}'s repositories to work in — a plan cannot answer that` }
+          return { kind: 'refused', reason: needs[0]?.why ?? `choose which of ${mate.name}'s repositories to work in. A plan cannot answer that` }
         }
         const outcome = await self.startSwarm(item.id, mate.id, resolved.path, presetId)
         return outcome.kind === 'started' ? { kind: 'ran', note: `${SWARM_PRESETS[presetId].label} arrangement on ${outcome.panelId}` } : { kind: 'refused', reason: outcome.reason }
@@ -349,23 +349,23 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
           if (item === undefined) return { kind: 'refused', reason: `no work item is called ${what}` }
           self.markDone(item.id); return { kind: 'ran' }
         }
-        return { kind: 'refused', reason: `board ${String(a.op)} is not a verb — add <title> or done <id>` }
+        return { kind: 'refused', reason: `board ${String(a.op)} is not a verb. Try add <title> or done <id>` }
       }
       case 'workspace': { const ok = await switchWorkspace(a.workspace!); return ok ? { kind: 'ran' } : { kind: 'refused', reason: `could not switch to ${a.workspace}` } }
       case 'review': openReview(a.panel!); return { kind: 'ran' }
-      case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel… — its parameters are asked there' }
+      case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel…, where its parameters are asked there' }
       case 'close': onClosePanel(a.panel!); return { kind: 'ran' }
       case 'reset-canvas': void window.canvas.canvas.requestReset(); return { kind: 'ran', note: 'the reset asks once more in its own dialog' }
       case 'discard': {
         const p = panelOf(a.panel!)
-        if (!p || !isReviewPanel(p)) return { kind: 'refused', reason: `${a.panel} is not a review node — open one with \`review <panel>\` first` }
+        if (!p || !isReviewPanel(p)) return { kind: 'refused', reason: `${a.panel} is not a review node; open one with \`review <panel>\` first` }
         const result = await window.canvas.review.at(p.subject)
-        if (result.kind !== 'changes') return { kind: 'refused', reason: `nothing to discard — the review reads ${result.kind}` }
+        if (result.kind !== 'changes') return { kind: 'refused', reason: `nothing to discard, because the review reads ${result.kind}` }
         // M285. The identity this read carried rides along as `expect`, so main
         // refuses by name if the tree moved between the read and the write.
         const done = await window.canvas.review.discard({ root: result.root, baseline: p.subject.baselineSha, subjectId: p.subject.subjectId, paths: result.files.map((f) => f.path), ...(result.identity === undefined ? {} : { expect: result.identity }) })
         if (done.kind === 'discarded') return { kind: 'ran', note: `${result.files.length} files` }
-        return { kind: 'refused', reason: done.kind === 'nothing-to-discard' ? 'nothing to discard' : done.kind === 'subject-moved' ? 'the changes moved since they were read — nothing was discarded' : done.detail }
+        return { kind: 'refused', reason: done.kind === 'nothing-to-discard' ? 'nothing to discard' : done.kind === 'subject-moved' ? 'the changes moved since they were read, so nothing was discarded' : done.detail }
       }
       case 'remove-worktree': {
         const done = await window.canvas.worktree.remove(a.worktree!)
@@ -396,7 +396,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
           kind: 'text',
           // The mode names itself on the line (the critic could not tell it from
           // Rename), and Enter is `run`, not `save`.
-          label: refused ? `Run a verb — ${refused}` : 'Run a verb — e.g. focus n3 · type n3 hello · close n3; several with ;',
+          label: refused ? `Run a verb: ${refused}` : 'Run a verb, for example focus n3 · type n3 hello · close n3; several with ;',
           ...(grammar !== undefined ? { hint: grammar } : {}),
           verb: 'run',
           initial,
@@ -417,7 +417,7 @@ export function executorActions(ctx: ActionCtx): ExecutorActions {
             if (planIsDestructive(built.plan)) {
               setInputMode({
                 kind: 'confirm',
-                label: `${describePlan(built.plan).join(' · ')} — run it?`,
+                label: `${describePlan(built.plan).join(' · ')}. Run it?`,
                 initial: '',
                 submit: () => run(true)
               })

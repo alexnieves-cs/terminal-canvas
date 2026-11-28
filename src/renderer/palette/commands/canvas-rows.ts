@@ -87,10 +87,10 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   // and stands down behind a covering view (shouldIgnoreKeys), but these rows
   // call undoCanvas bare — a person in a note who typed "undo" would have
   // rewound a panel spawn behind the text they meant to fix.
-  const historyOwner = ctx.draftHeld === true ? 'the editor has its own ⌘Z — this would rewind the canvas behind it'
-    : ctx.canvasCovered === true ? 'the canvas is covered — go back to it to undo there' : undefined
+  const historyOwner = ctx.draftHeld === true ? 'the editor has its own ⌘Z, and this would rewind the canvas behind it'
+    : ctx.canvasCovered === true ? 'the canvas is covered; go back to it to undo there' : undefined
   out.push(
-    withReason({ id: 'canvas.undo', title: 'Undo canvas change', subtitle: 'the last change to the canvas — a move, a close, a spawn', searchText: 'undo revert back history', group: 'canvas', shortcut: '⌘Z', ...hiddenAtRestIf(ctx.canUndo === false), run: () => actions.undoCanvas() },
+    withReason({ id: 'canvas.undo', title: 'Undo canvas change', subtitle: 'the last change to the canvas: a move, a close, a spawn', searchText: 'undo revert back history', group: 'canvas', shortcut: '⌘Z', ...hiddenAtRestIf(ctx.canUndo === false), run: () => actions.undoCanvas() },
       historyOwner ?? (ctx.canUndo === false ? 'nothing to undo' : undefined)),
     withReason({ id: 'canvas.redo', title: 'Redo canvas change', subtitle: 'the change Undo took back', searchText: 'redo again history', group: 'canvas', shortcut: '⌘⇧Z', ...hiddenAtRestIf(ctx.canRedo === false), run: () => actions.redoCanvas() },
       historyOwner ?? (ctx.canRedo === false ? 'nothing to redo' : undefined))
@@ -146,7 +146,7 @@ export function canvasRows(ctx: PaletteContext): Command[] {
     subtitle: 'a 60-second time-lapse of what the agents did while you were away, saved where you choose',
     searchText: 'film night time-lapse timelapse video last night replay movie overnight',
     group: 'canvas',
-    run: () => { actions.say(runLastNight() ? 'Rendering last night\'s film — it is saved when it is done' : 'the night film is not available in this window') }
+    run: () => { actions.say(runLastNight() ? 'Rendering last night\'s film. It is saved when it is done' : 'the night film is not available in this window') }
   })
   out.push({
     id: 'learn.open',
@@ -228,13 +228,13 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   // The UX pass. A person's OWN recipes were reachable only from New task ›
   // Options; each is a row now, beside the built-ins, opening the same sheet.
   for (const r of ctx.savedRecipes ?? []) {
-    out.push({ id: `recipe.saved.${r.id}`, ...recipeRow(r.id, `${r.name}…`, 'your saved recipe — opens New task with it filled in', `saved ${r.name}`) })
+    out.push({ id: `recipe.saved.${r.id}`, ...recipeRow(r.id, `${r.name}…`, 'your saved recipe. Opens New task with it filled in', `saved ${r.name}`) })
   }
   // The UX pass. Arrangements (M104's lineups) were reachable only from a
   // select inside the panel sheet; each opens that sheet on it now.
   for (const id of LINEUP_IDS) {
     out.push({
-      id: `arrangement.${id}`, title: `New panels as ${LINEUPS[id].label}…`, subtitle: `arrangement — ${LINEUPS[id].hint}`,
+      id: `arrangement.${id}`, title: `New panels as ${LINEUPS[id].label}…`, subtitle: `arrangement: ${LINEUPS[id].hint}`,
       // Found by typing, not at rest: the resting list's budget (`palette.rest.1`).
       searchText: `arrangement lineup layout seats ${id} ${LINEUPS[id].label}`, group: 'spawn', hiddenAtRest: true,
       run: () => actions.beginSpawnSheet(undefined, undefined, { what: lineupWhatId(id) })
@@ -243,7 +243,7 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   // The UX pass. Routines were reachable only from the agent profiles pane.
   for (const r of ctx.routines ?? []) {
     out.push({
-      id: `routine.run.${r.id}`, title: `Run routine ${r.name} now`, subtitle: 'a scheduled run, started early — its schedule is unchanged',
+      id: `routine.run.${r.id}`, title: `Run routine ${r.name} now`, subtitle: 'a scheduled run, started early. Its schedule is unchanged',
       searchText: `routine run now schedule ${r.name}`, group: 'canvas', hiddenAtRest: true, run: () => actions.runRoutine(r.id)
     })
   }
@@ -252,7 +252,7 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   out.push({
     id: 'repo.setup',
     title: 'Repository setup…',
-    subtitle: 'how this repository installs, serves, checks and previews — every new lane inherits it',
+    subtitle: 'how this repository installs, serves, checks and previews. Every new lane inherits it',
     searchText: 'repository setup install dependencies services ports checks preview environment prepare lane',
     group: 'canvas',
     run: () => actions.beginRepoSetup()
@@ -262,7 +262,7 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   out.push({
     id: 'editor.open',
     title: 'Open in editor',
-    subtitle: 'the selected file, or the folder its agent works in — in your editor (Settings ▸ Open files in)',
+    subtitle: 'the selected file, or the folder its agent works in, opened in your editor (Settings ▸ Open files in)',
     searchText: 'open in editor vscode code cursor zed ide worktree file line external',
     group: 'canvas',
     shortcut: '⌘⇧E',
@@ -285,7 +285,7 @@ export function canvasRows(ctx: PaletteContext): Command[] {
   out.push(withReason({
     id: 'update.check',
     title: 'Check for updates…',
-    subtitle: ctx.update === undefined || ctx.update === null ? 'ask GitHub whether a newer release is published — nothing is installed' : updateSentence(ctx.update),
+    subtitle: ctx.update === undefined || ctx.update === null ? 'ask GitHub whether a newer release is published. Nothing is installed' : updateSentence(ctx.update),
     searchText: 'update check release version newer github download notice',
     group: 'canvas',
     run: () => actions.checkForUpdates()

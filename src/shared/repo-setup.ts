@@ -268,10 +268,10 @@ export function servicesText(services: readonly SetupService[]): string {
 /** One line for Start work: what a new lane of this repository will get before its agent starts. */
 export function setupLine(read: { kind: 'saved' | 'draft'; setup: RepoSetup } | { kind: 'not-a-repo' } | null): string {
   if (read === null) return 'reading the repository setup…'
-  if (read.kind === 'not-a-repo') return 'not a repository — no setup applies'
+  if (read.kind === 'not-a-repo') return 'not a repository, so no setup applies'
   const s = read.setup
-  if (read.kind === 'draft') return isEmptySetup(s) ? 'no setup saved — the agent starts in a bare worktree' : `no setup saved — detected ${[...s.install, ...s.checks].slice(0, 2).map((c) => `\`${c}\``).join(', ')}; save it to prepare every lane`
-  if (isEmptySetup(s)) return 'the saved setup is empty — the agent starts in a bare worktree'
+  if (read.kind === 'draft') return isEmptySetup(s) ? 'no setup saved, so the agent starts in a bare worktree' : `no setup saved; detected ${[...s.install, ...s.checks].slice(0, 2).map((c) => `\`${c}\``).join(', ')}; save it to prepare every lane`
+  if (isEmptySetup(s)) return 'the saved setup is empty, so the agent starts in a bare worktree'
   const parts: string[] = []
   if (s.install.length > 0) parts.push(`prepares with ${s.install.map((c) => `\`${c}\``).join(' then ')}`)
   if (s.services.length > 0) parts.push(`${s.services.length} ${s.services.length === 1 ? 'service' : 'services'} with their own ports`)

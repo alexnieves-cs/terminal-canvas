@@ -133,7 +133,7 @@ export function planCombine(lanes: readonly CombineLane[], edges: readonly Combi
       const after = [...(preds.get(next.id) ?? [])]
       if (after.length > 0) {
         const names = after.map((p) => changed.find((l) => l.id === p)?.label ?? p)
-        reasons.set(next.id, `after ${names.join(', ')} — a hand-off link says so`)
+        reasons.set(next.id, `after ${names.join(', ')}, because a hand-off link says so`)
       } else if ((overlapCount.get(next.id) ?? 0) === 0) {
         reasons.set(next.id, 'touches no file another lane changed')
       } else {
@@ -151,9 +151,9 @@ export function planCombine(lanes: readonly CombineLane[], edges: readonly Combi
   })
 
   const summary = changed.length === 0 ? 'No lane has changes to combine.'
-    : changed.length === 1 ? `One lane has changes (${changed[0].label}) — nothing to combine it with.`
-      : overlaps.length === 0 ? `${changed.length} lanes change separate files — they should combine cleanly; a combined check confirms it.`
-        : `${changed.length} lanes, ${overlaps.length} ${overlaps.length === 1 ? 'file' : 'files'} changed in more than one — review ${overlaps.length === 1 ? 'it' : 'them'} before combining.`
+    : changed.length === 1 ? `One lane has changes (${changed[0].label}), so there is nothing to combine it with.`
+      : overlaps.length === 0 ? `${changed.length} lanes change separate files, so they should combine cleanly; a combined check confirms it.`
+        : `${changed.length} lanes, ${overlaps.length} ${overlaps.length === 1 ? 'file' : 'files'} changed in more than one. Review ${overlaps.length === 1 ? 'it' : 'them'} before combining.`
   return { lanes: changed, overlaps, order, cycle, summary }
 }
 
@@ -216,5 +216,5 @@ export function combineRunLine(r: CombineRunResult, labelOf: (id: string) => str
     const where = r.conflict.paths.length > 0 ? ` in ${r.conflict.paths.join(', ')}` : ''
     return `${labelOf(r.conflict.lane)} does not apply on top of ${r.applied.length === 0 ? 'the main tree' : r.applied.map(labelOf).join(' + ')}${where}.`
   }
-  return `${r.applied.length} lanes applied cleanly on ${r.base.slice(0, 7)} — run the checks on the combined tree.`
+  return `${r.applied.length} lanes applied cleanly on ${r.base.slice(0, 7)}. Run the checks on the combined tree.`
 }

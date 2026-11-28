@@ -38,7 +38,7 @@ export const ROUTINE_MIN_MS = 60_000
 
 export const ROUTINE_PROMPT = 'You are running as a scheduled routine with nobody watching. Routines gather, analyze, draft and prepare; irreversible actions stay behind confirmation — do not delete, force-push, publish, pay, or send anything outward. Leave what you prepared where a person will find it and say what you did.'
 
-export const ROUTINE_LIMIT_WORD = 'runs while the app is open — not while it is closed'
+export const ROUTINE_LIMIT_WORD = 'runs while the app is open, not while it is closed'
 
 export function carryRoutine(r: PersistedRoutine): PersistedRoutine {
   return {
@@ -61,21 +61,21 @@ export function carryRoutine(r: PersistedRoutine): PersistedRoutine {
  */
 export function routineRefusal(r: PersistedRoutine, teammate: { name: string; scheduling: boolean; places?: readonly string[] } | undefined, facts: PlanFacts = { panels: [] }): string | null {
   if (r.name.trim() === '') return 'a routine needs a name'
-  if (teammate === undefined) return `no agent profile is called ${r.teammateId} — pick one in Agent profiles`
-  if (!teammate.scheduling) return `${teammate.name} may not be scheduled — allow scheduling on the teammate first`
-  if (teammate.places !== undefined && teammate.places.length === 0) return `${teammate.name} has no places — a routine's chat needs a folder to work in; add one first`
+  if (teammate === undefined) return `no agent profile is called ${r.teammateId}; pick one in Agent profiles`
+  if (!teammate.scheduling) return `${teammate.name} may not be scheduled; allow scheduling on the teammate first`
+  if (teammate.places !== undefined && teammate.places.length === 0) return `${teammate.name} has no places, and a routine's chat needs a folder to work in; add one first`
   if (!Number.isFinite(r.everyMs) || r.everyMs < ROUTINE_MIN_MS) return `the shortest interval is ${ROUTINE_MIN_MS / 60_000} minute${ROUTINE_MIN_MS === 60_000 ? '' : 's'}`
   if (r.everyMs > TIMER_MAX_MS) return TIMER_MAX_WORD
-  if (r.prompt.trim() === '') return 'a routine needs a prompt — what the chat is asked each time'
+  if (r.prompt.trim() === '') return 'a routine needs a prompt: what the chat is asked each time'
   if (r.plan !== undefined && r.plan.trim() !== '') {
     const inputs = parsePlanLine(r.plan)
     for (const input of inputs) {
       const built = buildPlan([input], { panels: facts.panels.length === 0 ? [{ id: input.args[0] ?? 'x', kind: 'chat' }] : facts.panels, presets: undefined, templates: undefined, worktrees: undefined, workspaces: undefined })
       if (built.kind === 'refused') {
         // An unknown verb is refused as itself; a destructive one is the point.
-        return `the plan line was refused — ${built.reason}`
+        return `the plan line was refused: ${built.reason}`
       }
-      if (planIsDestructive(built.plan)) return `${input.verb} is a destructive verb — a routine runs unattended and cannot confirm it; take it out of the plan line`
+      if (planIsDestructive(built.plan)) return `${input.verb} is a destructive verb, and a routine runs unattended and cannot confirm it; take it out of the plan line`
     }
   }
   return null

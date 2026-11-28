@@ -34,7 +34,7 @@ module.exports = [
             steps = (task.criteria ?? []).map((item, index) => ({
               id: String(index),
               title: item.text,
-              word: item.done ? 'Finished — not verified' : 'Working',
+              word: item.done ? 'Finished, not verified' : 'Working',
               tone: item.done ? 'done' : 'working'
             }))
           }

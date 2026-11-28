@@ -15,7 +15,7 @@ export function OrchCriteria({ criteria }: { criteria: readonly string[] }): JSX
   return (
     <div className="orch__criteria" data-orch-criteria={criteria.length}>
       <div className="orch__section-title">Acceptance criteria</div>
-      <ul className="orch__criteria-list" title="Written by a person on the task; no verdict is recorded per criterion — the workbench's Checks tab reads the ledger">
+      <ul className="orch__criteria-list" title="Written by a person on the task; no verdict is recorded per criterion. The workbench's Checks tab reads the ledger">
         {criteria.map((c, i) => <li key={i} className="orch__criterion"><span className="orch__criterion-mark" aria-hidden="true" />{c}</li>)}
       </ul>
     </div>

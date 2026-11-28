@@ -390,14 +390,14 @@ function itemNote(item: JobItem, status: ItemStatus): string {
   switch (status) {
     case 'done': {
       const f = item.attempts.find((a) => a.outcome === 'finished')
-      return f?.evidence?.source === 'transcript' ? 'finished — found in its transcript' : 'finished'
+      return f?.evidence?.source === 'transcript' ? 'finished, found in its transcript' : 'finished'
     }
     case 'running': return 'running'
     case 'pending': return 'not started'
     case 'blocked': return 'waits on an unfinished item'
     case 'abandoned': return 'left undone'
     case 'safe-retry': return last?.outcome === 'mint-refused' ? `no worker was made${last.why ? ` — ${last.why}` : ''}` : last?.outcome === 'send-refused' ? `its worker was never sent the item${last.why ? ` — ${last.why}` : ''}` : 'stopped before its item was sent'
-    case 'needs-you': return last?.outcome === 'exited' ? 'its worker exited mid-turn — it may have changed files' : `interrupted mid-turn${last?.why ? ` (${last.why})` : ''} — it may have changed files`
+    case 'needs-you': return last?.outcome === 'exited' ? 'its worker exited mid-turn and may have changed files' : `interrupted mid-turn${last?.why ? ` (${last.why})` : ''} and may have changed files`
   }
 }
 
@@ -424,16 +424,16 @@ export function jobAccount(job: JobRecord, live: boolean, repo?: RepoNow | null)
   const lines: string[] = []
   const total = job.items.length
   const head = `${job.key}: ${counts.done} of ${plural(total, 'item')} finished`
-  if (live) lines.push(`${head}, ${counts.running} running — it kept going in the background`)
+  if (live) lines.push(`${head}, ${counts.running} running. It kept going in the background`)
   else lines.push(`${head}${job.why ? ` — ${job.why}` : ''}`)
-  if (counts['needs-you'] > 0) lines.push(`${plural(counts['needs-you'], 'item was', 'items were')} mid-turn and may have changed files — look before retrying`)
-  if (counts['safe-retry'] > 0) lines.push(`${plural(counts['safe-retry'], 'item')} never reached a worker — safe to retry`)
+  if (counts['needs-you'] > 0) lines.push(`${plural(counts['needs-you'], 'item was', 'items were')} mid-turn and may have changed files; look before retrying`)
+  if (counts['safe-retry'] > 0) lines.push(`${plural(counts['safe-retry'], 'item')} never reached a worker, so they are safe to retry`)
   if (counts.pending > 0) lines.push(`${plural(counts.pending, 'item')} not started`)
   if (repo !== undefined && repo !== null && job.repoAtStart !== undefined) {
     const moved = repo.head !== job.repoAtStart.head
     lines.push(`${job.node.cwd}: ${moved ? `HEAD moved ${job.repoAtStart.head.slice(0, 7)} → ${repo.head.slice(0, 7)}` : 'HEAD unchanged'}, ${plural(repo.dirty, 'uncommitted change')} now (${job.repoAtStart.dirty} when the job started)`)
   }
-  if (job.joined === true && !live && counts.done < total) lines.push('a collect waits on every item at once, so this block cannot resume part-way — run the workflow again')
+  if (job.joined === true && !live && counts.done < total) lines.push('a collect waits on every item at once, so this block cannot resume part-way; run the workflow again')
   const choices: RecoveryChoice[] = []
   if (live) choices.push('reconnect')
   else if (job.state !== 'done' && job.state !== 'abandoned') {
@@ -456,10 +456,10 @@ export type RecoveryPlan = { kind: 'ok'; indices: number[] } | { kind: 'refused'
  *   refuses the WHOLE plan by name: half a plan is a silent surprise.
  */
 export function recoveryPlan(job: JobRecord, live: boolean, choice: 'continue' | 'retry', named?: readonly number[]): RecoveryPlan {
-  if (live) return { kind: 'refused', reason: `${job.key} is still running — reconnect to it instead` }
+  if (live) return { kind: 'refused', reason: `${job.key} is still running; reconnect to it instead` }
   if (job.state === 'done') return { kind: 'refused', reason: `${job.key} already finished every item` }
   if (job.state === 'abandoned') return { kind: 'refused', reason: `${job.key} was abandoned` }
-  if (job.joined === true) return { kind: 'refused', reason: `${job.key} hands off into a collect that waits on every item at once — run the workflow again instead` }
+  if (job.joined === true) return { kind: 'refused', reason: `${job.key} hands off into a collect that waits on every item at once; run the workflow again instead` }
   const status = new Map(job.items.map((i) => [i.index, itemStatus(i, job, false)]))
   if (choice === 'continue') {
     const indices = job.items.filter((i) => status.get(i.index) === 'pending').map((i) => i.index)
@@ -467,14 +467,14 @@ export function recoveryPlan(job: JobRecord, live: boolean, choice: 'continue' |
   }
   if (named === undefined || named.length === 0) {
     const indices = job.items.filter((i) => status.get(i.index) === 'safe-retry').map((i) => i.index)
-    return indices.length === 0 ? { kind: 'refused', reason: `${job.key} has no item that is safe to retry without looking — name the ones to run again` } : { kind: 'ok', indices }
+    return indices.length === 0 ? { kind: 'refused', reason: `${job.key} has no item that is safe to retry without looking; name the ones to run again` } : { kind: 'ok', indices }
   }
   const out: number[] = []
   for (const idx of named) {
     const s = status.get(idx)
     const label = job.items.find((i) => i.index === idx)?.item ?? `item ${idx}`
     if (s === undefined) return { kind: 'refused', reason: `${job.key} has no item ${idx}` }
-    if (s === 'done') return { kind: 'refused', reason: `${label} already finished — it is not run twice` }
+    if (s === 'done') return { kind: 'refused', reason: `${label} already finished, and it is not run twice` }
     if (s === 'blocked') return { kind: 'refused', reason: `${label} waits on an item that has not finished` }
     if (s === 'abandoned') return { kind: 'refused', reason: `${label} was left undone` }
     if (!out.includes(idx)) out.push(idx)

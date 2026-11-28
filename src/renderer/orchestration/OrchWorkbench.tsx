@@ -280,10 +280,10 @@ function useChanges(subject: BenchSubject | null, active: boolean, refresh: numb
 function changesWords(result: ReviewResult, subject: BenchSubject): string {
   const since = subject.kind === 'session' ? 'since this session started' : subject.lane === undefined ? 'since its conversation started (a shared directory, not its own worktree)' : 'since the lane forked from the main tree'
   if (result.kind === 'changes') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} · +${result.added} −${result.removed} ${since}`
-  if (result.kind === 'shared') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} in a repository ${result.panelCount} sessions share — authorship is ambiguous, so none is attributed to this one`
+  if (result.kind === 'shared') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} in a repository ${result.panelCount} sessions share. Authorship is ambiguous, so none is attributed to this one`
   if (result.kind === 'clean') return `No changes ${since}`
   if (result.kind === 'never-started') return 'This session has not run yet, so it has no baseline to review against'
-  if (result.kind === 'not-a-repo') return 'Not in a git repository — there is no diff to review, and no revision to bind a check to'
+  if (result.kind === 'not-a-repo') return 'Not in a git repository, so there is no diff to review, and no revision to bind a check to'
   if (result.kind === 'git-missing') return 'git is not available, so changes cannot be read'
   if (result.kind === 'baseline-lost') return 'The starting point of this review is gone from the repository'
   return `git could not read the repository: ${result.detail}`
@@ -414,7 +414,7 @@ function useChecks(subject: BenchSubject | null, active: boolean, panels: readon
     // hidden: an armed watcher with no panel and no run yet has no command
     // text anywhere this page can reach, so it is counted, not invented.
     if (rows.hiddenUnrun === 0) return got
-    const sentence = `${rows.hiddenUnrun} watcher${rows.hiddenUnrun === 1 ? '' : 's'} armed without a panel on this canvas ${rows.hiddenUnrun === 1 ? 'has' : 'have'} not run yet — past runs are listed from the record, but a watcher with no run has no command to show here.`
+    const sentence = `${rows.hiddenUnrun} watcher${rows.hiddenUnrun === 1 ? '' : 's'} armed without a panel on this canvas ${rows.hiddenUnrun === 1 ? 'has' : 'have'} not run yet. Past runs are listed from the record, but a watcher with no run has no command to show here.`
     return { ...got, unavailable: [...(got.unavailable ?? []), sentence] }
   }, [subject, rows, key, raw, identities, chat.turns])
   return { evidence, identities }
@@ -526,7 +526,7 @@ function sourceWords(source: OrchEventSource): string {
 }
 
 function gapWords(row: GapRow): string {
-  return `${row.dropped} earlier ${row.dropped === 1 ? 'entry is' : 'entries are'} missing — the record was trimmed at its size limit on ${stamp(row.at)}. This is a gap, not a quiet period.`
+  return `${row.dropped} earlier ${row.dropped === 1 ? 'entry is' : 'entries are'} missing. The record was trimmed at its size limit on ${stamp(row.at)}. This is a gap, not a quiet period.`
 }
 
 /**
@@ -536,12 +536,12 @@ function gapWords(row: GapRow): string {
  */
 function recordWords(read: LedgerTimelineRead): string {
   const older = read.reachedStart ? 'This is the beginning of the record.' : `Older entries exist beyond the ${TIMELINE_ROWS} shown.`
-  return `The durable record — what was written to disk, not the live feed. ${older}`
+  return `The durable record: what was written to disk, not the live feed. ${older}`
 }
 
 function TimelineTab({ read, subject }: { read: TimelineRead; subject: BenchSubject }): JSX.Element {
   if (read.kind === 'loading' || read.kind === 'idle') return <p className="orch__caption" role="status">Reading the record…</p>
-  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-timeline-kind="unwired">The durable record could not be read in this build, so there is no history to show — this is not a claim that nothing happened.</p>
+  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-timeline-kind="unwired">The durable record could not be read in this build, so there is no history to show and nothing is known about what happened.</p>
   const { entries } = read.read
   if (entries.length === 0) {
     return (
@@ -606,7 +606,7 @@ function TimelineTab({ read, subject }: { read: TimelineRead; subject: BenchSubj
  */
 function ArtifactsTab({ read, subject, onOpenPath }: { read: TimelineRead; subject: BenchSubject; onOpenPath?: (path: string) => void }): JSX.Element {
   if (read.kind === 'loading' || read.kind === 'idle') return <p className="orch__caption" role="status">Reading the record…</p>
-  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-artifacts-kind="unwired">The durable record could not be read in this build, so the artifacts it holds cannot be listed — this is not a claim that none were produced.</p>
+  if (read.kind === 'unwired') return <p className="orch__review-words" data-orch-artifacts-kind="unwired">The durable record could not be read in this build, so the artifacts it holds cannot be listed, and whether any were produced is unknown.</p>
   const produced = read.read.entries.flatMap((e) => (e.kind === 'event' && e.row.event === 'artifact' ? [e.row] : []))
   const trimmed = read.read.entries.some((e) => e.kind === 'gap')
   if (produced.length === 0) {
@@ -639,7 +639,7 @@ function ArtifactsTab({ read, subject, onOpenPath }: { read: TimelineRead; subje
               // gets a sentence: the count survived, the paths did not. An
               // empty list under the heading would read as "it produced
               // nothing", which is the opposite of what the row says.
-              <p className="orch__caption" data-orch-artifact-pathless>This execution recorded what it produced, but not which files — the paths were not available when the record was written.</p>
+              <p className="orch__caption" data-orch-artifact-pathless>This execution recorded what it produced, but not which files. The paths were not available when the record was written.</p>
             )}
             <ul className="orch__review-files" aria-label="Artifacts">
               {run.rows.flatMap((row) => (row.paths ?? []).map((path) => (
@@ -715,22 +715,22 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const handoff = subject?.kind === 'task' && taskHandoffOf !== undefined ? taskHandoffOf(subject.itemId) : undefined
   const subjectGone = pinned !== null && (pinned.kind === 'session' ? !panels.some((p) => p.rect.id === pinned.id) : !workItems.some((w) => w.id === pinned.itemId))
   const boundLine = pinned !== null
-    ? `Pinned to ${pinned.title}${subjectGone ? ' — which is no longer on this canvas' : ''}`
+    ? `Pinned to ${pinned.title}${subjectGone ? ', which is no longer on this canvas' : ''}`
     : current !== null ? `Bound to the selection · ${current.title}` : 'Bound to the selection · nothing selected'
 
   /** M285's freshness, in words, from the canvas's own handoff. */
   const freshness = ((): { word: string; standing: string } | null => {
     if (subject === null || subject.kind !== 'task') return null
-    if (subject.lane === undefined) return { standing: 'no-lane', word: subject.chatId === undefined ? 'Not started — no conversation and no lane yet, so there is nothing to review' : 'No review mark is kept for a task in a shared directory — its changes are its conversation\'s, read since that started' }
-    if (handoff === undefined) return { standing: 'unread', word: 'Freshness not read yet — the canvas has not judged this lane' }
+    if (subject.lane === undefined) return { standing: 'no-lane', word: subject.chatId === undefined ? 'Not started. There is no conversation and no lane yet, so there is nothing to review' : 'No review mark is kept for a task in a shared directory. Its changes are its conversation\'s, read since that started' }
+    if (handoff === undefined) return { standing: 'unread', word: 'Freshness not read yet. The canvas has not judged this lane' }
     const files = item?.reviewed?.files
     switch (handoff.standing) {
       case 'none': return { standing: 'none', word: 'Not reviewed yet' }
-      case 'current': return { standing: 'current', word: `Reviewed · current — you read ${files ?? 0} file${files === 1 ? '' : 's'} and the content has not moved since` }
+      case 'current': return { standing: 'current', word: `Reviewed · current. You read ${files ?? 0} file${files === 1 ? '' : 's'} and the content has not moved since` }
       // `stale` is also what a mark reads when the CURRENT read carries no identity —
       // then nothing moved that this app saw, and the words must not say it did.
-      case 'stale': return { standing: 'stale', word: handoff.changes?.identity === undefined ? `Reviewed · stale — the changes could not be re-read, so the mark over ${files ?? 0} file${files === 1 ? '' : 's'} cannot be confirmed` : `Reviewed · stale — the content has moved since you read ${files ?? 0} file${files === 1 ? '' : 's'}` }
-      default: return { standing: 'unknown', word: 'Reviewed once · freshness unknown — that mark predates content identity; mark again to make it checkable' }
+      case 'stale': return { standing: 'stale', word: handoff.changes?.identity === undefined ? `Reviewed · stale. The changes could not be re-read, so the mark over ${files ?? 0} file${files === 1 ? '' : 's'} cannot be confirmed` : `Reviewed · stale. The content has moved since you read ${files ?? 0} file${files === 1 ? '' : 's'}` }
+      default: return { standing: 'unknown', word: 'Reviewed once · freshness unknown. That mark predates content identity; mark again to make it checkable' }
     }
   })()
   const canMark = subject?.kind === 'task' && handoff !== undefined && handoff.changes !== undefined && (handoff.state === 'ready' || handoff.state === 'shared') && onPatchWorkItem !== undefined
@@ -749,9 +749,9 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
   const writable = ((): { kind: 'ok'; root: string; base: string | undefined; identity: ReviewIdentity; paths: string[]; subjectId: string | null } | { kind: 'blocked'; reason: string } | null => {
     if (subject === null || changes.read.kind !== 'result') return null
     const r = changes.read.result
-    if (r.kind === 'shared') return { kind: 'blocked', reason: `commit and discard are blocked here by name — ${r.panelCount} sessions share this directory, so the diff is not this subject's alone; commit from the session that wrote it` }
+    if (r.kind === 'shared') return { kind: 'blocked', reason: `commit and discard are blocked here by name: ${r.panelCount} sessions share this directory, so the diff is not this subject's alone; commit from the session that wrote it` }
     if (r.kind !== 'changes') return null
-    if (r.identity === undefined) return { kind: 'blocked', reason: 'commit and discard need the content identity this read did not carry — refresh; if it stays absent, git could not hash the tree' }
+    if (r.identity === undefined) return { kind: 'blocked', reason: 'commit and discard need the content identity this read did not carry. Refresh, and if it stays absent, git could not hash the tree' }
     return { kind: 'ok', root: changes.read.repoRoot, base: changes.read.base, identity: r.identity, paths: r.files.map((f) => f.path), subjectId: subject.kind === 'session' ? subject.id : subject.chatId ?? null }
   })()
   // A discard restores to the review's BASE — a lane's fork point, a session's
@@ -764,12 +764,12 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
     const asked = subjectKey
     setWriteDraft({ key: asked, kind: 'discard', message: '', busy: true })
     let gate: string | null = null
-    if (writable.base === undefined) gate = 'no revision to restore to — the review\'s starting point could not be read'
+    if (writable.base === undefined) gate = 'no revision to restore to, because the review\'s starting point could not be read'
     else if (writable.subjectId === null) gate = 'a discard needs the task\'s conversation to judge who else writes here, and this task has none'
     else if (typeof window.canvas?.review?.identity === 'function') {
       const atHead = await window.canvas.review.identity({ root: writable.root, base: 'HEAD' }).catch(() => null)
       if (atHead === null) gate = 'the tree could not be re-read against HEAD, so nothing is restored'
-      else if (atHead.content !== writable.identity.content) gate = `HEAD has moved past the point this review compares against (${writable.base.slice(0, 10)}) — a commit was made since; restoring to that point would undo committed work in the tree, so discard from the review node on the canvas instead`
+      else if (atHead.content !== writable.identity.content) gate = `HEAD has moved past the point this review compares against (${writable.base.slice(0, 10)}). A commit was made since; restoring to that point would undo committed work in the tree, so discard from the review node on the canvas instead`
     }
     if (subjectKeyRef.current !== asked) return
     if (gate !== null) { setWriteDraft((d) => (d?.key === asked ? null : d)); setWriteOutcome({ key: asked, outcome: { kind: 'refused', sentence: gate } }); return }
@@ -782,7 +782,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
     const out = draft.kind === 'commit'
       ? await orchCommit({ root: writable.root, paths: writable.paths, message: draft.message, identity: writable.identity })
       : writable.base === undefined || writable.subjectId === null
-        ? { kind: 'refused' as const, sentence: 'the discard gate did not run — refresh and try again' }
+        ? { kind: 'refused' as const, sentence: 'the discard gate did not run; refresh and try again' }
         : await orchDiscard({ root: writable.root, baseline: writable.base, subjectId: writable.subjectId, paths: writable.paths, identity: writable.identity })
     // Landed for the subject it was asked for, or dropped: a late outcome must
     // not paint under another subject's controls.
@@ -868,7 +868,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
           <button type="button" className="orch__mini" data-orch-bench-refresh {...shellControl(() => { setLocalRefresh((n) => n + 1); onRefreshTaskHandoffs?.() })}>Refresh</button>
           {onReading !== undefined && (
             <button type="button" className="orch__mini orch__mini--read" data-orch-bench-reading={reading ? 'on' : 'off'} aria-pressed={reading}
-              title={reading ? 'Back to the scene (Esc)' : 'Read the review in the full working area — the scene steps aside until you come back'}
+              title={reading ? 'Back to the scene (Esc)' : 'Read the review in the full working area. The scene steps aside until you come back'}
               {...shellControl(() => { if (!open) onOpen(true); onReading(!reading) })}>{reading ? 'Back to scene' : 'Read full view'}</button>
           )}
           {!reading && <button type="button" className="orch__mini" data-orch-bench-toggle={open ? 'close' : 'open'} {...shellControl(() => onOpen(!open))}>{open ? 'Collapse' : 'Expand'}</button>}
@@ -909,8 +909,8 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                 )
               })()}
               {changes.read.kind === 'loading' && <p className="orch__caption" role="status">Reading changes…</p>}
-              {changes.read.kind === 'no-lane' && <p className="orch__review-words" data-orch-review-kind="no-lane">This task has not been started — no conversation and no lane, so there is no diff to show.</p>}
-              {changes.read.kind === 'lane-missing' && <p className="orch__review-words" data-orch-review-kind="lane-missing">The task's worktree is not listed by git any more — it was removed outside this app.</p>}
+              {changes.read.kind === 'no-lane' && <p className="orch__review-words" data-orch-review-kind="no-lane">This task has not been started. There is no conversation and no lane, so there is no diff to show.</p>}
+              {changes.read.kind === 'lane-missing' && <p className="orch__review-words" data-orch-review-kind="lane-missing">The task's worktree is not listed by git any more. It was removed outside this app.</p>}
               {changes.read.kind === 'result' && (
                 <>
                   <p className="orch__review-words" data-orch-review-kind={changes.read.result.kind}>{changesWords(changes.read.result, subject)}{changes.read.sectionNote !== undefined ? ` — ${changes.read.sectionNote}` : ''}</p>
@@ -979,7 +979,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                 </span>
                 <span className="orch__bench-diffmeta">
                   <span data-orch-diff-where title={subject.kind === 'task' && subject.lane !== undefined ? subject.lane.path : undefined}>{subject.title}{where !== '' ? ` · ${where}` : ''}</span>
-                  {sharedCount !== null && <span className="orch__bench-diffwarn" data-orch-diff-shared>{`shared by ${sharedCount} sessions — not this one's alone`}</span>}
+                  {sharedCount !== null && <span className="orch__bench-diffwarn" data-orch-diff-shared>{`shared by ${sharedCount} sessions, not this one's alone`}</span>}
                   {freshness !== null && freshness.standing !== 'no-lane' && freshness.standing !== 'unread' && (
                     <span data-orch-diff-review={freshness.standing} data-fresh={freshness.standing === 'current' ? 'fresh' : freshness.standing === 'none' ? 'none' : 'stale'}>
                       {freshness.standing === 'current' ? 'reviewed · current' : freshness.standing === 'none' ? 'not reviewed' : freshness.standing === 'stale' ? 'review stale' : 'review freshness unknown'}
@@ -996,7 +996,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                   ))}
                 </pre>
               ) : <p className="orch__caption" role="status">Reading the diff…</p>)}
-              {changes.diff.kind === 'no-base' && <p className="orch__caption">No revision to diff against — the review's starting point could not be read.</p>}
+              {changes.diff.kind === 'no-base' && <p className="orch__caption">No revision to diff against. The review's starting point could not be read.</p>}
               {changes.diff.kind === 'diff' && (
                 changes.diff.diff.kind === 'diff' ? (
                   <pre ref={diffRef} className="orch__diff orch__diff--bench" data-orch-diff data-orch-diff-key={changes.diff.key} aria-label="Diff"
@@ -1011,18 +1011,18 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                           {...(pickable ? { 'data-orch-diff-line': at, title: 'Comment on this line', onClick: () => { if ((window.getSelection()?.toString() ?? '') !== '') return; focus?.onLine?.(openPath as string, line) } } : {})}>{outward(line.text, `panel ${dataSubject}`).text}{'\n'}</span>
                       )
                     })}
-                    {changes.diff.diff.truncated > 0 && <span className="orch__diff-line orch__diff-line--meta">{`… ${changes.diff.diff.truncated} more lines — open the review on canvas for the whole diff`}</span>}
+                    {changes.diff.diff.truncated > 0 && <span className="orch__diff-line orch__diff-line--meta">{`… ${changes.diff.diff.truncated} more lines. Open the review on canvas for the whole diff`}</span>}
                   </pre>
-                ) : <p className="orch__caption">{changes.diff.diff.kind === 'binary' ? 'A binary file — no text diff to show.' : 'The diff could not be read.'}</p>
+                ) : <p className="orch__caption">{changes.diff.diff.kind === 'binary' ? 'A binary file, with no text diff to show.' : 'The diff could not be read.'}</p>
               )}
             </div>
             <div className="orch__bench-col orch__bench-col--brief" data-orch-bench-brief>
               <div className="orch__section-title">Brief</div>
               {subject.kind !== 'task' ? (
-                <p className="orch__caption">A session has no brief — a brief belongs to a task.</p>
+                <p className="orch__caption">A session has no brief. A brief belongs to a task.</p>
               ) : (
                 <>
-                  <p className="orch__bench-brief-text">{item?.brief !== undefined && item.brief !== '' ? item.brief : 'No brief yet — write one in the inspector.'}</p>
+                  <p className="orch__bench-brief-text">{item?.brief !== undefined && item.brief !== '' ? item.brief : 'No brief yet. Write one in the inspector.'}</p>
                   <div className="orch__section-title">Acceptance criteria</div>
                   {item?.criteria !== undefined && item.criteria.length > 0
                     ? <ol className="orch__bench-criteria">{item.criteria.map((c, i) => <li key={i}>{c}</li>)}</ol>
@@ -1055,7 +1055,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                         {expandedCheck === c.key && <CheckOutput record={c} />}
                         {/* M324. A failed check's follow-up, into the conversation beside it. */}
                         {c.outcome === 'failed' && focus?.onCheckFollowUp !== undefined && (
-                          <button type="button" className="orch__mini" data-orch-check-followup={c.key} title="Compose a follow-up naming this failure and its last lines, in the conversation — you send it"
+                          <button type="button" className="orch__mini" data-orch-check-followup={c.key} title="Compose a follow-up naming this failure and its last lines, in the conversation, for you to send"
                             {...shellControl(() => focus.onCheckFollowUp?.(c))}>Ask the agent to fix this</button>
                         )}
                       </li>
@@ -1064,7 +1064,7 @@ export function OrchWorkbench(props: OrchWorkbenchProps): JSX.Element {
                 )}
                 {checks.evidence.claims.length > 0 && (
                   <>
-                    <div className="orch__section-title">Claims — the agent's own account, not checks this canvas ran</div>
+                    <div className="orch__section-title">Claims: the agent's own account, not checks this canvas ran</div>
                     <ul className="orch__review-files" aria-label="Agent claims" data-orch-claims>
                       {checks.evidence.claims.map((cl, i) => (
                         <li key={`${cl.command}:${cl.at}:${i}`} className="orch__activity-row orch__check-row orch__check-row--claim" data-orch-claim={cl.claimed} title={cl.source}>

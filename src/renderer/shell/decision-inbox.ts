@@ -193,7 +193,7 @@ export function buildInbox(input: InboxInput): Inbox {
       members: [{ panelId: row.id, label: row.label }],
       moreFromPanel: 0,
       ...(task === undefined ? {} : { task }),
-      blocker: kind === 'chat' ? 'is waiting for your reply' : kind === 'terminal' ? 'rang for you — it is waiting at its prompt' : 'is waiting for you',
+      blocker: kind === 'chat' ? 'is waiting for your reply' : kind === 'terminal' ? 'rang for you and is waiting at its prompt' : 'is waiting for you',
       ...(last === undefined || last.trim() === '' ? {} : { context: last.trim() }),
       since, unblocks
     })

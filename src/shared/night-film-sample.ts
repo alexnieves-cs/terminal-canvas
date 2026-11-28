@@ -70,7 +70,7 @@ export function sampleNight(): FilmInput {
       ]
     },
     queue: [
-      { kind: 'failed', itemId: 't2', title: 'Fix flaky checkout test', text: '`npm run e2e -- checkout` kept failing — the auto run gave up' },
+      { kind: 'failed', itemId: 't2', title: 'Fix flaky checkout test', text: '`npm run e2e -- checkout` kept failing, and the auto run gave up' },
       { kind: 'checked', itemId: 't3', title: 'API docs pass', text: '3 files to review', files: 3 },
       { kind: 'checked', itemId: 't1', title: 'Refactor auth session', text: '6 files to review', files: 6 }
     ]

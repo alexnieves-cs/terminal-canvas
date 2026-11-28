@@ -155,7 +155,7 @@ function MemoryNodeImpl(props: MemoryNodeProps): JSX.Element {
              wrote anything, which is a different fact with a different fix. */
           <p className="pf__note" data-memory-arm="unresolved">{read.unresolved}</p>
         ) : read.entries.length === 0 ? (
-          <p className="pf__note" data-memory-arm="empty">nothing remembered about this repository yet — add the first below, or an agent can with tc memory add</p>
+          <p className="pf__note" data-memory-arm="empty">nothing remembered about this repository yet. Add the first below, or an agent can with tc memory add</p>
         ) : (
           <ul className="memory-node__list" data-memory-list>
             {read.entries.map((entry) => (

@@ -511,7 +511,7 @@ export function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, 
       {p.synthetic && <text x={8} y={25} className="orch__pplate-sub" data-orch-grouping style={{ display: 'none' }}>{ORCH_DEP_GROUPING}</text>}
       {hidden !== null && (
         <g className="orch__pplate-more" transform={`translate(0, ${moreY})`} data-orch-platform-more={p.hidden.ids.length} role="button" tabIndex={0}
-          aria-label={`${hidden} — focus the island to see them all`} onClick={(e) => { e.stopPropagation(); onFit(p.id) }}
+          aria-label={`${hidden}. Focus the island to see them all`} onClick={(e) => { e.stopPropagation(); onFit(p.id) }}
           onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') { e.preventDefault(); onFit(p.id) } }}>
           <title>{`${hidden}. Focus the island to see every station.`}</title>
           <rect className="orch__pplate-bg" width={hidden.length * 5.6 + 16} height={18} rx={9} />
@@ -520,7 +520,7 @@ export function PlatformPlate({ p, cx, y, w, level, focused, selected, onFocus, 
       )}
       {onWorld !== undefined && (
         <g className="orch__pplate-more orch__pplate-world" transform={`translate(0, ${worldY})`} data-orch-platform-world={p.id} role="button" tabIndex={0}
-          aria-label="View in World — this island's agents in the 3D room"
+          aria-label="View in World: this island's agents in the 3D room"
           onClick={(e) => { e.stopPropagation(); onWorld(p.id) }}
           onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') { e.preventDefault(); onWorld(p.id) } }}>
           <title>This island's agents in the World view.</title>
@@ -1071,7 +1071,7 @@ export function GraphBoard(props: {
             <span className="orch__crumb orch__crumb--leaf" data-orch-crumb="object">{selectedObject.title} · {selectedObject.kind}</span></>}
         </nav>
         {props.webgl === 'unavailable' && (
-          <p className="orch__caption orch__webgl-notice" data-orch-webgl-notice role="status">3D is unavailable here (no WebGL context) — the scene is flat, and every action is the same.</p>
+          <p className="orch__caption orch__webgl-notice" data-orch-webgl-notice role="status">3D is unavailable here (no WebGL context). The scene is flat, and every action is the same.</p>
         )}
         <div className="orch__scene-buttons" role="toolbar" aria-label="Camera">
           <button type="button" className="orch__mini" data-orch-fit="all" title="Fit every platform in view" {...shellControl(fitAll)}>Fit all</button>

@@ -77,11 +77,11 @@ export function diagramIssues(t: Pick<PersistedTemplate, 'nodes' | 'edges'>): Re
       if (v === undefined || (typeof v === 'string' && v.trim() === '')) add(node.key, `no ${label} yet`)
     }
     if (node.kind === 'http' && typeof raw.method === 'string' && raw.method.trim() !== '' && raw.method.trim().toUpperCase() !== 'GET') {
-      add(node.key, `only GET runs — a ${raw.method.trim().toUpperCase()} is refused`)
+      add(node.key, `only GET runs, and a ${raw.method.trim().toUpperCase()} is refused`)
     }
     const touches = t.edges.some((e) => e.from === node.key || e.to === node.key)
     if (t.nodes.length > 1 && !touches) add(node.key, 'not connected to anything')
-    else if (node.kind === 'collect' && !t.edges.some((e) => e.to === node.key)) add(node.key, 'collects nothing — no block hands off to it')
+    else if (node.kind === 'collect' && !t.edges.some((e) => e.to === node.key)) add(node.key, 'collects nothing, because no block hands off to it')
   }
   return out
 }

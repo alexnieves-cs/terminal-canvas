@@ -3083,7 +3083,7 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ xFirst, xSnap, xSecond, yFirst, ySnap, ySecond }))
     ok('resume-lost.4 the exit sentence names the backend and promises a resume only where it is true: a failed resume says the next message starts a NEW conversation with nothing from before',
       /^codex could not resume/.test(F.exitSentence('codex', { code: 1, resumeLost: 'no rollout found' })) && /NEW conversation/.test(F.exitSentence('claude', { code: 1, resumeLost: 'x' })) &&
-        F.exitSentence('claude', { code: 1 }) === 'claude exited with 1 — the next message resumes the conversation',
+        F.exitSentence('claude', { code: 1 }) === 'claude exited with 1, and the next message resumes the conversation',
       F.exitSentence('codex', { code: 1, resumeLost: 'no rollout found' }))
   }
 

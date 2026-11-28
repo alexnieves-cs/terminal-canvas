@@ -90,7 +90,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null
                 type="button"
                 className="annotation__label"
                 data-annotation-label
-                title={a.anchor.kind === 'panel' ? 'a note on this panel — click to select, double-click to edit' : 'a note on the canvas — click to select, double-click to edit'}
+                title={a.anchor.kind === 'panel' ? 'a note on this panel. Click to select, double-click to edit' : 'a note on the canvas. Click to select, double-click to edit'}
                 onMouseDown={(e) => { e.stopPropagation() }}
                 onClick={(e) => { e.stopPropagation(); onSelect?.(a.id) }}
                 onDoubleClick={(e) => { e.stopPropagation(); onBeginEdit?.(a.id) }}

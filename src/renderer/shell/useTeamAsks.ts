@@ -65,7 +65,7 @@ export async function answerTeamAsk(row: Pick<TeamAskRow, 'workspaceId' | 'askId
   } catch {
     answered.delete(k)
     publish()
-    return 'the answer did not reach the app — try again'
+    return 'the answer did not reach the app; try again'
   }
 }
 

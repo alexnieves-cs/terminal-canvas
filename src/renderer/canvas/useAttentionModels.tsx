@@ -315,7 +315,7 @@ export function useAttentionModels(deps: UseAttentionModelsDeps) {
         setRelatedItemId(itemId)
         // #10. Continuing collapses the summary into the task's normal status:
         // the lens bar it opens carries the next action until the lens closes.
-        setResumedNext({ itemId, text: resumeSummary.blocker !== undefined ? `open blocker — ${resumeSummary.blocker}` : resumeSummary.nextAction, ...(resumeSummary.action === undefined ? {} : { action: resumeSummary.action }) })
+        setResumedNext({ itemId, text: resumeSummary.blocker !== undefined ? `open blocker: ${resumeSummary.blocker}` : resumeSummary.nextAction, ...(resumeSummary.action === undefined ? {} : { action: resumeSummary.action }) })
         const r = frameItem(itemId)
         if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
         // M315. Continue DOES the step it names. It framed the task and left

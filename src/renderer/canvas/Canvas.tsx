@@ -1573,7 +1573,7 @@ export function Canvas({
       return { kind: 'ok', id: 'start-work' }
     }
     const item = workItemsRef.current.find((i) => i.id === req.id)
-    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${req.id} — tc status lists the board` }
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${req.id}; tc status lists the board` }
     actions.markDone(req.id)
     return { kind: 'ok', id: req.id }
   }), [])
@@ -2512,8 +2512,8 @@ export function Canvas({
     const panel = panelsRef.current.find((p) => p.rect.id === panelId)
     if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
     const owners = isWorkPanel(panel) ? [panel.work.itemId] : taskMemberships(displayPanelsRef.current, workItemsRef.current).filter((m) => m.members.some((x) => x.panelId === panelId)).map((m) => m.itemId)
-    if (owners.length === 0) return { kind: 'refused', reason: 'that panel is not part of a task — select a work card or one of its panels' }
-    if (owners.length > 1) return { kind: 'refused', reason: `that panel is part of ${owners.length} tasks — focus one from its card` }
+    if (owners.length === 0) return { kind: 'refused', reason: 'that panel is not part of a task; select a work card or one of its panels' }
+    if (owners.length > 1) return { kind: 'refused', reason: `that panel is part of ${owners.length} tasks, so focus one from its card` }
     const itemId = owners[0]!
     window.setTimeout(() => openFocusTaskRef.current(itemId), 0)
     return { kind: 'ran' }
@@ -2542,8 +2542,8 @@ export function Canvas({
     if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
     const itemId = isReviewPanel(panel) && panel.subject.workItemId !== undefined ? panel.subject.workItemId : boardVerbsRef.current.taskOfPanel?.(panelId)
     const item = itemId === undefined ? undefined : workItemsRef.current.find((w) => w.id === itemId)
-    if (item === undefined) return { kind: 'refused', reason: `${panelId} is not part of one task — name its card, its review, or a panel only that task holds` }
-    if ((item.comments ?? []).length >= REVIEW_COMMENTS_MAX) return { kind: 'refused', reason: `${item.title} already holds ${REVIEW_COMMENTS_MAX} comments — resolve or remove some first` }
+    if (item === undefined) return { kind: 'refused', reason: `${panelId} is not part of one task; name its card, its review, or a panel only that task holds` }
+    if ((item.comments ?? []).length >= REVIEW_COMMENTS_MAX) return { kind: 'refused', reason: `${item.title} already holds ${REVIEW_COMMENTS_MAX} comments; resolve or remove some first` }
     const comment = newReviewComment({ ...draft, quote: '', at: Date.now() })
     setWorkItems((current) => current.map((w) => (w.id === item.id ? carryWorkItem({ ...w, comments: [...(w.comments ?? []), comment], updatedAt: Date.now() }) : w)))
     return { kind: 'ran', note: `${draft.proposedBy === undefined ? 'commented' : 'proposed a comment'} on ${commentPlace(comment)} in ${item.title}` }
@@ -2825,11 +2825,11 @@ export function Canvas({
        * `useCallback(…, [])` and so is the same function every render.
        */
       if (!target || !isTerminalPanel(target) || !session || session.dormant) {
-        setHandoffResult(key, 'skipped — target is dormant')
+        setHandoffResult(key, 'skipped: target is dormant')
         continue
       }
       if (!isRestartable(session.status)) {
-        setHandoffResult(key, 'skipped — target has not started')
+        setHandoffResult(key, 'skipped: target has not started')
         continue
       }
       setHandoffResult(key, `ran after exit ${info.exitCode}`)
@@ -3430,7 +3430,7 @@ export function Canvas({
   const importDocxFile = useCallback(async (path?: string, world?: Point): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
     const result = await window.canvas.docx.import(path === undefined ? {} : { path })
     if (result.kind === 'cancelled') return { kind: 'refused', reason: 'no document chosen' }
-    if (result.kind === 'exists') return { kind: 'refused', reason: `${displayPath(result.path).short} already exists — rename or move it, then import again` }
+    if (result.kind === 'exists') return { kind: 'refused', reason: `${displayPath(result.path).short} already exists; rename or move it, then import again` }
     if (result.kind === 'refused') return result
     const at = world ?? viewCentre(hostRef.current, viewportRef.current)
     openFilePanel(result.path, at, { prose: true, exact: true, imported: { from: result.source, dropped: result.dropped } })
@@ -3925,7 +3925,7 @@ export function Canvas({
         <CommandPill actions={paletteActions} panels={panels}
           {...(lens !== null ? { taskTitle: workItems.find((i) => i.id === lens.itemId)?.title ?? lens.itemId } : {})}
           selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
-          engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
+          engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available; check readiness' : undefined}
           onJump={pillJump} onSend={sendFromPill} openRef={pillOpenRef} />
         {/* M548. The live tournament's bracket, in screen space; nothing at all until one has run. */}
         <TournamentBracket run={paletteActions.runTournament} say={paletteActions.say} />

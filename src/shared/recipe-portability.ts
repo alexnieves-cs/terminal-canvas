@@ -354,14 +354,14 @@ export function recipePreflight(input: PreflightInput): Preflight {
   for (const { field, text } of input.texts ?? []) {
     const left = unfilled(text, input.renderContext ?? {})
     if (left.length > 0 && !items.some((i) => i.id === `placeholder:${left[0]}`)) {
-      items.push({ id: `placeholder:${left[0]}`, ok: false, severity: 'block', line: `${left.join(', ')} in the ${field} has no value — fill it in before starting` })
+      items.push({ id: `placeholder:${left[0]}`, ok: false, severity: 'block', line: `${left.join(', ')} in the ${field} has no value; fill it in before starting` })
     }
   }
   const requires = input.recipe?.requires
   if (requires?.setup === true) {
     items.push(input.setup?.kind === 'saved'
       ? { id: 'setup', ok: true, severity: 'block', line: 'the repository setup this recipe needs is saved' }
-      : { id: 'setup', ok: false, severity: 'block', line: 'this recipe needs the repository setup saved — set up this repository first, so every lane is prepared the same way' })
+      : { id: 'setup', ok: false, severity: 'block', line: 'this recipe needs the repository setup saved. Set up this repository first, so every lane is prepared the same way' })
   }
   if (input.tools === null) {
     if (tools.length > 0) items.push({ id: 'tools', ok: false, severity: 'warn', line: `checking ${tools.map((t) => t.tool).join(', ')} on the login PATH…` })
@@ -371,14 +371,14 @@ export function recipePreflight(input: PreflightInput): Preflight {
       if (found === undefined) continue
       items.push(found
         ? { id: `tool:${t.tool}`, ok: true, severity: 'block', line: `${t.tool} is on the login PATH` }
-        : { id: `tool:${t.tool}`, ok: false, severity: 'block', line: `${t.tool} is not on the login PATH — ${t.where} would fail in the lane before the agent could do anything` })
+        : { id: `tool:${t.tool}`, ok: false, severity: 'block', line: `${t.tool} is not on the login PATH, so ${t.where} would fail in the lane before the agent could do anything` })
     }
   }
   if (input.setup?.kind === 'saved' && input.ports !== null) {
     for (const s of input.setup.setup.services) {
       if (!s.port) continue
       const port = input.ports[s.name]
-      if (port === null) items.push({ id: `port:${s.name}`, ok: false, severity: 'warn', line: `no free port is left in this lane's span for ${s.name} — it would start without one` })
+      if (port === null) items.push({ id: `port:${s.name}`, ok: false, severity: 'warn', line: `no free port is left in this lane's span for ${s.name}, so it would start without one` })
     }
   }
   for (const cap of requires?.capabilities ?? []) {
@@ -386,7 +386,7 @@ export function recipePreflight(input: PreflightInput): Preflight {
     if (input.fit === undefined) continue
     items.push(row !== undefined && row.ok
       ? { id: `capability:${cap}`, ok: true, severity: 'block', line: row.line }
-      : { id: `capability:${cap}`, ok: false, severity: 'block', line: `this recipe needs ${cap} from its backend — ${row?.line ?? `${input.fit.backend} was not judged for it`}` })
+      : { id: `capability:${cap}`, ok: false, severity: 'block', line: `this recipe needs ${cap} from its backend: ${row?.line ?? `${input.fit.backend} was not judged for it`}` })
   }
   const blocked = items.find((i) => !i.ok && i.severity === 'block')?.line
   const saved = input.setup?.kind === 'saved' ? input.setup.setup : null
@@ -463,7 +463,7 @@ export function compareRecipeRuns(now: { item: PersistedWorkItem; outcome: Recip
     else out.push(`v${a.version} → v${b.version}: ${recipeChanges(a.definition, b.definition).join('; ') || 'the definition changed'}`)
     if (a.repository !== undefined && b.repository !== undefined && a.repository !== b.repository) out.push(`another repository (${a.repository.split('/').pop()} → ${b.repository.split('/').pop()})`)
   } else {
-    out.push('the earlier run did not record its recipe definition — only its outcome can be compared')
+    out.push('the earlier run did not record its recipe definition, so only its outcome can be compared')
   }
   const o = now.outcome, p = before.outcome
   out.push(`${o.merged ? 'merged' : o.finished ? 'done' : 'not finished'} (last success: ${p.merged ? 'merged' : 'done'})`)
@@ -472,9 +472,9 @@ export function compareRecipeRuns(now: { item: PersistedWorkItem; outcome: Recip
   if (o.criteria.total > 0 || p.criteria.total > 0) out.push(`${o.criteria.met} of ${o.criteria.total} criteria confirmed (last success: ${p.criteria.met} of ${p.criteria.total})`)
   if (o.passed !== undefined && p.passed !== undefined) {
     const lost = p.passed.filter((c) => !(o.passed ?? []).includes(c))
-    out.push(lost.length === 0 ? `${o.passed.length} check${o.passed.length === 1 ? '' : 's'} passing (last success: ${p.passed.length})` : `${o.passed.length} check${o.passed.length === 1 ? '' : 's'} passing — not passing now: ${lost.map((c) => `\`${c}\``).join(', ')}`)
+    out.push(lost.length === 0 ? `${o.passed.length} check${o.passed.length === 1 ? '' : 's'} passing (last success: ${p.passed.length})` : `${o.passed.length} check${o.passed.length === 1 ? '' : 's'} passing, but not passing now: ${lost.map((c) => `\`${c}\``).join(', ')}`)
   } else {
-    out.push('checks: not compared — the evidence for one of the runs was not read')
+    out.push('checks: not compared, because the evidence for one of the runs was not read')
   }
   if (o.openComments > 0) out.push(`${o.openComments} review comment${o.openComments === 1 ? '' : 's'} still open`)
   return out

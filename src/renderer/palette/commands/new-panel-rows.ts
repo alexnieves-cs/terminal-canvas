@@ -77,7 +77,7 @@ export function newPanelRows(ctx: PaletteContext): Command[] {
   out.push({
     id: 'canvas.browser',
     title: 'Open a page…',
-    subtitle: 'a browser panel — a dev server, docs, a preview',
+    subtitle: 'a browser panel for a dev server, docs, a preview',
     searchText: 'open page browser url web http localhost dev server preview',
     group: 'spawn',
     run: () => actions.beginBrowser()
@@ -119,7 +119,7 @@ export function newPanelRows(ctx: PaletteContext): Command[] {
   out.push(withReason({
     id: 'template.save',
     title: 'Save selection as template…',
-    subtitle: 'start the same panels and handoffs again in one step — reusable as a workflow',
+    subtitle: 'start the same panels and handoffs again in one step, reusable as a workflow',
     searchText: 'save template selection shape of work',
     group: 'panel',
     hiddenAtRest: true,
@@ -198,7 +198,7 @@ export function newPanelRows(ctx: PaletteContext): Command[] {
           // only on the launcher, which is gone once a panel exists, and the
           // palette called the same door "New chat (no folder)". Both names
           // find it; the id and the no-folder fact are unchanged (sandbox.1).
-          title: `Ask a question (new chat, no folder) — ${row.label}`,
+          title: `Ask a question (new chat, no folder): ${row.label}`,
           searchText: `ask a question new chat no folder sandbox ${row.label} conversation without a repository`,
           group: 'spawn',
           run: () => actions.newSandboxChat(backend)

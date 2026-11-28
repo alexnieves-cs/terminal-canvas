@@ -102,7 +102,7 @@ export function configureNode(t: PersistedTemplate, key: string, patch: Record<s
   const fields = FIELDS[node.kind]
   const patched: Record<string, unknown> = { ...node }
   for (const [name, value] of Object.entries(patch)) {
-    if (name === 'kind' || name === 'key') return { kind: 'refused', reason: `${name} is a node's identity and cannot be changed — remove the node and add another` }
+    if (name === 'kind' || name === 'key') return { kind: 'refused', reason: `${name} is a node's identity and cannot be changed; remove the node and add another` }
     const type = fields[name]
     if (type === undefined) return { kind: 'refused', reason: `a ${node.kind} node has no field called ${name}` }
     const okType = type === 'string' ? isStr(value) : type === 'number' ? isNum(value) : Array.isArray(value) && value.every(isStr)
@@ -147,7 +147,7 @@ export function addEdge(t: PersistedTemplate, from: string, to: string, trigger:
   if (from === to) return { kind: 'refused', reason: 'an edge cannot start and end on the same node' }
   if (t.edges.some((e) => e.from === from && e.to === to)) return { kind: 'refused', reason: `${from} already hands off to ${to}` }
   // `to`, never `→`: this reason reaches the screen (M183's refusal line) and `icons.1` bans a symbol glyph in renderer text.
-  if (edgeWouldCycle(t.edges, from, to)) return { kind: 'refused', reason: `${from} to ${to} would close a cycle — a workflow runs forward` }
+  if (edgeWouldCycle(t.edges, from, to)) return { kind: 'refused', reason: `${from} to ${to} would close a cycle, and a workflow runs forward` }
   const next = copyOf(t)
   next.edges.push({ from, to, trigger })
   return { kind: 'ok', template: next }

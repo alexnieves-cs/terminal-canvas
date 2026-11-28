@@ -26,7 +26,7 @@ export interface FileRow {
 /** Kept in one place so the four arms' wording cannot drift between renders. */
 function noteFor(result: DirResult): string | undefined {
   switch (result.kind) {
-    case 'unreadable': return `cannot read this directory — ${result.detail}`
+    case 'unreadable': return `cannot read this directory: ${result.detail}`
     case 'not-a-directory': return 'not a directory'
     case 'gone': return 'this directory is gone'
     case 'ok': return undefined

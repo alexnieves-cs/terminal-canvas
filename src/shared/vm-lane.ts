@@ -155,11 +155,11 @@ export function parseVmLaneSpec(raw: unknown, home: string): { kind: 'ok'; spec:
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { kind: 'refused', reason: 'the sandbox spec is not an object' }
   const r = raw as Record<string, unknown>
   if (!VM_RUNTIMES.includes(r.runtime as VmRuntimeId)) return { kind: 'refused', reason: 'no VM runtime is named' }
-  if (typeof r.laneId !== 'string' || !SEGMENT.test(r.laneId)) return { kind: 'refused', reason: `a lane id must be a plain name — ${JSON.stringify(r.laneId)} is not` }
+  if (typeof r.laneId !== 'string' || !SEGMENT.test(r.laneId)) return { kind: 'refused', reason: `a lane id must be a plain name, and ${JSON.stringify(r.laneId)} is not` }
   for (const key of ['worktree', 'stateDir'] as const) {
     const p = r[key]
-    if (typeof p !== 'string' || !isAbsoluteClean(p)) return { kind: 'refused', reason: `the ${key === 'worktree' ? 'worktree' : 'state folder'} must be a plain absolute path — no . or .. segments, no //, and no comma, quote or =` }
-    if (covers(p, home)) return { kind: 'refused', reason: `${p} is your home folder or above it — a sandboxed lane mounts only its own worktree` }
+    if (typeof p !== 'string' || !isAbsoluteClean(p)) return { kind: 'refused', reason: `the ${key === 'worktree' ? 'worktree' : 'state folder'} must be a plain absolute path, with no . or .. segments, no //, and no comma, quote or =` }
+    if (covers(p, home)) return { kind: 'refused', reason: `${p} is your home folder or above it, and a sandboxed lane mounts only its own worktree` }
   }
   const worktree = r.worktree as string
   const stateDir = r.stateDir as string
@@ -183,7 +183,7 @@ export function parseVmLaneSpec(raw: unknown, home: string): { kind: 'ok'; spec:
   if (!Array.isArray(r.authKeys) || r.authKeys.some((k) => !VM_AUTH_ENV_KEYS.includes(k as string))) {
     return { kind: 'refused', reason: `only ${VM_AUTH_ENV_KEYS.join(' or ')} may pass into the VM` }
   }
-  if (r.authKeys.length === 0) return { kind: 'refused', reason: `the VM cannot read your Keychain — set ${VM_AUTH_ENV_KEYS[0]} (from \`claude setup-token\`) in your login shell` }
+  if (r.authKeys.length === 0) return { kind: 'refused', reason: `the VM cannot read your Keychain; set ${VM_AUTH_ENV_KEYS[0]} (from \`claude setup-token\`) in your login shell` }
   return {
     kind: 'ok',
     spec: {

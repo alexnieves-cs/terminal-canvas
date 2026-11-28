@@ -19,7 +19,7 @@ export const QUICK_ACCEPT_MAX_FILES = 5
 
 export function quickAccept(input: { files: number; checks: readonly CheckRecord[] | null }): { offer: true } | { offer: false; reason: string } {
   if (!(input.files > 0)) return { offer: false, reason: 'no changed files' }
-  if (input.files > QUICK_ACCEPT_MAX_FILES) return { offer: false, reason: `more than ${QUICK_ACCEPT_MAX_FILES} files — read them, then Mark reviewed` }
+  if (input.files > QUICK_ACCEPT_MAX_FILES) return { offer: false, reason: `more than ${QUICK_ACCEPT_MAX_FILES} files; read them, then Mark reviewed` }
   if (input.checks === null || input.checks.length === 0) return { offer: false, reason: 'no check has run on this lane' }
   if (!input.checks.every((c) => c.outcome === 'passed')) return { offer: false, reason: 'a check on this lane has not passed' }
   return { offer: true }

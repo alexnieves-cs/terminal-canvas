@@ -258,7 +258,7 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   // lane has no diff of its own, and a projection that reported one would be
   // attributing somebody else's files to it.
   if (item.panelId === undefined || item.worktreeId === undefined) {
-    return { state: 'no-lane', standing, word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start task…', detail: 'this task has no lane yet — starting work gives it a worktree and a conversation' }
+    return { state: 'no-lane', standing, word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start task…', detail: 'this task has no lane yet. Starting work gives it a worktree and a conversation' }
   }
 
   // M401 (B2). An accepted task's `section` is undefined exactly when its
@@ -269,25 +269,25 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   // its section reads "no changes" and the mark reads "changed since" — the
   // moment of success reported as a warning. The merge record is the fact.
   if (item.merged !== undefined) {
-    return carry({ state: 'accepted', word: `merged into ${item.merged.into}`, tone: 'idle', action: 'review', actionLabel: 'Review', detail: `you accepted it — ${mergedLine(item.merged)}; ${section === undefined ? 'its lane has been removed' : 'the lane stays until you remove it'}` })
+    return carry({ state: 'accepted', word: `merged into ${item.merged.into}`, tone: 'idle', action: 'review', actionLabel: 'Review', detail: `you accepted it: ${mergedLine(item.merged)}; ${section === undefined ? 'its lane has been removed' : 'the lane stays until you remove it'}` })
   }
 
   // The lane is gone, or was never readable. Never review a DIFFERENT
   // directory to fill the gap: the recovery is to say which one it is.
   if (section === undefined) {
-    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'the worktree this task was started in is not listed any more — starting work again gives it a fresh lane' })
+    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'the worktree this task was started in is not listed any more. Starting work again gives it a fresh lane' })
   }
   if (section.result.kind === 'baseline-lost') {
-    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: section.note ?? 'the lane could not be compared against the main tree — starting work again gives it a fresh lane' })
+    return carry({ state: 'lane-missing', word: 'lane missing', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: section.note ?? 'the lane could not be compared against the main tree. Starting work again gives it a fresh lane' })
   }
   if (section.result.kind === 'git-missing') {
-    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'git was not found on the login PATH, so this lane’s changes cannot be read — install git, or start work again once it is there' })
+    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'git was not found on the login PATH, so this lane’s changes cannot be read. Install git, or start work again once it is there' })
   }
   if (section.result.kind === 'repo-unreadable') {
-    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: `this lane’s changes could not be read — ${section.result.detail}` })
+    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: `this lane’s changes could not be read: ${section.result.detail}` })
   }
   if (section.result.kind === 'not-a-repo' || section.result.kind === 'never-started') {
-    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'this lane is not a git worktree any more, so there is no diff to review — starting work again gives it a fresh one' })
+    return carry({ state: 'unreadable', word: 'unreadable', tone: 'exited', action: 'start', actionLabel: 'Start task again…', detail: 'this lane is not a git worktree any more, so there is no diff to review. Starting work again gives it a fresh one' })
   }
 
   // Execution outranks the diff: an agent still writing means the diff under
@@ -296,16 +296,16 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   if (supervision !== undefined && supervision.blocker !== undefined) {
     return carry({
       state: 'blocked', word: 'needs you', tone: 'needs-you', action: 'answer', actionLabel: 'Answer',
-      detail: `${supervision.detail} — the lane is not settled until this is answered`,
+      detail: `${supervision.detail}. The lane is not settled until this is answered`,
       blocker: { kind: supervision.blocker.kind, subject: supervision.blocker.subject }
     })
   }
   if (supervision !== undefined && (supervision.execution === 'running' || supervision.execution === 'queued')) {
-    return carry({ state: 'working', word: 'working', tone: 'working', action: 'resume', actionLabel: 'Resume', detail: `${supervision.detail} — the changes under it are still moving, so there is nothing settled to review yet` })
+    return carry({ state: 'working', word: 'working', tone: 'working', action: 'resume', actionLabel: 'Resume', detail: `${supervision.detail}. The changes under it are still moving, so there is nothing settled to review yet` })
   }
 
   if (files !== undefined && files.length === 0) {
-    return carry({ state: 'empty', word: 'no changes', tone: 'idle', action: 'resume', actionLabel: 'Resume', detail: 'the conversation stopped and its lane holds no changes — nothing was written, which is not the same as nothing being wrong' })
+    return carry({ state: 'empty', word: 'no changes', tone: 'idle', action: 'resume', actionLabel: 'Resume', detail: 'the conversation stopped and its lane holds no changes. Nothing was written, which is not the same as nothing being wrong' })
   }
 
   const count = changes === undefined ? 0 : changes.files
@@ -320,7 +320,7 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
       tone: 'idle',
       action: 'review',
       actionLabel: standing === 'none' ? 'Review' : 'Review again',
-      detail: `more than one panel has run in this repository, so these ${count} changed ${count === 1 ? 'file is' : 'files are'} not attributable to this task alone — read them, but do not read them as this agent's work`
+      detail: `more than one panel has run in this repository, so these ${count} changed ${count === 1 ? 'file is' : 'files are'} not attributable to this task alone. Read them, but do not read them as this agent's work`
     })
   }
   // M285. `unknown` gets its own words: a review happened, and this app cannot
@@ -330,10 +330,10 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
   const detail = standing === 'current'
     ? `you reviewed ${count === 1 ? 'this change' : 'these changes'} and the lane has not moved since`
     : standing === 'stale'
-      ? `the lane has changed since you reviewed it — ${count} ${count === 1 ? 'file' : 'files'} stand now`
+      ? `the lane has changed since you reviewed it, and ${count} ${count === 1 ? 'file' : 'files'} stand now`
       : standing === 'unknown'
-        ? `you reviewed this lane before this canvas recorded what it read, so it cannot say whether these ${count} ${count === 1 ? 'file' : 'files'} are what you saw — review again to make the mark checkable`
-        : `the conversation stopped and its lane holds ${count} changed ${count === 1 ? 'file' : 'files'} — reviewing them is what decides the task, not the agent’s own account of them`
+        ? `you reviewed this lane before this canvas recorded what it read, so it cannot say whether these ${count} ${count === 1 ? 'file' : 'files'} are what you saw; review again to make the mark checkable`
+        : `the conversation stopped and its lane holds ${count} changed ${count === 1 ? 'file' : 'files'}. Reviewing them is what decides the task, not the agent’s own account of them`
   return carry({ state: 'ready', word, tone: 'idle', action: 'review', actionLabel: standing === 'none' ? 'Review' : 'Review again', detail })
 }
 
@@ -470,7 +470,7 @@ export function reviewEvidence(
       commands: [],
       more: 0,
       none: missing.length === 0
-        ? 'no commands were recorded for this lane — this canvas ran none in it, and the conversation asked for none'
+        ? 'no commands were recorded for this lane. This canvas ran none in it, and the conversation asked for none'
         : `nothing to show, and not because nothing ran: ${missing.join('; ')}`,
       noneKind: !sources.ledgerRead ? 'failed-reader' : missing.length > 0 ? 'unread' : 'never-ran'
     }

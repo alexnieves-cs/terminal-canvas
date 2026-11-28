@@ -53,7 +53,7 @@ export type AccountJoinResult =
   | { kind: 'refused' | 'failed'; reason: string }
 
 /** The one not-signed-in sentence, for every door that needs a session. */
-export const NOT_SIGNED_IN = 'not signed in — run `tc login` or sign in from the app first'
+export const NOT_SIGNED_IN = 'not signed in; run `tc login` or sign in from the app first'
 
 /**
  * Shared workspaces (supabase workspace_shares/workspace_members). A share is

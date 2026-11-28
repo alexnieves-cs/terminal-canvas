@@ -570,7 +570,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
             {/* The `auto` row names the clone it derived rather than saying
                 `auto`: the user is being told which folder the work will happen
                 in, and `auto` is a word about the app, not about the work. */}
-            <option value="">{chosenRoot !== null && root === '' ? `${shortPath(chosenRoot, 2)} — the clone of ${String(wanted)}` : repos === undefined ? 'reading your repositories…' : 'choose a repository folder…'}</option>
+            <option value="">{chosenRoot !== null && root === '' ? `${shortPath(chosenRoot, 2)}, the clone of ${String(wanted)}` : repos === undefined ? 'reading your repositories…' : 'choose a repository folder…'}</option>
             {(repos ?? []).map((r) => (
               <option key={r.path} value={r.path} data-start-repo-row={r.path}>{shortPath(r.path, 2)}{r.repo === null ? '' : ` — ${r.repo}`}</option>
             ))}
@@ -600,13 +600,13 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           <select ref={(el) => { if (model.titleFixed && whoForced) firstRef.current = el }} className="sheet__select" data-start-agent value={teammateId} aria-label="agent profile"
             onChange={(e) => { setTeammateId(e.target.value); setRefusal(null) }}>
             {/* M400. Automatic is the launcher's answer: a teammate whose place holds the folder, or a new one for exactly it. */}
-            <option value="" data-start-agent-row="auto">Automatic — {who.kind === 'mint' ? `a new teammate for ${shortPath(who.places[0] ?? '')}` : who.kind === 'reuse' && teammateId === '' ? teammateWord(who.mate) : 'the teammate for this folder'}</option>
+            <option value="" data-start-agent-row="auto">Automatic: {who.kind === 'mint' ? `a new teammate for ${shortPath(who.places[0] ?? '')}` : who.kind === 'reuse' && teammateId === '' ? teammateWord(who.mate) : 'the teammate for this folder'}</option>
             {model.teammates.map((t) => (
               // A teammate with no places is DISABLED with the fix, never
               // dropped: a row that vanished would read as a teammate that was
               // never made, and the grant is the thing to go and give.
               <option key={t.id} value={t.id} disabled={t.places.length === 0} data-start-agent-row={t.id}>
-                {teammateWord(t)}{t.places.length === 0 ? ' — no places yet' : ''}
+                {teammateWord(t)}{t.places.length === 0 ? ' (no places yet)' : ''}
               </option>
             ))}
           </select>
@@ -622,7 +622,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
             onChange={(e) => { setBackendPick(e.target.value as AgentBackend); setRefusal(null) }}>
             {backendRows.map((r) => (
               <option key={r.backend} value={r.backend} disabled={r.fit.verdict === 'refused'} data-start-backend-row={r.backend} data-start-backend-fit={r.fit.verdict}>
-                {r.label}{r.fit.verdict === 'fits' ? ' — can do everything this task needs' : r.fit.verdict === 'refused' ? ` — cannot: ${r.fit.refusal ?? ''}` : ` — without ${r.fit.rows.filter((x) => !x.ok).length} of what this task asks`}
+                {r.label}{r.fit.verdict === 'fits' ? ', which can do everything this task needs' : r.fit.verdict === 'refused' ? ` (cannot: ${r.fit.refusal ?? ''})` : `, without ${r.fit.rows.filter((x) => !x.ok).length} of what this task asks`}
               </option>
             ))}
           </select>
@@ -793,7 +793,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           <span className="sheet__defaults sheet__fit">
             {preflight.plan.install.length > 0 && <span className="sheet__fit-row" data-start-preflight-install>prepares with {preflight.plan.install.map((c) => `\`${c}\``).join(' then ')}</span>}
             {preflight.plan.services.map((sv) => (
-              <span key={sv.name} className="sheet__fit-row" data-start-preflight-service={sv.name}>service {sv.name}: `{sv.command}`{sv.port === undefined ? '' : sv.port === null ? ' — no free port' : ` on :${sv.port}`}</span>
+              <span key={sv.name} className="sheet__fit-row" data-start-preflight-service={sv.name}>service {sv.name}: `{sv.command}`{sv.port === undefined ? '' : sv.port === null ? ', no free port' : ` on :${sv.port}`}</span>
             ))}
             {preflight.plan.checks.length > 0 && <span className="sheet__fit-row" data-start-preflight-checks>checks {preflight.plan.checks.map((c) => `\`${c}\``).join(', ')}</span>}
             {preflight.items.filter((i) => !i.ok).map((i) => (
@@ -810,7 +810,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         <p className="sheet__hint" data-start-tonight>
           Leaving for the night?{' '}
           <button type="button" className="pf__verb pf__verb--word" data-start-tonight-run disabled={tonightBusy}
-            title="Run the open tasks on the board one at a time while you are away — paused at usage limits, the Mac kept awake"
+            title="Run the open tasks on the board one at a time while you are away. Runs pause at usage limits, and the Mac stays awake"
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
             onClick={(e) => { e.preventDefault(); const run = model.runTonight; if (run === undefined) return; setTonightBusy(true); void run().then((r) => { setTonightBusy(false); setTonightLine(r.kind === 'refused' ? r.reason : (r.note ?? 'queued for tonight')) }) }}>Run tonight</button>
           {tonightLine !== null && <span data-start-tonight-line> {tonightLine}</span>}

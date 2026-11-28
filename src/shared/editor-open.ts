@@ -87,7 +87,7 @@ export function planEditorOpen(t: EditorTarget, pref: EditorPref, which: (bin: s
   }
   if (pref !== 'auto') {
     const e = EDITORS.find((x) => x.id === pref)
-    return { kind: 'refused', reason: `${e?.label ?? pref} is not installed here — neither its \`${e?.bins[0] ?? pref}\` command nor its app was found` }
+    return { kind: 'refused', reason: `${e?.label ?? pref} is not installed here. Neither its \`${e?.bins[0] ?? pref}\` command nor its app was found` }
   }
   return { kind: 'default-app', path: t.path, ...(lineNote === undefined ? {} : { note: lineNote }) }
 }

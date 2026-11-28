@@ -71,7 +71,7 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
       {!props.loaded ? (
         <p className="pf__note" data-teammates-note>reading the roster…</p>
       ) : props.teammates.length === 0 ? (
-        <p className="pf__note" data-teammates-note>no agent profiles yet — name one above; it starts with no places, no services and no schedule</p>
+        <p className="pf__note" data-teammates-note>no agent profiles yet. Name one above; it starts with no places, no services and no schedule</p>
       ) : (
         <ul className="rail-list rail-list--teammates" data-teammates-list>
           {props.teammates.map((t) => (
@@ -94,18 +94,18 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
           <div className="shell__region-title shell__region-title--action">
             <span>{teammateWord(selected)}</span>
             <button type="button" className="pf__verb pf__verb--word" data-teammate-chat disabled={selected.places.length === 0}
-              title={selected.places.length === 0 ? 'add a place first — a teammate with no places can work nowhere' : `Start a chat as ${teammateWord(selected)}`}
+              title={selected.places.length === 0 ? 'add a place first, because a teammate with no places can work nowhere' : `Start a chat as ${teammateWord(selected)}`}
               {...shellControl(() => { if (selected.places.length > 0) props.onChat(selected.id) })}>Chat as {teammateWord(selected)}</button>
           </div>
           <label className="teammates-pane__field">
             <span className="teammates-pane__label">brief</span>
             <textarea className="teammates-pane__brief" data-teammate-brief defaultValue={selected.brief} key={selected.id}
-              placeholder="what this agent profile is for — appended to every spawn's system prompt"
+              placeholder="what this agent profile is for. It is appended to every spawn's system prompt"
               onBlur={(e) => { if (e.target.value !== selected.brief) props.onSave({ ...selected, brief: e.target.value }) }} />
           </label>
           <div className="teammates-pane__field">
             <span className="teammates-pane__label">places</span>
-            {selected.places.length === 0 && <p className="pf__note" data-teammate-no-places>no places — this agent profile can touch nothing until you add a folder</p>}
+            {selected.places.length === 0 && <p className="pf__note" data-teammate-no-places>no places, so this agent profile can touch nothing until you add a folder</p>}
             <ul className="teammates-pane__list">
               {selected.places.map((p) => (
                 <li key={p} className="teammates-pane__item" data-teammate-place={p}>
@@ -128,9 +128,9 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
                     {/* M191 (the golden audit, second half, 16). One sentence, not two states
                         that read as a contradiction, and it names the next step: a grant
                         without a credential is a permission waiting for a token. */}
-                    <span>{svc.label}{granted && !svc.connected ? ' — granted, but no credential yet: add one in Connections' : granted ? ' — granted' : svc.connected ? '' : ' — not connected'}</span>
+                    <span>{svc.label}{granted && !svc.connected ? ': granted, but no credential yet. Add one in Connections' : granted ? ': granted' : svc.connected ? '' : ': not connected'}</span>
                     <button type="button" className="pf__verb pf__verb--word" data-teammate-service-toggle={svc.id}
-                      title={granted ? `Revoke ${svc.label} from this teammate` : `Grant ${svc.label} to this teammate — it spends the app's credential through the broker`}
+                      title={granted ? `Revoke ${svc.label} from this teammate` : `Grant ${svc.label} to this teammate. It spends the app's credential through the broker`}
                       {...shellControl(() => props.onSave({ ...selected, services: granted ? selected.services.filter((x) => x !== svc.id) : [...selected.services, svc.id] }))}>{granted ? 'revoke' : 'grant'}</button>
                   </li>
                 )
@@ -177,7 +177,7 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
   return (
     <div className="teammates-pane__field" data-teammate-routines>
       <span className="teammates-pane__label">routines</span><span className="teammates-pane__note">{ROUTINE_LIMIT_WORD}</span>
-      {props.routines.length === 0 && <p className="pf__note" data-routines-empty>no routines — a routine starts a fresh chat as {teammateWord(props.teammate)} on a schedule</p>}
+      {props.routines.length === 0 && <p className="pf__note" data-routines-empty>no routines yet. A routine starts a fresh chat as {teammateWord(props.teammate)} on a schedule</p>}
       <ul className="teammates-pane__list">
         {props.routines.map((r) => (
           <li key={r.id} className="teammates-pane__routine" data-routine-row={r.id} data-routine-paused={r.paused ? '' : undefined}>
@@ -189,8 +189,8 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
                 never inside one: the missed badge and the last-run sentence
                 each keep their words together, and the line breaks at the gap. */}
             <p className="pf__note teammates-pane__last" data-routine-last>
-              {r.missed !== undefined && <span className="badge" data-tone="needs-you" data-routine-missed>missed at {when(r.missed.at)} — the app was closed</span>}
-              <span className="teammates-pane__last-run">{r.lastRun === undefined ? 'never run' : r.lastRun.outcome === 'started' ? `last run ${when(r.lastRun.at)}` : `last run ${when(r.lastRun.at)} was refused — ${r.lastRun.error ?? 'no reason given'}`}</span>
+              {r.missed !== undefined && <span className="badge" data-tone="needs-you" data-routine-missed>missed at {when(r.missed.at)}, while the app was closed</span>}
+              <span className="teammates-pane__last-run">{r.lastRun === undefined ? 'never run' : r.lastRun.outcome === 'started' ? `last run ${when(r.lastRun.at)}` : `last run ${when(r.lastRun.at)} was refused: ${r.lastRun.error ?? 'no reason given'}`}</span>
             </p>
             <div className="teammates-pane__actions">
               <button type="button" className="pf__verb pf__verb--word" data-routine-run title="Run it now, whatever the schedule says" {...shellControl(() => props.onRun(r.id))}>Run now</button>
@@ -205,9 +205,9 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
         <input className="teammates-pane__name" data-routine-name placeholder="routine name…" value={name} onChange={(e) => setName(e.target.value)} />
         <label className="teammates-pane__item"><span>every</span><input className="teammates-pane__minutes" data-routine-minutes type="number" min={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} /><span>minutes</span></label>
         <label className="teammates-pane__field"><span className="teammates-pane__label">prompt</span><textarea className="teammates-pane__brief" data-routine-prompt placeholder="asked of the fresh chat each time" value={prompt} onChange={(e) => setPrompt(e.target.value)} /></label>
-        <label className="teammates-pane__field"><span className="teammates-pane__label">verb line</span><span className="teammates-pane__note">optional — never destructive</span><input className="teammates-pane__name" data-routine-plan placeholder="focus n3" value={plan} onChange={(e) => setPlan(e.target.value)} /></label>
+        <label className="teammates-pane__field"><span className="teammates-pane__label">verb line</span><span className="teammates-pane__note">optional, never destructive</span><input className="teammates-pane__name" data-routine-plan placeholder="focus n3" value={plan} onChange={(e) => setPlan(e.target.value)} /></label>
         {refusal !== null && <p className="pf__note chat__refusal" data-routine-refusal role="alert">{refusal}</p>}
-        <button type="button" className="inspector__action" data-routine-add disabled={!props.teammate.scheduling} title={props.teammate.scheduling ? 'Save this routine' : `${teammateWord(props.teammate)} may not be scheduled — allow scheduling above first`} {...shellControl(() => { if (props.teammate.scheduling) submit() })}>Add routine</button>
+        <button type="button" className="inspector__action" data-routine-add disabled={!props.teammate.scheduling} title={props.teammate.scheduling ? 'Save this routine' : `${teammateWord(props.teammate)} may not be scheduled; allow scheduling above first`} {...shellControl(() => { if (props.teammate.scheduling) submit() })}>Add routine</button>
       </div>
     </div>
   )

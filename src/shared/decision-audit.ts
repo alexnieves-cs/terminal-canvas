@@ -76,7 +76,7 @@ export function parseDecisionRow(raw: unknown): DecisionRow | null {
  * history and this audit say them the same way.
  */
 export function capDecisionTitle(agent: string, note: string, byPerson: boolean): string {
-  return `${byPerson ? 'Set' : 'An agent set'} ${agent}'s own caps — ${note}`
+  return `${byPerson ? 'Set' : 'An agent set'} ${agent}'s own caps: ${note}`
 }
 
 export function proposalDecisionTitle(keep: boolean, proposer: string, place: string): string {

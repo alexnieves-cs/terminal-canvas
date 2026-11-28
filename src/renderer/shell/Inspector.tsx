@@ -232,7 +232,7 @@ function CapsSection({ id, caps, onCap }: { id: string; caps: CapsField; onCap?:
       u === '' ? (caps.own?.usd === undefined ? null : 'default-usd') : `${u}usd`,
       c === '' ? (caps.own?.contextK === undefined ? null : 'default-k') : `${c}k`
     ].filter((x): x is string => x !== null)
-    if (parts.length === 0) { setSaid({ ok: true, text: 'nothing to change — the Settings caps apply' }); return }
+    if (parts.length === 0) { setSaid({ ok: true, text: 'nothing to change, so the Settings caps apply' }); return }
     const out = onCap(id, parts.join(','))
     setSaid(out.kind === 'ran' ? { ok: true, text: out.note ?? 'set' } : { ok: false, text: out.reason })
   }
@@ -402,7 +402,7 @@ function EdgePanel({ edge, onSetLinkAutomation, onRemoveLink, onRelabelLink }: {
       <dl className="inspector__fields">
         <div className="inspector__field">
           <dt className="inspector__label">label</dt>
-          <dd className="inspector__value">{edge.label ?? (edge.automation !== undefined && edge.automation.enabled ? 'none — the rule is shown on the line' : 'none')}</dd>
+          <dd className="inspector__value">{edge.label ?? (edge.automation !== undefined && edge.automation.enabled ? 'none; the rule is shown on the line' : 'none')}</dd>
         </div>
         <div className="inspector__field">
           <dt className="inspector__label">rule</dt>
@@ -424,7 +424,7 @@ function EdgePanel({ edge, onSetLinkAutomation, onRemoveLink, onRelabelLink }: {
               {options.map((o) => {
                 const exitFamily = o.value === 'exit' || o.value === 'exit-ok' || o.value === 'exit-fail'
                 const off = (o.value === 'restart' && !edge.canRestart) || (exitFamily && edge.sourceIsChat)
-                return <option key={o.value} value={o.value} disabled={off}>{o.label}{off ? (o.value === 'restart' ? ' — terminals only' : ' — a chat never exits') : ''}</option>
+                return <option key={o.value} value={o.value} disabled={off}>{o.label}{off ? (o.value === 'restart' ? ' (terminals only)' : ' (a chat never exits)') : ''}</option>
               })}
             </select>
           </dd>
@@ -861,7 +861,7 @@ function InspectorPanel({
                 className="inspector__link-action"
                 data-inspector-grants-action="revoke"
                 disabled={!revoke.enabled}
-                title={revoke.enabled ? 'Revoke every tool granted for this session — it asks again' : revoke.reason}
+                title={revoke.enabled ? 'Revoke every tool granted for this session. It asks again' : revoke.reason}
                 {...shellControl(() => { if (revoke.enabled) onRevokeGrants?.(model.id) })}
               >
                 Revoke
@@ -953,7 +953,7 @@ function InspectorPanel({
               // unsampled arm, and `CPU 0%` beside a working agent is the
               // wrong answer whichever produced it.
               ? `CPU ${machine.cpuPercent < 0.05 ? 'under 1%' : formatCpu(machine.cpuPercent)} · RAM ${formatMemory(machine.memoryBytes)}`
-              : arm === 'none' ? 'no reading yet — the process table is sampled every few seconds' : arm === 'not-measured' ? 'not measured — only a terminal\'s process tree is sampled' : 'not running — nothing to measure'}</div>
+              : arm === 'none' ? 'no reading yet. The process table is sampled every few seconds' : arm === 'not-measured' ? 'not measured. Only a terminal\'s process tree is sampled' : 'not running, so there is nothing to measure'}</div>
             {/* Round 7. The shape UNDER the figure, never instead of it. The
                 line above is the metrics rule's one home for the readout and
                 stays exactly as it was; the sparklines answer the question a
@@ -1164,7 +1164,7 @@ function InspectorPanel({
         */
         <section className="inspector__section" data-work-section="cost">
           <h2 className="inspector__section-heading">Cost</h2>
-          <p className="inspector__arm" data-work-arm="cost">{model.kind === 'terminal' ? 'no agent on this panel — nothing to cost' : `${KIND_NOUN[model.kind]} costs nothing`}</p>
+          <p className="inspector__arm" data-work-arm="cost">{model.kind === 'terminal' ? 'no agent on this panel, so nothing to cost' : `${KIND_NOUN[model.kind]} costs nothing`}</p>
         </section>
       )}
       {!model.usage.hidden && (
@@ -1216,7 +1216,7 @@ function InspectorPanel({
             door beside the feed of what it did. A view — nothing runs. */}
         {model.kind === 'chat' && (
           <div className="inspector__replay">
-            <button type="button" className="inspector__action" data-inspector-replay title="Scrub this conversation back to any turn and see its files as they stood then — and compare it with another"
+            <button type="button" className="inspector__action" data-inspector-replay title="Scrub this conversation back to any turn and see its files as they stood then, and compare it with another"
               {...shellControl(() => openReplay(model.id))}>Replay this conversation…</button>
           </div>
         )}
@@ -1343,7 +1343,7 @@ function InspectorPanel({
             // sixth kind cannot reach this sentence without failing to compile.
             model.kind === 'terminal'
             ? model.restartable
-              ? `Restart ${model.heading} — ends the running process and starts it again`
+              ? `Restart ${model.heading}. This ends the running process and starts it again`
               : `${model.heading} has not started yet`
             : `${KIND_NOUN[model.kind]} has no process to restart`
           }
@@ -1409,11 +1409,11 @@ function InspectorPanel({
           >
             {/* M92. Three toggles, each reading the model's marks; the word says what the click DOES. */}
             <button type="button" className="inspector__action" role="menuitem" data-inspector-action={model.marks?.locked ? 'unlock' : 'lock'}
-              title={model.marks?.locked ? 'Unlock — drag and resize work again' : 'Lock — drag and resize refuse; close still works'}
+              title={model.marks?.locked ? 'Unlock so drag and resize work again' : 'Lock so drag and resize refuse. Close still works'}
               {...shellControl(() => { (model.marks?.locked ? onUnlock : onLock)(model.id); setMenuOpen(false) })}>{model.marks?.locked ? 'Unlock' : 'Lock'}</button>
             <button type="button" className="inspector__action" role="menuitem" data-inspector-action={model.marks?.pinned ? 'unpin' : 'pin'}
               disabled={!model.marks?.pinned && pinRefusal(model.kind, false, pinnedCount ?? 0) !== undefined}
-              title={model.marks?.pinned ? 'Unpin — tiering decides again' : (pinRefusal(model.kind, false, pinnedCount ?? 0) ?? 'Pin — kept live wherever the camera is, inside the live budget')}
+              title={model.marks?.pinned ? 'Unpin so tiering decides again' : (pinRefusal(model.kind, false, pinnedCount ?? 0) ?? 'Pin to keep it live wherever the camera is, inside the live budget')}
               {...shellControl(() => { (model.marks?.pinned ? onUnpin : onPin)(model.id); setMenuOpen(false) })}>{model.marks?.pinned ? 'Unpin' : 'Pin'}</button>
             <button type="button" className="inspector__action" role="menuitem" data-inspector-action={model.marks?.maximised ? 'restore' : 'maximise'}
               title={model.marks?.maximised ? 'Restore this panel to where it was' : 'Fill the window with this panel'}
@@ -1429,7 +1429,7 @@ function InspectorPanel({
                 data-front-end={model.frontEnd.verb}
                 disabled={!model.frontEnd.enabled}
                 title={model.frontEnd.enabled
-                  ? (model.frontEnd.verb === 'open-as-chat' ? `Open ${model.heading} as a chat — the same session, rendered as a transcript` : `Open ${model.heading} in a terminal — claude --resume this session`)
+                  ? (model.frontEnd.verb === 'open-as-chat' ? `Open ${model.heading} as a chat: the same session, rendered as a transcript` : `Open ${model.heading} in a terminal with claude --resume`)
                   : (model.frontEnd.reason ?? '')}
                 {...shellControl(() => { onFrontEnd(model.id); setMenuOpen(false) })}
               >
@@ -1518,7 +1518,7 @@ function InspectorPanel({
  *  M259. Sentence-case LABELS a person would say, each with a one-line HINT, grouped by the question they answer — the flat run of lower-case codes read as a config file. */
 const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'Folder', title: 'Name', command: 'Command', args: 'Arguments', presetId: 'Preset', message: 'First message', width: 'Workers at once', list: 'List of items', prompt: 'Instructions', target: 'Write results to', line: 'Canvas verb', url: 'Address', method: 'Method' }
 const NODE_FIELD_HINTS: Record<string, string> = {
-  cwd: 'Where it works — its terminal or chat opens here.',
+  cwd: 'Where it works. Its terminal or chat opens here.',
   title: 'What the block is called on the graph.',
   command: 'The program to run; empty is your login shell.',
   args: 'Words passed to the command, separated by spaces.',
@@ -1530,7 +1530,7 @@ const NODE_FIELD_HINTS: Record<string, string> = {
   target: 'The file the collected results are written to.',
   line: 'One line, run through the same executor the palette uses.',
   url: 'Read with a GET when the block runs.',
-  method: 'Only GET runs — a write is refused by name.'
+  method: 'Only GET runs. A write is refused by name.'
 }
 /** The groups, in reading order; a field no group names falls into the last. */
 const NODE_FIELD_GROUPS: ReadonlyArray<{ title: string; fields: readonly string[] }> = [

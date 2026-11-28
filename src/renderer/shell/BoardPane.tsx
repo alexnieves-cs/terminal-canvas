@@ -25,7 +25,7 @@ import { panelState, providerState } from '@renderer/panels/panel-state'
  * instead, disabled by nothing, because a board row that did nothing on
  * click would read as a broken row.
  */
-export const BOARD_EMPTY = 'Nothing on the board — add a GitHub item, or ⌘K, then Add a task to the board…'
+export const BOARD_EMPTY = 'Nothing on the board. Add a GitHub item, or ⌘K, then Add a task to the board…'
 
 export interface BoardPaneProps {
   onToggle: () => void
@@ -116,7 +116,7 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
       </div>
       {moved !== null && moved.phase !== 'pending' && (
         <div className="board-pane__toast" data-board-moved={moved.phase} role="status">
-          <span className="board-pane__toast-text">{moved.phase === 'moved' ? `Moved “${moved.title}” to ${moved.to}` : `Couldn't move “${moved.title}” — it stays in ${moved.from}`}</span>
+          <span className="board-pane__toast-text">{moved.phase === 'moved' ? `Moved “${moved.title}” to ${moved.to}` : `Couldn't move “${moved.title}”. It stays in ${moved.from}`}</span>
           {moved.phase === 'moved' && USER_SET_STATES.includes(moved.from) && (
             <button type="button" className="pf__verb pf__verb--word board-pane__undo" data-board-undo title={`Put it back in ${moved.from}`}
               {...shellControl(() => { props.onSetState(moved.id, moved.from); setMoved(null) })}>Undo</button>
@@ -175,7 +175,7 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
                         {/* A working card's note is the one sentence the runtime left (`lane closed`, a refusal). */}
                         {item.note !== undefined && <span className="board-row__note" data-board-note>{item.note}</span>}
                         {props.onFocusTask !== undefined && (
-                          <button type="button" className="rail-row__verb board-row__focus" data-board-focus title="Open this task beside its conversation — changes, checks and preview in one place"
+                          <button type="button" className="rail-row__verb board-row__focus" data-board-focus title="Open this task beside its conversation, with changes, checks and preview in one place"
                             {...shellControl(() => props.onFocusTask?.(item.id))}>Focus</button>
                         )}
                         {!carded && (
@@ -196,7 +196,7 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
 
 /** M149 (F.7). The empty column's three arms: a user-set column is a drop target; a runtime column names what sets it. */
 export function emptyColumnWord(state: string, droppable: boolean): string {
-  if (droppable) return 'nothing here — drop a card, or add one from the palette'
+  if (droppable) return 'Nothing here yet. Drop a card, or add one from the palette'
   // The two runtime states are read off WORK_ITEM_STATES by index, never
   // spelled: `verify:rail state.2` forbids the state words as literals outside
   // panel-state.ts, so a renamed state fails here loudly rather than matching nothing.

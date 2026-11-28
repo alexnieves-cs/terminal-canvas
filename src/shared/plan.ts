@@ -105,10 +105,10 @@ const TEAMMATE_REFUSED_VERBS = new Set([
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
   if (HUMAN_ANSWER_VERBS.has(step.verb)) {
     const panel = facts.panels.find((p) => p.id === step.args['panel'])
-    if (panel?.state === 'wants-you') return `${panel.id} is waiting for a person — a permission prompt is answered at the keyboard, never by a plan`
+    if (panel?.state === 'wants-you') return `${panel.id} is waiting for a person, and a permission prompt is answered at the keyboard, never by a plan`
   }
   if (caller?.teammateId !== undefined && (TEAMMATE_REFUSED_VERBS.has(step.verb) || step.verb.startsWith('create-'))) {
-    return `a teammate's plan cannot ${step.verb} — sessions and settings are the person's to open and change`
+    return `a teammate's plan cannot ${step.verb}, because sessions and settings are the person's to open and change`
   }
   return null
 }
@@ -120,7 +120,7 @@ export async function runAgentPlan(line: string, facts: PlanFacts, execute: (ste
   if (inputs.length > 16) return { kind: 'refused', reason: 'a plan may contain at most 16 operations' }
   const built = buildPlan(inputs, facts)
   if (built.kind === 'refused') return { kind: 'refused', reason: outward(`${built.reason} — ${built.fix}`, 'canvas plan').text }
-  if (planIsDestructive(built.plan)) return { kind: 'refused', reason: 'this plan needs human confirmation — run it through the palette' }
+  if (planIsDestructive(built.plan)) return { kind: 'refused', reason: 'this plan needs human confirmation; run it through the palette' }
   // Every step is judged before the first runs: a refusal on step three
   // must not leave steps one and two done (agent-door.1's rule, reached again).
   for (const step of built.plan.steps) {
@@ -172,11 +172,11 @@ function bindArgs(verb: VerbDef, raw: readonly string[], facts: PlanFacts, index
     switch (def.kind) {
       case 'panel': {
         const panel = facts.panels.find((p) => p.id === value)
-        if (!panel) return refuse(`step ${index + 1}: no panel is called ${value}`, 'name a panel by its id — the Panels pane and tc status list them')
+        if (!panel) return refuse(`step ${index + 1}: no panel is called ${value}`, 'name a panel by its id; the Panels pane and tc status list them')
         break
       }
       case 'preset':
-        if (facts.presets !== undefined && !facts.presets.some((p) => p.id === value)) return refuse(`step ${index + 1}: no preset is called ${value}`, 'name a preset by its id — Manage presets… lists them')
+        if (facts.presets !== undefined && !facts.presets.some((p) => p.id === value)) return refuse(`step ${index + 1}: no preset is called ${value}`, 'name a preset by its id; Manage presets… lists them')
         break
       case 'key': {
         const pool = def.name === 'template' ? facts.templates : def.name === 'worktree' ? facts.worktrees : def.name === 'workspace' ? facts.workspaces : undefined
@@ -188,7 +188,7 @@ function bindArgs(verb: VerbDef, raw: readonly string[], facts: PlanFacts, index
         if (s === undefined) return refuse(`step ${index + 1}: no setting is called ${value}`, 'Manage settings… lists every id')
         // Guardrail 1: the closed list. A plan that can raise its own
         // ceiling has no ceiling; a plan that can move the vault reads disk.
-        if (s.planWritable !== true) return refuse(`step ${index + 1}: ${value} is not a setting a plan may write`, 'change it yourself in ⌘K › Settings — only cosmetic and attention settings are plan-writable')
+        if (s.planWritable !== true) return refuse(`step ${index + 1}: ${value} is not a setting a plan may write`, 'change it yourself in ⌘K › Settings, because only cosmetic and attention settings are plan-writable')
         break
       }
       case 'text':
@@ -215,19 +215,19 @@ export function buildPlan(inputs: readonly PlanInput[], facts: PlanFacts): PlanR
     if (verb.id === 'type' || verb.id === 'submit' || verb.id === 'interrupt') {
       const panel = facts.panels.find((p) => p.id === bound.args['panel'])
       if (panel !== undefined && !acceptsTyping(panel)) {
-        return refuse(`step ${i + 1}: ${panel.id} is a ${panel.kind === 'terminal' ? 'plain shell' : panel.kind} — a plan may only type into an agent`, 'aim it at an agent panel: a terminal running claude or codex, or a chat')
+        return refuse(`step ${i + 1}: ${panel.id} is a ${panel.kind === 'terminal' ? 'plain shell' : panel.kind}, and a plan may only type into an agent`, 'aim it at an agent panel: a terminal running claude or codex, or a chat')
       }
     }
     if (verb.id === 'send') {
       const panel = facts.panels.find((p) => p.id === bound.args['panel'])
-      if (panel !== undefined && panel.kind !== 'chat') return refuse(`step ${i + 1}: ${panel.id} is not a chat — send needs one`, 'use `type` and `submit` for an agent terminal')
+      if (panel !== undefined && panel.kind !== 'chat') return refuse(`step ${i + 1}: ${panel.id} is not a chat, and send needs one`, 'use `type` and `submit` for an agent terminal')
     }
     const step: PlanStep = { verb: verb.id, args: bound.args }
     // Guardrail 5: destructive asks first. The step is not refused — it is
     // given the confirmation the runtime will not skip.
     if (verb.destructive) {
       const what = verb.args.length > 0 ? ` ${bound.args[verb.args[0]!.name] ?? ''}` : ''
-      step.confirm = { reason: `${verb.id}${what} is destructive — confirm to run it` }
+      step.confirm = { reason: `${verb.id}${what} is destructive; confirm to run it` }
     }
     steps.push(step)
   }
@@ -269,7 +269,7 @@ export async function runPlan(plan: Plan, exec: StepExecutor, opts: { acknowledg
   for (let i = 0; i < plan.steps.length; i += 1) {
     const step = plan.steps[i]!
     if (step.confirm !== undefined && !opts.acknowledged) {
-      steps.push({ kind: 'refused', reason: `step ${i + 1} (${step.verb}) needs its confirmation — confirm the plan to run it` })
+      steps.push({ kind: 'refused', reason: `step ${i + 1} (${step.verb}) needs its confirmation; confirm the plan to run it` })
       return { steps, summary: `stopped at step ${i + 1}: ${step.verb} needs its confirmation` }
     }
     let outcome: StepOutcome

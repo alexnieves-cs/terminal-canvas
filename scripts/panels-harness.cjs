@@ -1745,7 +1745,7 @@ app.whenReady().then(async () => {
     }),
     capture: async (req) => {
       const guest = req && typeof req.webContentsId === 'number' ? webContents.fromId(req.webContentsId) : null
-      if (guest === null || guest === undefined || guest.isDestroyed()) return { kind: 'refused', reason: 'no page is open in this pane — open one, then capture it' }
+      if (guest === null || guest === undefined || guest.isDestroyed()) return { kind: 'refused', reason: 'no page is open in this pane; open one, then capture it' }
       if (guest.getType() !== 'webview') return { kind: 'refused', reason: 'that id is not a page in a browser panel' }
       const dir = join(app.getPath('userData'), 'captures')
       try { mkdirSync(dir, { recursive: true }) } catch {}

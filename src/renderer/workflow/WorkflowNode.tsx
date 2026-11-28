@@ -96,7 +96,7 @@ export const TEMPLATE_GONE = 'that template is no longer saved'
  * There is no second editor here to save FROM — that is spec §9's whole
  * claim — so the sentence names the door that does work.
  */
-export const REASON_NOTHING_TO_SAVE = 'nothing to save — the diagram matches the template'
+export const REASON_NOTHING_TO_SAVE = 'nothing to save; the diagram matches the template'
 /** M184. A stale save keeps the draft; these two verbs are the only ways out of it. */
 /** M184. The Stop verb's subject is the run, not the pool — a chat mid-turn is running too. */
 export const REASON_NOTHING_RUNNING = 'nothing of this workflow is running'
@@ -493,13 +493,13 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               const lines = capabilityLines(toolCapabilities({ kind: 'workflow', nodes: template.nodes }))
               return (
                 <div className="workflow-node__unread" data-workflow-unread role="status">
-                  <p className="pf__note">Not read yet — this workflow came from outside this canvas (a file, or an agent's answer). Its action blocks are refused by name until you read them.</p>
+                  <p className="pf__note">Not read yet. This workflow came from outside this canvas (a file, or an agent's answer). Its action blocks are refused by name until you read them.</p>
                   <p className="pf__note" data-workflow-reach="commands">runs · {lines.commands}</p>
                   <p className="pf__note" data-workflow-reach="network">reaches · {lines.network}</p>
                   <p className="pf__note" data-workflow-reach="files">works in · {lines.files}</p>
                   <button type="button" className="pf__verb pf__verb--word" data-workflow-mark-read disabled={readOnly === true || props.onMarkRead === undefined}
-                    title={readOnly === true ? REASON_MERGED_VIEW : 'You have read every block above — allow this workflow to run'}
-                    onMouseDown={press(() => props.onMarkRead?.(id))}>I've read this — allow runs</button>
+                    title={readOnly === true ? REASON_MERGED_VIEW : 'You have read every block above. Allow this workflow to run'}
+                    onMouseDown={press(() => props.onMarkRead?.(id))}>I've read this, allow runs</button>
                 </div>
               )
             })()}
@@ -511,7 +511,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               {runVerb}
               {!readOnly && (
                 <button type="button" className="pf__verb pf__verb--word workflow-node__tool workflow-node__library-toggle" data-workflow-library-toggle aria-expanded={libraryOpen} aria-pressed={libraryOpen}
-                  title={libraryOpen ? 'Hide the node library' : 'Show the node library — drag a kind onto the diagram'}
+                  title={libraryOpen ? 'Hide the node library' : 'Show the node library. Drag a kind onto the diagram'}
                   onMouseDown={press(() => setLibraryOpen((v) => !v))}><Plus size={13} /><span>Add node</span></button>
               )}
               {triggerVerb}
@@ -520,7 +520,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                 onMouseDown={press(() => setHistoryOpen((v) => !v))}><History size={13} /><span>{mine.length === 0 ? 'History' : `History (${mine.length})`}</span></button>
               <button type="button" className="pf__verb pf__verb--word workflow-node__tool workflow-node__expand" data-workflow-expand={expanded ? 'restore' : 'expand'} aria-pressed={expanded}
                 disabled={marks.readOnly}
-                title={marks.readOnly ? REASON_MERGED_VIEW : expanded ? 'Back to the panel\'s size on the canvas — one undo' : 'Edit in an expanded view — the panel fills the window; Restore puts it back'}
+                title={marks.readOnly ? REASON_MERGED_VIEW : expanded ? 'Back to the panel\'s size on the canvas (one undo)' : 'Edit in an expanded view. The panel fills the window, and Restore puts it back'}
                 onMouseDown={press(() => { if (!marks.readOnly) (expanded ? marks.restore : marks.maximise)(panel.rect.id) })}>{expanded ? <Restore /> : <Maximize />}<span>{expanded ? 'Restore' : 'Expand editor'}</span></button>
               <span className="workflow-node__spacer" />
               {/* M259. The status: one word at rest when there is one to say,
@@ -572,7 +572,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                   {LIBRARY.map((entry) => {
                     const Glyph = WORKFLOW_NODE_GLYPH[entry.kind]
                     return (
-                      <li key={entry.kind} className="workflow-node__entry" data-workflow-library-kind={entry.kind} data-family={KIND_FAMILY[entry.kind]} title={`Drag onto the diagram, or Add — for example: ${entry.example}`}
+                      <li key={entry.kind} className="workflow-node__entry" data-workflow-library-kind={entry.kind} data-family={KIND_FAMILY[entry.kind]} title={`Drag onto the diagram, or Add. For example: ${entry.example}`}
                         onMouseDown={(e) => beginLibraryDrag(entry.kind, e)}>
                         <span className="workflow-node__entry-glyph"><Glyph size={14} /></span>
                         <span className="workflow-node__entry-text">
@@ -594,7 +594,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                     {(['horizontal', 'vertical'] as const).map((dir) => (
                       <button key={dir} type="button" className="pf__verb workflow-node__layout-btn" data-workflow-layout={dir} disabled={template.nodes.length < 2}
                         aria-label={`Arrange ${dir === 'horizontal' ? 'left to right' : 'top to bottom'}`}
-                        title={template.nodes.length < 2 ? 'nothing to arrange — one block' : `Arrange ${dir === 'horizontal' ? 'left to right' : 'top to bottom'}`}
+                        title={template.nodes.length < 2 ? 'nothing to arrange in one block' : `Arrange ${dir === 'horizontal' ? 'left to right' : 'top to bottom'}`}
                         onMouseDown={press(() => arrange(dir))}><span className={`workflow-node__layout-glyph workflow-node__layout-glyph--${dir}`}><AutoLayout size={13} /></span></button>
                     ))}
                   </div>
@@ -771,7 +771,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                   <div className="workflow-node__timeline" data-workflow-timeline={selectedRun.id}>
                     <h4 className="workflow-node__timeline-title">Timeline</h4>
                     {timeline.length === 0 ? (
-                      <p className="pf__note workflow-node__empty" data-workflow-timeline-empty>this run was recorded before runs kept their blocks — its events cannot be placed on the graph</p>
+                      <p className="pf__note workflow-node__empty" data-workflow-timeline-empty>this run was recorded before runs kept their blocks, so its events cannot be placed on the graph</p>
                     ) : (
                       <ol className="workflow-node__events">
                         {timeline.map((row) => {
@@ -815,7 +815,7 @@ function PoolRows({ templateId, blockKey }: { templateId: string; blockKey: stri
     <section className="workflow-node__pool" data-workflow-pool={blockKey}>
       <h4 className="workflow-node__pool-title">{blockKey} · pool</h4>
       {pool.items.length === 0 && pool.refused === undefined ? (
-        <p className="pf__note workflow-node__empty" data-workflow-pool-empty>not run yet — Run starts the workers</p>
+        <p className="pf__note workflow-node__empty" data-workflow-pool-empty>not run yet. Run starts the workers</p>
       ) : (
         <ul className="workflow-node__runs" data-workflow-pool-items>
           {pool.items.map((row) => (
@@ -826,7 +826,7 @@ function PoolRows({ templateId, blockKey }: { templateId: string; blockKey: stri
           ))}
         </ul>
       )}
-      {pool.refused !== undefined && <p className="pf__note workflow-node__pool-refused" data-workflow-pool-refused>{`refused — ${pool.refused}`}</p>}
+      {pool.refused !== undefined && <p className="pf__note workflow-node__pool-refused" data-workflow-pool-refused>{`refused: ${pool.refused}`}</p>}
       {pool.stopped !== undefined && <p className="pf__note workflow-node__pool-stopped" data-workflow-pool-stopped>{poolStoppedWord(pool.stopped)}</p>}
     </section>
   )

@@ -242,15 +242,15 @@ function inboxAffects(item: InboxItem): string {
   const behind = item.unblocks > 0 ? `, and ${item.unblocks} more ${item.unblocks === 1 ? 'waits' : 'wait'} behind it` : ''
   const a = item.approval
   // M359. Nothing the agent would do is approved until its plan is.
-  if (a !== undefined && a.toolName === PLAN_TOOL) return `Affects everything ${item.label} does next — it starts nothing until its plan is approved${behind}.`
+  if (a !== undefined && a.toolName === PLAN_TOOL) return `Affects everything ${item.label} does next. It starts nothing until its plan is approved${behind}.`
   if (a !== undefined) {
     const what = a.argument === '' ? `one ${a.toolName} call` : `${a.toolName} \`${clip(a.argument)}\``
     const askers = item.members.length > 1 ? `${item.members.length} agents' turns wait` : `${item.label}'s turn waits`
     return `Affects ${what}${whereOf(a.cwd)} — ${askers} on it${behind}.`
   }
   // M355. A hold spends nothing more while it waits, and serves what it kept first once raised.
-  if (item.kind === 'cap') return `Affects ${item.label}'s next turn — nothing runs, or is spent, until its cap is raised${behind}.`
-  return `Affects ${item.label}'s next turn — nothing runs until you reply${behind}.`
+  if (item.kind === 'cap') return `Affects ${item.label}'s next turn. Nothing runs, or is spent, until its cap is raised${behind}.`
+  return `Affects ${item.label}'s next turn. Nothing runs until you reply${behind}.`
 }
 
 function decisionFromInbox(item: InboxItem): QueueDecision {
@@ -271,7 +271,7 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
     const who = perm.inbox?.label ?? 'an agent'
     return {
       severity: 'blocked',
-      why: `Stopped — ${who} has a plan waiting for your approval${d.length > 1 ? `, and ${d.length - 1} more ${d.length === 2 ? 'thing needs' : 'things need'} you here` : ''}.`,
+      why: `Stopped: ${who} has a plan waiting for your approval${d.length > 1 ? `, and ${d.length - 1} more ${d.length === 2 ? 'thing needs' : 'things need'} you here` : ''}.`,
       next: { label: `Read ${who}'s plan`, evidence: perm.evidence },
       after: `Approve it and the agent leaves plan mode and starts on it; keep planning and it revises the plan and asks again.${waiters}`
     }
@@ -280,7 +280,7 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
     const a = perm.inbox?.approval
     return {
       severity: 'blocked',
-      why: `Stopped — ${perm.inbox?.label ?? 'an agent'} needs your permission to use ${a?.toolName ?? 'a tool'}${d.length > 1 ? `, and ${d.length - 1} more ${d.length === 2 ? 'thing needs' : 'things need'} you here` : ''}.`,
+      why: `Stopped: ${perm.inbox?.label ?? 'an agent'} needs your permission to use ${a?.toolName ?? 'a tool'}${d.length > 1 ? `, and ${d.length - 1} more ${d.length === 2 ? 'thing needs' : 'things need'} you here` : ''}.`,
       next: { label: `Answer ${a?.toolName ?? 'the'} request`, evidence: perm.evidence },
       after: `Allow and the agent carries on with its turn; deny and it is told no and chooses another way.${waiters}`
     }
@@ -288,7 +288,7 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
   if (q !== undefined) {
     return {
       severity: 'blocked',
-      why: `Stopped — ${q.text}.`,
+      why: `Stopped: ${q.text}.`,
       next: { label: `Reply to ${q.inbox?.label ?? 'the agent'}`, evidence: q.evidence },
       after: `Your reply starts its next turn.${waiters}`
     }
@@ -296,7 +296,7 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
   if (cap !== undefined) {
     return {
       severity: 'blocked',
-      why: `Stopped — ${cap.text}.`,
+      why: `Stopped: ${cap.text}.`,
       next: { label: `Raise ${cap.inbox?.label ?? 'the agent'}'s cap`, evidence: cap.evidence },
       after: `Raise the cap and what it kept goes first; leave it and it stays held, spending nothing more.${waiters}`
     }
@@ -305,7 +305,7 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
     const n = d.filter((x) => x.kind === 'check').length
     return {
       severity: 'failed',
-      why: `${n === 1 ? 'A check' : `${n} checks`} failed — ${check.text}. Nothing is verified until ${n === 1 ? 'it passes' : 'they pass'}.`,
+      why: `${n === 1 ? 'A check' : `${n} checks`} failed: ${check.text}. Nothing is verified until ${n === 1 ? 'it passes' : 'they pass'}.`,
       next: { label: 'Open the failing output', evidence: check.evidence },
       after: `Send the failure to the agent from the review; once a re-run passes, the task can be verified.${waiters}`
     }
@@ -313,14 +313,14 @@ function describe(group: { title: string; decisions: QueueDecision[]; affects: {
   if (review !== undefined) {
     return {
       severity: 'review',
-      why: `Waiting for your review — ${review.text}.`,
+      why: `Waiting for your review: ${review.text}.`,
       next: { label: 'Review the changes', evidence: review.evidence },
       after: `Accept lands it; comments go back to the agent as one follow-up.${waiters}`
     }
   }
   return {
     severity: 'lost',
-    why: `A decision from before the restart did not come back — ${lost?.text ?? 'its session ended'}.`,
+    why: `A decision from before the restart did not come back: ${lost?.text ?? 'its session ended'}.`,
     next: { label: 'Go to it', evidence: lost?.evidence ?? { kind: 'panel', panelId: '' } },
     after: 'Continue the task and the agent asks again; nothing was allowed on your behalf.'
   }
@@ -345,7 +345,7 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
       push(t.itemId, {
         key: `check:${t.itemId}:${r.command}`, kind: 'check', since: r.at,
         text: `\`${r.command}\` ${r.exitCode === null ? 'ended without an exit code' : `exited ${r.exitCode}`}${where === undefined ? '' : ` in ${where}`}`,
-        affects: `Affects whether ${t.title} can be verified — it stays unverified until \`${clip(r.command, 40)}\` passes again.`,
+        affects: `Affects whether ${t.title} can be verified. It stays unverified until \`${clip(r.command, 40)}\` passes again.`,
         evidence: r.outputId !== undefined ? { kind: 'output', outputId: r.outputId, panelId: r.panelId } : { kind: 'panel', panelId: r.panelId }
       })
     }
@@ -362,7 +362,7 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
       push(t.itemId, {
         key: `review:${t.itemId}`, kind: 'review', since: 0, evidence: { kind: 'review', itemId: t.itemId },
         text: h.standing === 'stale' ? `the changes moved since your review${files}` : finished,
-        affects: `Affects ${h.files === undefined ? 'the task\'s changes' : `${h.files} changed file${h.files === 1 ? '' : 's'}`} — nothing lands on your branch until you accept.`,
+        affects: `Affects ${h.files === undefined ? 'the task\'s changes' : `${h.files} changed file${h.files === 1 ? '' : 's'}`}. Nothing lands on your branch until you accept.`,
         ...(v === undefined ? {} : { verdict: v })
       })
     }
@@ -372,8 +372,8 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
     if (liveKeys.has(l.key)) continue
     push(l.itemId !== null && input.tasks.some((t) => t.itemId === l.itemId) ? l.itemId : null, {
       key: `lost:${l.key}`, kind: 'lost', since: l.since, evidence: { kind: 'panel', panelId: l.panelId },
-      text: `${l.label} ${l.text} — its session ended before you answered`,
-      affects: 'Affects nothing now — the request is gone, and nothing was allowed on your behalf.'
+      text: `${l.label} ${l.text}, but its session ended before you answered`,
+      affects: 'Affects nothing now. The request is gone, and nothing was allowed on your behalf.'
     })
   }
 
@@ -418,7 +418,7 @@ export function buildTaskQueue(input: QueueInput): TaskQueue {
   const review = groups.filter((g) => g.severity === 'review').length
   if (review > 0) parts.push(`${review} to review`)
   const headline = groups.length === 0
-    ? (quiet > 0 ? `Nothing needs you — ${quiet} task${quiet === 1 ? ' is' : 's are'} working or done.` : 'Nothing needs you.')
+    ? (quiet > 0 ? `Nothing needs you. ${quiet} task${quiet === 1 ? ' is' : 's are'} working or done.` : 'Nothing needs you.')
     : `${parts.join(' · ')}${quiet > 0 ? `. ${quiet} more working or done` : ''}.`
   const checks: Record<string, CheckTally> = {}
   const runs: Record<string, QueueCheckRun[]> = {}

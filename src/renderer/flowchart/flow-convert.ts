@@ -211,8 +211,8 @@ export function chartToPlan(panels: readonly Panel[], scope: ReadonlySet<string>
     for (const t of succs.get(next.rect.id) ?? []) indeg.set(t, (indeg.get(t) ?? 1) - 1)
   }
   const steps = order.filter(isStep)
-  if (steps.length === 0) return { kind: 'refused', reason: 'the chart has no labelled step — a process or a decision with words in it becomes a step' }
-  if (steps.length > PLAN_STEPS_MAX) return { kind: 'refused', reason: `a plan holds ${PLAN_STEPS_MAX} steps and this chart has ${steps.length} — select a part of it` }
+  if (steps.length === 0) return { kind: 'refused', reason: 'the chart has no labelled step. A process or a decision with words in it becomes a step' }
+  if (steps.length > PLAN_STEPS_MAX) return { kind: 'refused', reason: `a plan holds ${PLAN_STEPS_MAX} steps and this chart has ${steps.length}; select a part of it` }
   const stepOf = new Map(steps.map((s, i) => [s.rect.id, `s${i + 1}`]))
   // The nearest STEP ancestors of a shape, walking back through the shapes
   // that are not steps (a start, a junction) — with a guard against loops.
@@ -246,7 +246,7 @@ export function chartToPlan(panels: readonly Panel[], scope: ReadonlySet<string>
         kind: review ? 'review' : 'agent',
         role: review ? 'you' : 'agent',
         dependsOn: deps,
-        expected: review ? `An answer to “${label}” — decided by a person.` : `“${label}” done, with a plain account of what changed.`
+        expected: review ? `An answer to “${label}”, decided by a person.` : `“${label}” done, with a plain account of what changed.`
       } as PlanStep
     })
   }

@@ -5450,10 +5450,10 @@ try {
       outranks?.how === 'quit' && malformed === null &&
       P.parseRunMarker({ at: 1, kept: true, running: [] }) !== null && P.parseRunMarker({ at: 1, kept: true }) === null && P.parseRunMarker(null) === null &&
       allBack.length === 1 && allBack[0].group === 'crash' && allBack[0].tone === 'info' &&
-      allBack[0].text === 'Terminal Canvas closed unexpectedly last time — your canvas is back as it was last saved, and A and B reconnected, still running' &&
-      oneLost.length === 2 && oneLost[0].group === 'ended' && oneLost[0].tone === 'problem' && oneLost[0].text === 'B ended when the app closed unexpectedly — start again or leave stopped' && oneLost[1].group === 'crash' &&
-      direct.length === 2 && direct[0].group === 'crash' && direct[0].text === 'Terminal Canvas closed unexpectedly last time — your canvas is back as it was last saved' &&
-      direct[1].group === 'stopped' && direct[1].text === 'A and B stopped when the app closed unexpectedly — click one to start it again' &&
+      allBack[0].text === 'Terminal Canvas closed unexpectedly last time. Your canvas is back as it was last saved, and A and B reconnected, still running' &&
+      oneLost.length === 2 && oneLost[0].group === 'ended' && oneLost[0].tone === 'problem' && oneLost[0].text === 'B ended when the app closed unexpectedly. Start again or leave stopped' && oneLost[1].group === 'crash' &&
+      direct.length === 2 && direct[0].group === 'crash' && direct[0].text === 'Terminal Canvas closed unexpectedly last time. Your canvas is back as it was last saved' &&
+      direct[1].group === 'stopped' && direct[1].text === 'A and B stopped when the app closed unexpectedly. Click one to start it again' &&
       ![...allBack, ...oneLost, ...direct].some((l) => /you quit|was closed|set to keep running/.test(l.text)),
       JSON.stringify({ constructedClean, unchangedNotRewritten, survivesLoser, beforeAlive, crash, once, markerGone, sealedStaysGone, quit, outranks, malformed, allBack, oneLost, direct }))
   } catch (e) { ok('persist.6 (threw)', false, String(e)) }

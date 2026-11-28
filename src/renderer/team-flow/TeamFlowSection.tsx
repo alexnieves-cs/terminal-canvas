@@ -45,10 +45,10 @@ export function TeamFlowSection({ onGoToPanel, onRefused }: { onGoToPanel: (pane
                   </div>
                   <div className="inbox__group-verbs team-flow__verbs">
                     <button type="button" className="approval__verb" data-team-handoff-verb="take"
-                      title="Take it: you hold this agent now — its questions and its review are yours. It keeps running where it runs."
+                      title="Take it: you hold this agent now. Its questions and its review are yours. It keeps running where it runs."
                       {...shellControl(() => send({ kind: 'take', workspaceId: row.workspaceId, handoffId: row.handoffId }))}>Take it</button>
                     <button type="button" className="approval__verb approval__verb--deny" data-team-handoff-verb="decline"
-                      title={row.named ? 'Decline — it stays with the person who offered it' : 'Not for you — it stays offered to everyone else'}
+                      title={row.named ? 'Decline. It stays with the person who offered it' : 'Not for you. It stays offered to everyone else'}
                       {...shellControl(() => send({ kind: 'decline', workspaceId: row.workspaceId, handoffId: row.handoffId }))}>Decline</button>
                   </div>
                 </li>
@@ -86,10 +86,10 @@ export function TeamFlowSection({ onGoToPanel, onRefused }: { onGoToPanel: (pane
                         {...shellControl(() => send({ kind: 'look', workspaceId: row.workspaceId, reviewId: row.reviewId }))}>I'm looking</button>
                     )}
                     <button type="button" className="approval__verb" data-team-review-verb="approve"
-                      title="Approve — one approval passes it, unless someone asks for changes"
+                      title="Approve. One approval passes it, unless someone asks for changes"
                       {...shellControl(() => send({ kind: 'approve', workspaceId: row.workspaceId, reviewId: row.reviewId }))}>Approve</button>
                     <button type="button" className="approval__verb approval__verb--deny" data-team-review-verb="request-changes"
-                      title="Ask for changes — one request decides it, whoever else approved"
+                      title="Ask for changes. One request decides it, whoever else approved"
                       {...shellControl(() => send({ kind: 'request-changes', workspaceId: row.workspaceId, reviewId: row.reviewId }))}>Ask for changes</button>
                   </div>
                 </li>
@@ -116,7 +116,7 @@ export function TeamFlowSection({ onGoToPanel, onRefused }: { onGoToPanel: (pane
                       {...shellControl(() => send({ kind: 'settle-review', workspaceId: row.workspaceId, reviewId: row.id }))}>Done</button>
                   )}
                   <button type="button" className="approval__verb approval__verb--deny" data-team-mine-verb="withdraw"
-                    title={row.kind === 'handoff' ? 'Call the offer back — you keep the agent' : 'Take it out of the queue'}
+                    title={row.kind === 'handoff' ? 'Call the offer back and keep the agent' : 'Take it out of the queue'}
                     {...shellControl(() => send(row.kind === 'handoff'
                       ? { kind: 'withdraw', workspaceId: row.workspaceId, handoffId: row.id }
                       : { kind: 'withdraw-review', workspaceId: row.workspaceId, reviewId: row.id }))}>Withdraw</button>

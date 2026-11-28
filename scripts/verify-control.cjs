@@ -695,7 +695,7 @@ const ok = (n, pass, detail = '') => {
     const read = a.list(10)
     rmSync(dir, { recursive: true, force: true })
     ok('audit.3 a person\'s cap and a kept proposal reach the audit in one set of words; an agent\'s own lowering is the agent\'s and stays out',
-      personCap === "Set claude — api's own caps — spend cap $4.10" && agentCap.startsWith('An agent set') &&
+      personCap === "Set claude — api's own caps: spend cap $4.10" && agentCap.startsWith('An agent set') &&
         kept === "Kept review seat's proposed comment on src/a.ts:12" && C.proposalDecisionTitle(false, 'x', 'y:1').startsWith('Discarded') &&
         read.rows.map((r) => r.title).join('|') === `${kept}|${personCap}`,
       JSON.stringify(read.rows))

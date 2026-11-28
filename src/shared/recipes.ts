@@ -97,7 +97,7 @@ export const BUILT_IN_RECIPES: readonly Recipe[] = [
   {
     id: 'recipe-review-change',
     name: 'Review a change',
-    hint: 'Read a branch or diff and report findings, most severe first — no edits',
+    hint: 'Read a branch or diff and report findings, most severe first, with no edits',
     ask: { label: 'Which change?', placeholder: 'e.g. branch feature/x, PR #45, or the last commit' },
     swarm: 'review',
     brief: 'Review "{input}" for correctness, risk and missing tests. Report findings; do not change the code.',
@@ -110,7 +110,7 @@ export const BUILT_IN_RECIPES: readonly Recipe[] = [
   {
     id: 'recipe-investigate-bug',
     name: 'Investigate a bug',
-    hint: 'Reproduce, find the cause, propose a fix — with evidence, before any change lands',
+    hint: 'Reproduce, find the cause, propose a fix, with evidence, before any change lands',
     ask: { label: 'What is the bug?', placeholder: 'e.g. the export button does nothing on large canvases' },
     swarm: 'explore',
     brief: 'Find the root cause of: {input}. Reproduce it first; propose a fix with the evidence for it.',

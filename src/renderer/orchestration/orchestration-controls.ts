@@ -63,13 +63,13 @@ export function orchControls(input: OrchControlInput): { controls: OrchControl[]
   const row = input.backend === undefined ? undefined : BACKENDS[input.backend]
   // Interrupt
   if (isChat && row !== undefined && row.interrupts && GENERATING.has(input.state)) {
-    controls.push({ id: 'interrupt', label: 'Interrupt', affects: `stops the current generation in ${input.title} only — the process stays up, nothing it wrote is rolled back, and no resumable checkpoint is kept` })
+    controls.push({ id: 'interrupt', label: 'Interrupt', affects: `stops the current generation in ${input.title} only. The process stays up, nothing it wrote is rolled back, and no resumable checkpoint is kept` })
   } else if (isChat && row !== undefined && !row.interrupts) {
     absent.push({ id: 'interrupt', reason: row.reasons.noInterrupt })
   } else if (isChat) {
-    absent.push({ id: 'interrupt', reason: 'nothing is generating — there is no turn to interrupt' })
+    absent.push({ id: 'interrupt', reason: 'nothing is generating, so there is no turn to interrupt' })
   } else {
-    absent.push({ id: 'interrupt', reason: input.kind === 'terminal' ? 'a terminal has no interrupt door here — Ctrl-C in its own panel is the only one' : 'not a session' })
+    absent.push({ id: 'interrupt', reason: input.kind === 'terminal' ? 'a terminal has no interrupt door here. Ctrl-C in its own panel is the only one' : 'not a session' })
   }
   // Retry: a preview, never a send.
   const failed = input.state === 'exited' || (input.lastTurn !== undefined && input.lastTurn.kind !== 'ok')
@@ -78,14 +78,14 @@ export function orchControls(input: OrchControlInput): { controls: OrchControl[]
   } else if (isChat && row !== undefined && !row.resumes) {
     absent.push({ id: 'retry', reason: `${row.label} cannot resume a conversation, so there is no known context to retry from` })
   } else if (isChat && !failed) {
-    absent.push({ id: 'retry', reason: 'the last turn ended normally — there is nothing to retry' })
+    absent.push({ id: 'retry', reason: 'the last turn ended normally, so there is nothing to retry' })
   } else if (isChat) {
     absent.push({ id: 'retry', reason: 'no prompt of yours is recorded to retry from' })
   } else {
-    absent.push({ id: 'retry', reason: input.kind === 'terminal' ? 'a failed command is never re-run from here — it is not assumed safe to repeat' : 'not a session' })
+    absent.push({ id: 'retry', reason: input.kind === 'terminal' ? 'a failed command is never re-run from here, because it is not assumed safe to repeat' : 'not a session' })
   }
   absent.push({ id: 'reassign', reason: 'no runtime here can move a running session to another teammate' })
-  absent.push({ id: 'stop', reason: isChat && row !== undefined && !row.interrupts ? `${row.reasons.noInterrupt} — End process below is the stop it has` : 'no runtime here stops a session while reporting its surviving child processes — End process kills the CLI only' })
+  absent.push({ id: 'stop', reason: isChat && row !== undefined && !row.interrupts ? `${row.reasons.noInterrupt}. End process below is the stop it has` : 'no runtime here stops a session while reporting its surviving child processes. End process kills the CLI only' })
   return { controls, absent }
 }
 
@@ -127,16 +127,16 @@ export type OrchStandingKind = 'running' | 'idle' | 'stopped' | 'interrupted' | 
 export function orchSessionStanding(input: { state: string; exitCode?: number | null; lastTurn?: OrchLastTurn }): { kind: OrchStandingKind; word: string } {
   const cut = input.lastTurn !== undefined && (input.lastTurn.kind === 'interrupted' || (input.lastTurn.kind === 'aborted' && input.lastTurn.reason === 'interrupt-timeout'))
   if (input.state === 'wants-you') return { kind: 'waiting', word: NEEDS_YOU } // 4.1: the one state word
-  if (GENERATING.has(input.state)) return { kind: 'running', word: 'running — a turn is in flight' }
+  if (GENERATING.has(input.state)) return { kind: 'running', word: 'running, a turn is in flight' }
   // An interrupt the CLI answered leaves a partial turn; one it ignored ends in
   // main's kill (interrupt-timeout) and the process is gone until the next send.
   // Either way the fact a person needs is that the run was CUT SHORT — not that
   // the session is stopped, and not that it is merely idle.
-  if (cut) return { kind: 'interrupted', word: `interrupted — the last turn was cut short${input.lastTurn?.kind === 'aborted' ? ' (the CLI ignored the interrupt and main killed the process)' : ''}; the conversation resumes on the next message` }
-  if (input.state === 'exited') return { kind: 'stopped', word: `stopped — the session exited${input.exitCode === undefined || input.exitCode === null ? '' : ` (${input.exitCode})`}` }
+  if (cut) return { kind: 'interrupted', word: `interrupted: the last turn was cut short${input.lastTurn?.kind === 'aborted' ? ' (the CLI ignored the interrupt and main killed the process)' : ''}; the conversation resumes on the next message` }
+  if (input.state === 'exited') return { kind: 'stopped', word: `stopped: the session exited${input.exitCode === undefined || input.exitCode === null ? '' : ` (${input.exitCode})`}` }
   const t = input.lastTurn
-  if (t?.kind === 'aborted') return { kind: 'aborted', word: `aborted — ${t.reason ?? 'no reason recorded'}; the session is still up` }
-  if (t?.kind === 'error') return { kind: 'errored', word: 'errored — the last turn failed; the session is still up' }
+  if (t?.kind === 'aborted') return { kind: 'aborted', word: `aborted: ${t.reason ?? 'no reason recorded'}; the session is still up` }
+  if (t?.kind === 'error') return { kind: 'errored', word: 'errored: the last turn failed; the session is still up' }
   return { kind: 'idle', word: 'idle' }
 }
 
@@ -149,10 +149,10 @@ export interface OrchSpendInput {
 
 /** One session's spend, or Unknown with the reason. */
 export function orchSpendWord(s: OrchSpendInput): { known: boolean; word: string } {
-  if (s.backend === undefined) return { known: false, word: 'Unknown — not an agent session' }
+  if (s.backend === undefined) return { known: false, word: 'Unknown, not an agent session' }
   const row = BACKENDS[s.backend]
-  if (!row.reportsCost) return { known: false, word: `Unknown — ${row.label} reports no cost` }
-  if (s.costUsd === undefined) return { known: false, word: `Unknown — ${row.label} has reported nothing yet this launch` }
+  if (!row.reportsCost) return { known: false, word: `Unknown: ${row.label} reports no cost` }
+  if (s.costUsd === undefined) return { known: false, word: `Unknown: ${row.label} has reported nothing yet this launch` }
   return { known: true, word: `$${s.costUsd.toFixed(2)} reported by ${row.label}` }
 }
 
@@ -190,8 +190,8 @@ export function orchLimits(input: OrchLimitsInput): OrchLimitRow[] {
       label: 'Concurrency',
       value: input.maxConcurrent > 0 ? `${input.inFlight} of ${input.maxConcurrent} turns in flight` : `${input.inFlight} in flight · no ceiling set`,
       coverage: input.maxConcurrent > 0
-        ? 'agent chat sessions on this canvas — main queues a send past the ceiling (agents.maxConcurrent); terminals and watchers are not counted'
-        : 'nothing queues — set agents.maxConcurrent to make this enforced'
+        ? 'agent chat sessions on this canvas. Main queues a send past the ceiling (agents.maxConcurrent); terminals and watchers are not counted'
+        : 'nothing queues; set agents.maxConcurrent to make this enforced'
     },
     {
       id: 'spend',
@@ -199,8 +199,8 @@ export function orchLimits(input: OrchLimitsInput): OrchLimitRow[] {
       label: 'Spend',
       value: `${known.length > 0 ? `$${spent.toFixed(2)}` : 'Unknown'}${input.budgetUsd > 0 ? ` of $${input.budgetUsd.toFixed(2)}` : ''}${unknown > 0 ? ` · ${unknown} session${unknown === 1 ? '' : 's'} unknown` : ''}`,
       coverage: input.budgetUsd > 0
-        ? `sessions whose CLI reports a dollar figure (${known.length} of ${input.sessions.length} here) — main refuses their next send past the budget; the ${unknown} unknown ${unknown === 1 ? 'is' : 'are'} not counted and not capped`
-        : `a sum over the ${known.length} session${known.length === 1 ? '' : 's'} that report cost; nothing refuses on it — set agents.budgetUsd to make this enforced`
+        ? `sessions whose CLI reports a dollar figure (${known.length} of ${input.sessions.length} here). Main refuses their next send past the budget; the ${unknown} unknown ${unknown === 1 ? 'is' : 'are'} not counted and not capped`
+        : `a sum over the ${known.length} session${known.length === 1 ? '' : 's'} that report cost; nothing refuses on it; set agents.budgetUsd to make this enforced`
     },
     {
       id: 'window',
@@ -208,7 +208,7 @@ export function orchLimits(input: OrchLimitsInput): OrchLimitRow[] {
       label: 'Usage window',
       value: util === undefined ? 'no usage window reported yet' : `${Math.round(util * 100)}% used${input.budgetWindowPercent > 0 ? ` · stops at ${input.budgetWindowPercent}%` : ''}`,
       coverage: input.budgetWindowPercent > 0
-        ? 'the subscription windows the claude CLI reports — main refuses a send past the percentage; providers that report no window are not covered'
+        ? 'the subscription windows the claude CLI reports. Main refuses a send past the percentage; providers that report no window are not covered'
         : 'read from the claude CLI\'s rate-limit events only; nothing refuses on it'
     },
     {

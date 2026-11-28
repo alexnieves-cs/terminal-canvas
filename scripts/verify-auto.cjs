@@ -157,7 +157,7 @@ function makeManager(overrides = {}) {
         A.autoChipParts({ ...base, state: 'done', verdict: 'claimed' }).head === 'agent says done' &&
         A.autoChipWords({ ...base, state: 'done' }) === 'auto · complete · done' &&
         A.autoChipWords({ ...base, state: 'running', checking: true }) === 'auto · complete · checking' &&
-        A.autoChipWords({ ...base, state: 'stuck', reason: 'check' }) === 'auto · complete · stuck — the check kept failing' &&
+        A.autoChipWords({ ...base, state: 'stuck', reason: 'check' }) === 'auto · complete · stuck: the check kept failing' &&
         A.autoVerdictOf({ ...base, state: 'done' }) === 'claimed' && A.autoVerdictOf({ ...base, state: 'done', verdict: 'checked' }) === 'checked' &&
         A.autoVerdictOf({ ...base, state: 'running' }) === undefined)
   }

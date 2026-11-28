@@ -248,7 +248,7 @@ function inlineRefusal(text: string): string | undefined {
  */
 export function blockRefusal(block: MdBlock): string | undefined {
   switch (block.kind) {
-    case 'raw': return `${block.name} — edit as source`
+    case 'raw': return `${block.name}: edit as source`
     case 'blank': return 'a blank line has nothing to edit'
     case 'heading': case 'paragraph': return inlineRefusal(block.model.text)
     case 'list': return block.model.items.map((it) => inlineRefusal(it.text)).find((r) => r !== undefined)
@@ -352,7 +352,7 @@ function normalize(kind: MdBlock['kind'], model: BlockModel): BlockModel {
 export function editBlock(text: string, index: number, model: BlockModel): BlockEdit {
   const blocks = parseBlocks(text)
   const block = blocks[index]
-  if (block === undefined) return { kind: 'refused', reason: 'that block is no longer in this note — it changed; look again' }
+  if (block === undefined) return { kind: 'refused', reason: 'that block is no longer in this note. It changed; look again' }
   const before = blockRefusal(block)
   if (before !== undefined) return { kind: 'refused', reason: before }
   const { inner, last } = eolOf(block.source, text)
@@ -360,20 +360,20 @@ export function editBlock(text: string, index: number, model: BlockModel): Block
   const source = render(block, wanted, inner, last)
   const next = text.slice(0, block.start) + source + text.slice(block.end)
   const again = parseBlocks(next)
-  if (again.length !== blocks.length) return { kind: 'refused', reason: again.length > blocks.length ? 'a blank line or a new block would split this one — use Source' : 'this edit would merge into the next block — use Source' }
+  if (again.length !== blocks.length) return { kind: 'refused', reason: again.length > blocks.length ? 'a blank line or a new block would split this one; use Source' : 'this edit would merge into the next block; use Source' }
   const edited = again[index]
-  if (edited.kind !== block.kind) return { kind: 'refused', reason: `this edit would turn the ${block.kind} into ${edited.kind === 'raw' ? `a ${edited.name}` : `a ${edited.kind}`} — use Source` }
-  if (!again.every((b, k) => k === index || (b.kind === blocks[k].kind && b.source === blocks[k].source))) return { kind: 'refused', reason: 'this edit would change the blocks around it — use Source' }
+  if (edited.kind !== block.kind) return { kind: 'refused', reason: `this edit would turn the ${block.kind} into ${edited.kind === 'raw' ? `a ${edited.name}` : `a ${edited.kind}`}; use Source` }
+  if (!again.every((b, k) => k === index || (b.kind === blocks[k].kind && b.source === blocks[k].source))) return { kind: 'refused', reason: 'this edit would change the blocks around it; use Source' }
   const after = blockRefusal(edited)
   if (after !== undefined) return { kind: 'refused', reason: after }
-  if (!('model' in edited) || !same(edited.model, wanted)) return { kind: 'refused', reason: "this text can't be represented in rich mode exactly as typed — use Source" }
+  if (!('model' in edited) || !same(edited.model, wanted)) return { kind: 'refused', reason: "this text can't be represented in rich mode exactly as typed; use Source" }
   return { kind: 'edited', text: next }
 }
 
 /** Replace one block's bytes with exactly what a person typed as its source. */
 export function replaceBlockSource(text: string, index: number, source: string): BlockEdit {
   const block = parseBlocks(text)[index]
-  if (block === undefined) return { kind: 'refused', reason: 'that block is no longer in this note — it changed; look again' }
+  if (block === undefined) return { kind: 'refused', reason: 'that block is no longer in this note. It changed; look again' }
   const { inner, last } = eolOf(block.source, text)
   // A typed box without a final newline would glue the next block onto it.
   const bytes = last !== '' && !source.endsWith('\n') ? source + inner : source
@@ -383,7 +383,7 @@ export function replaceBlockSource(text: string, index: number, source: string):
 /** A new block after `index` (or at the top for -1), separated by blank lines on both sides. */
 export function insertBlockAfter(text: string, index: number, source: string): BlockEdit {
   const blocks = parseBlocks(text)
-  if (index < -1 || index >= blocks.length) return { kind: 'refused', reason: 'that block is no longer in this note — it changed; look again' }
+  if (index < -1 || index >= blocks.length) return { kind: 'refused', reason: 'that block is no longer in this note. It changed; look again' }
   const eol = text.includes('\r\n') ? '\r\n' : '\n'
   const at = index === -1 ? 0 : blocks[index].end
   const body = source.replace(/(\r?\n)+$/, '').replace(/\r?\n/g, eol)
@@ -399,7 +399,7 @@ export function insertBlockAfter(text: string, index: number, source: string): B
 export function removeBlock(text: string, index: number): BlockEdit {
   const blocks = parseBlocks(text)
   const block = blocks[index]
-  if (block === undefined || block.kind === 'blank') return { kind: 'refused', reason: 'that block is no longer in this note — it changed; look again' }
+  if (block === undefined || block.kind === 'blank') return { kind: 'refused', reason: 'that block is no longer in this note. It changed; look again' }
   let start = block.start, end = block.end
   if (blocks[index + 1]?.kind === 'blank') end = blocks[index + 1].end
   else if (blocks[index - 1]?.kind === 'blank') start = blocks[index - 1].start

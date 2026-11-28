@@ -50,7 +50,7 @@ export const AUTO_MODES: Readonly<Record<AutoModeId, AutoMode>> = {
     steps: []
   },
   review: {
-    id: 'review', label: 'Review', hint: 'read and report — change nothing', turnLimit: 4,
+    id: 'review', label: 'Review', hint: 'read and report, change nothing', turnLimit: 4,
     opening: `Review the code this conversation is about. Read; change NOTHING. Report every defect you find with the file and line, ranked by what it would silently break. ${TAIL}`,
     continuation: `Continue the review; change nothing. ${TAIL}`,
     steps: []
@@ -178,7 +178,7 @@ export function validateAutoMode(mode: AutoMode, facts: PlanFacts, panelId = fac
   for (const step of mode.steps) {
     const verb = verbById(step.verb)
     if (verb === undefined) return { kind: 'refused', reason: `${mode.id} names ${step.verb}, which is not a verb` }
-    if (verb.destructive) return { kind: 'refused', reason: `${mode.id} carries ${step.verb}, a destructive verb — an auto mode runs unattended and cannot confirm it` }
+    if (verb.destructive) return { kind: 'refused', reason: `${mode.id} carries ${step.verb}, a destructive verb, and an auto mode runs unattended and cannot confirm it` }
   }
   const inputs: PlanInput[] = [
     { verb: 'send', args: [panelId, mode.opening] },
@@ -261,6 +261,6 @@ export function autoChipWords(s: AutoStatus): string {
     case 'running': return s.checking === true ? `auto · ${s.mode} · checking` : `auto · ${s.mode} · ${s.turn}/${s.limit}`
     case 'done': return s.verdict === undefined ? `auto · ${s.mode} · done` : `auto · ${s.mode} · ${AUTO_VERDICT_WORDS[s.verdict]}`
     case 'stopped': return `auto · ${s.mode} · stopped`
-    case 'stuck': return `auto · ${s.mode} · stuck — ${s.reason === undefined ? 'no reason given' : STUCK_WORDS[s.reason]}`
+    case 'stuck': return `auto · ${s.mode} · stuck: ${s.reason === undefined ? 'no reason given' : STUCK_WORDS[s.reason]}`
   }
 }

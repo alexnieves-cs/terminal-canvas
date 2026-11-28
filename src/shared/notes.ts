@@ -30,7 +30,7 @@ export function isNoteTint(value: unknown): value is NoteTint {
 export function noteFormSentence(form: NoteForm): string {
   if (form === 'sticky') return 'a tinted card for a thought you want to see beside the work'
   if (form === 'text') return 'editable type on the canvas, with no card around it'
-  return 'a named region with a quiet boundary — its middle stays out of the way'
+  return 'a named region with a quiet boundary; its middle stays out of the way'
 }
 
 /**

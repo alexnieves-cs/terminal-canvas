@@ -64,7 +64,7 @@ export function buildFeedback(repo: string, facts: FeedbackFacts): FeedbackDraft
     '',
     `**On the canvas** ${kinds}`,
     '',
-    '_This draft was prepared by the app and scrubbed of anything that looked like a secret. Nothing has been sent: read it, change it, and submit it yourself — or close this tab._'
+    '_This draft was prepared by the app and scrubbed of anything that looked like a secret. Nothing has been sent: read it, change it, and submit it yourself, or close this tab._'
   ].join('\n')
   const { text: body, count } = redactSecrets(rawBody)
   const title = saidClean === '' ? 'Feedback' : `Feedback: ${saidClean.split('\n')[0]?.slice(0, 60) ?? ''}`
@@ -78,7 +78,7 @@ export function buildFeedback(repo: string, facts: FeedbackFacts): FeedbackDraft
   // guessed from the unencoded length: one CJK or emoji character encodes to
   // nine or twelve, so an arithmetic estimate can report `truncated` for a
   // draft that still does not fit.
-  const tail = '\n\n_(this draft was cut to fit in a link — paste the rest in yourself)_'
+  const tail = '\n\n_(this draft was cut to fit in a link; paste the rest in yourself)_'
   let room = body.length
   let cutBody = body
   let url = full

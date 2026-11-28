@@ -196,7 +196,7 @@ export function useWorkflowVerbs(deps: UseWorkflowVerbsDeps) {
    */
   const saveWorkflowDraft = useCallback(async (templateId: string): Promise<{ kind: 'saved' } | { kind: 'stale'; reason: string } | { kind: 'refused'; reason: string }> => {
     const draft = getDraft(templateId)
-    if (draft === undefined || !draft.dirty) return { kind: 'refused', reason: 'nothing to save — the diagram matches the template' }
+    if (draft === undefined || !draft.dirty) return { kind: 'refused', reason: 'nothing to save; the diagram matches the template' }
     if (isBuiltInTemplate(templateId)) return { kind: 'refused', reason: 'a built-in workflow saves as a copy' }
     const result = await window.canvas.template.save(draft.template, draft.baseRevision)
     if (result.kind === 'stale') return { kind: 'stale', reason: result.reason }

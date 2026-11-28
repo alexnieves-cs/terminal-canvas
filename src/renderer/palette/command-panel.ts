@@ -19,7 +19,7 @@
 export const COMMAND_ROW_ID = 'command.run'
 
 /** Why the row is disabled while nothing follows the `>`. */
-export const REASON_NO_COMMAND = 'type a command after > — it runs in a new panel'
+export const REASON_NO_COMMAND = 'type a command after >, and it runs in a new panel'
 
 /**
  * `> npm test` → `npm test`; `>` alone → ``; anything else → null. Only a

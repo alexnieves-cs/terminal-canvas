@@ -151,7 +151,7 @@ export function agentsSentence(agents: readonly BoardAgent[]): string {
   const parts: string[] = []
   if (waiting.length > 0) parts.push(`${names(waiting)} ${waiting.length === 1 ? 'is' : 'are'} waiting on you`)
   if (busy.length > 0) parts.push(`${names(busy)} ${busy.length === 1 ? 'is' : 'are'} working`)
-  if (parts.length === 0 && idle.length > 0) parts.push(idle.length === 1 ? `${idle[0]!.title} is idle — its last turn ended` : `${idle.length} agents are idle — their last turns ended`)
+  if (parts.length === 0 && idle.length > 0) parts.push(idle.length === 1 ? `${idle[0]!.title} is idle; its last turn ended` : `${idle.length} agents are idle; their last turns ended`)
   else if (idle.length > 0) parts.push(`${idle.length} idle`)
   return parts.join('; ')
 }
@@ -216,7 +216,7 @@ export function buildTaskBoard(input: BoardInput): TaskBoard {
     if (item.state === 'done' || accepted) {
       rows.push({
         ...base, group: 'done',
-        status: item.merged !== undefined ? `Accepted — merged into ${item.merged.into}.` : accepted ? (h?.detail ?? 'Accepted.') : 'Marked done.',
+        status: item.merged !== undefined ? `Accepted and merged into ${item.merged.into}.` : accepted ? (h?.detail ?? 'Accepted.') : 'Marked done.',
         action: { kind: 'open', label: 'Open' }, more: 0
       })
       continue
@@ -231,7 +231,7 @@ export function buildTaskBoard(input: BoardInput): TaskBoard {
     if (waiting !== undefined || h?.state === 'blocked') {
       rows.push({
         ...base, group: 'attention',
-        status: waiting !== undefined ? `Stopped — ${waiting.title} is waiting on you.` : (h?.detail ?? 'Stopped — an agent is waiting on you.'),
+        status: waiting !== undefined ? `Stopped. ${waiting.title} is waiting on you.` : (h?.detail ?? 'Stopped. An agent is waiting on you.'),
         // The label names the agent, so the press lands on IT — and on its
         // request (a terminal's prompt is the terminal) — never on the task page.
         action: waiting !== undefined ? { kind: 'jump', panelId: waiting.id, label: `Go to ${waiting.title}` } : { kind: 'open', label: 'Open' }, more: 0
@@ -239,16 +239,16 @@ export function buildTaskBoard(input: BoardInput): TaskBoard {
       continue
     }
     if (item.state === 'review' || (h?.state === 'ready' && h.standing !== 'current')) {
-      rows.push({ ...base, group: 'review', status: h?.detail ?? 'The agent finished — nothing is verified yet.', action: { kind: 'open', side: 'changes', label: 'Review the changes' }, more: 0 })
+      rows.push({ ...base, group: 'review', status: h?.detail ?? 'The agent finished. Nothing is verified yet.', action: { kind: 'open', side: 'changes', label: 'Review the changes' }, more: 0 })
       continue
     }
     if (item.panelId === undefined && agents.length === 0) {
-      rows.push({ ...base, group: 'running', status: 'Not started — no agent has this task yet.', action: { kind: 'start', label: 'Start task' }, more: 0 })
+      rows.push({ ...base, group: 'running', status: 'Not started. No agent has this task yet.', action: { kind: 'start', label: 'Start task' }, more: 0 })
       continue
     }
     const who = agentsSentence(agents)
     const changed = h?.changes === undefined ? '' : `${h.changes.files} file${h.changes.files === 1 ? '' : 's'} changed so far`
-    const status = who !== '' ? `${who}${changed === '' ? '.' : ` — ${changed}.`}` : h !== undefined ? h.detail : 'Its conversation was closed — nothing is running.'
+    const status = who !== '' ? `${who}${changed === '' ? '.' : ` · ${changed}.`}` : h !== undefined ? h.detail : 'Its conversation was closed. Nothing is running.'
     rows.push({ ...base, group: 'running', status, action: { kind: 'open', ...(plan !== undefined && plan.attention !== null ? { side: 'plan' as const } : {}), label: 'Open' }, more: 0 })
   }
 
@@ -277,6 +277,6 @@ export function buildTaskBoard(input: BoardInput): TaskBoard {
   const n = groups[0]!.rows.length
   const headline = rows.length === 0
     ? 'No tasks yet.'
-    : n === 0 ? `Nothing needs you — ${counts.join(' · ')}.` : `${counts.join(' · ')}.`
+    : n === 0 ? `Nothing needs you. ${counts.join(' · ')}.` : `${counts.join(' · ')}.`
   return { groups, headline }
 }

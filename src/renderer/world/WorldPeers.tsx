@@ -35,7 +35,7 @@ export function WorldPeers({ camera }: { camera: RefObject<CameraApi | null> }):
   return (
     <div className="world-peers" role="group" aria-label="Teammates here" data-world-peers>
       {following !== null && followed !== undefined ? (
-        <span className="world-peers__follow" role="status">Following {followed.name}{target === null ? ' — not on an agent here' : ''}</span>
+        <span className="world-peers__follow" role="status">Following {followed.name}{target === null ? ', not on an agent here' : ''}</span>
       ) : null}
       {ordered.map((p) => (
         <button
@@ -46,7 +46,7 @@ export function WorldPeers({ camera }: { camera: RefObject<CameraApi | null> }):
           data-idle={p.active ? undefined : ''}
           data-watching={p.panelId ?? undefined}
           aria-pressed={following === p.userId}
-          title={`${p.name}${p.mode === 'world' ? ' — in the room' : ''}. ${following === p.userId ? 'Stop following' : 'Follow'}`}
+          title={`${p.name}${p.mode === 'world' ? ', in the room' : ''}. ${following === p.userId ? 'Stop following' : 'Follow'}`}
           onClick={() => setFollowing((f) => (f === p.userId ? null : p.userId))}
           style={{ background: p.color }}
         >

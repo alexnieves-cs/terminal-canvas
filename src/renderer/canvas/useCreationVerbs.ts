@@ -101,18 +101,18 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
     // Every arm says what it decided on the console: a starter that quietly did
     // nothing is indistinguishable from a click that missed (the journey check).
     const say = (what: string): void => { console.info(`[starter] ${what}`) }
-    if (mergedRef.current) { say('refused: merged'); return { kind: 'refused', reason: 'the merged view is read-only — leave it to open the starter canvas' } }
+    if (mergedRef.current) { say('refused: merged'); return { kind: 'refused', reason: 'the merged view is read-only; leave it to open the starter canvas' } }
     const keys = starterKeysToApply(starterRef.current)
-    if (keys.length === 0) { say('refused: every key applied'); return { kind: 'refused', reason: 'every starter object is already on this canvas — close what you do not need; a reset lays it out again' } }
+    if (keys.length === 0) { say('refused: every key applied'); return { kind: 'refused', reason: 'every starter object is already on this canvas. Close what you do not need; a reset lays it out again' } }
     // A canvas with panels and NO record is the person's own arrangement:
     // the starter lays itself out on an empty canvas only (the primary's
     // door) and never over what is there (the critic's finding 6).
-    if (starterRef.current === undefined && panelsRef.current.length > 0) { say('refused: canvas not empty'); return { kind: 'refused', reason: 'this canvas already has panels — the starter lays out on an empty canvas; reset the canvas or make a new workspace for it' } }
+    if (starterRef.current === undefined && panelsRef.current.length > 0) { say('refused: canvas not empty'); return { kind: 'refused', reason: 'this canvas already has panels. The starter lays out on an empty canvas; reset the canvas or make a new workspace for it' } }
     const applied = [...(starterRef.current?.keys ?? [])]
     let origin: WorldRect | undefined = panelsRef.current.find((p): p is ChatPanel => isChatPanel(p))?.rect
     if (keys.includes(AGENT_KEY)) {
       const readiness = onboardingReadiness(envReportRef.current)
-      if (readiness.preferred === undefined) { say('refused: no engine discovered'); return { kind: 'refused', reason: 'no conversation engine has been discovered — the starter canvas begins with an agent; install one and Check again' } }
+      if (readiness.preferred === undefined) { say('refused: no engine discovered'); return { kind: 'refused', reason: 'no conversation engine has been discovered. The starter canvas begins with an agent; install one and Check again' } }
       say(`minting the chat with ${readiness.preferred}`)
       // The chat is placed EXACTLY at the view's centre (`at`), so its rect is
       // known here without waiting for React to commit `beginNewChat`'s
@@ -194,10 +194,10 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
       templateRowsRef.current = rows
       setTemplateRows(rows)
       openWorkflowPanel(saved.template.id, at)
-      return { kind: 'ran', note: `${saved.template.name} arrived as a workflow — nothing has run; read its blocks, then choose "I've read this" to allow runs${dropped}` }
+      return { kind: 'ran', note: `${saved.template.name} arrived as a workflow. Nothing has run yet; read its blocks, then choose "I've read this" to allow runs${dropped}` }
     }
     openBrowserPanel(result.url, { root: result.root, reviewed: false, tool: result.capabilities }, at)
-    return { kind: 'ran', note: `${result.name} arrived in ${result.root} — nothing of it has run; read what it can reach, then choose "I've read this"${dropped}` }
+    return { kind: 'ran', note: `${result.name} arrived in ${result.root}. Nothing of it has run yet; read what it can reach, then choose "I've read this"${dropped}` }
   }, [openWorkflowPanel, openBrowserPanel])
   // M252. "I've read this" — a PERSON'S act, and deliberately NOT a verb: no
   // palette row, no agent line, no workflow node reaches either function
@@ -259,13 +259,13 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
     // object in the same place. M395's `spotFor` did the free-spot search here,
     // over panelsRef OUTSIDE the updater, and only for authored objects.
     const current = (): boolean => creationWorkspaceRef.current === workspace && !mergedRef.current && !transitionRef.current
-    const refused = (): CreationResult => ({ kind: 'refused', reason: 'the workspace changed — create the object again here' })
+    const refused = (): CreationResult => ({ kind: 'refused', reason: 'the workspace changed; create the object again here' })
     const host: CreationHost = {
       terminal: async () => { onSpawn(at, { cwd: noteRootRef.current ?? '~', args: [] }, { focus: true }); return { kind: 'ran' } },
       agent: async () => {
         const readiness = onboardingReadiness(await window.canvas.env.report())
         if (!current()) return refused()
-        if (!readiness.preferred) return { kind: 'refused', reason: 'no conversation engine is available — check readiness' }
+        if (!readiness.preferred) return { kind: 'refused', reason: 'no conversation engine is available; check readiness' }
         const result = await beginNewChat({ backend: readiness.preferred })
         return result.kind === 'refused' ? result : { kind: 'ran' }
       },
@@ -277,7 +277,7 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
         if (!/\.md$/i.test(filename)) return { kind: 'refused', reason: 'choose a Markdown filename ending in .md' }
         const seed = view === 'deck' ? DECK_SEED : `# ${checklist ? 'Checklist' : 'Note'}\n\n`
         const result = await window.canvas.file.create({ root, name: filename, seed })
-        if (result.kind !== 'created') return { kind: 'refused', reason: result.kind === 'exists' ? 'that file already exists — choose another filename' : result.detail }
+        if (result.kind !== 'created') return { kind: 'refused', reason: result.kind === 'exists' ? 'that file already exists; choose another filename' : result.detail }
         if (!current()) return { kind: 'refused', reason: `created ${result.path}; the workspace changed, so open the file there explicitly` }
         openFilePanel(result.path, worldCentre(), view === 'deck' ? { deck: {} } : { prose: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
         return { kind: 'ran' }
@@ -307,13 +307,13 @@ export function useCreationVerbs(deps: UseCreationVerbsDeps) {
       },
       tool: async (description) => {
         const folder = noteRootRef.current
-        if (!folder) return { kind: 'refused', reason: 'select a panel with a workspace folder first — a tool is made inside one' }
+        if (!folder) return { kind: 'refused', reason: 'select a panel with a workspace folder first, because a tool is made inside one' }
         const typed = description?.trim() ?? ''
         if (typed === '') {
           // The palette FIRST: input mode is cleared whenever the palette is
           // closed, so a prompt set on a closed palette would vanish unseen.
           palette.openPalette()
-          setInputMode({ kind: 'text', label: 'Describe a tool — what should it do?', initial: '', submit: (said) => { setInputMode(null); if (said.trim() !== '') void createObject('tool', said) } })
+          setInputMode({ kind: 'text', label: 'Describe a tool. What should it do?', initial: '', submit: (said) => { setInputMode(null); if (said.trim() !== '') void createObject('tool', said) } })
           return { kind: 'ran' }
         }
         const result = await window.canvas.tool.generate({ description: typed, folder })

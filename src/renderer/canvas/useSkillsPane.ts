@@ -214,7 +214,7 @@ export function useSkillsPane(deps: SkillsPaneDeps) {
       if (t === undefined) return
       const repoRoot = repoRootOfKey(key)
       if (repoRoot !== null && !roughlyInside(repoRoot, t.places)) {
-        setSkillAssignNotice(`this may not be visible to ${t.name} yet — ${repoRoot} looks outside their places; saving anyway to let main's real check decide`)
+        setSkillAssignNotice(`this may not be visible to ${t.name} yet: ${repoRoot} looks outside their places; saving anyway to let main's real check decide`)
       } else {
         setSkillAssignNotice(null)
       }
@@ -262,7 +262,7 @@ export function useSkillsPane(deps: SkillsPaneDeps) {
       projectScopeNote: (() => {
         if (skillsCwd === null || skillsCwd === '') return null
         const lane = laneOfPath(skillsCwd, worktreeRows)
-        return lane === undefined ? null : `this conversation works in a ${lane.branch} lane — a project skill goes to ${displayPath(lane.root).short}, the repository it was cut from`
+        return lane === undefined ? null : `this conversation works in a ${lane.branch} lane. A project skill goes to ${displayPath(lane.root).short}, the repository it was cut from`
       })(),
       newSkillResult,
       onNewSkill: (scope: 'user' | 'project', name: string) => {
@@ -272,7 +272,7 @@ export function useSkillsPane(deps: SkillsPaneDeps) {
             setNewSkillResult(
               r.kind === 'created' ? `created ${r.path}`
                 : r.kind === 'refused' ? r.why
-                  : r.kind === 'failed' ? `the skill could not be created — ${r.why}`
+                  : r.kind === 'failed' ? `the skill could not be created: ${r.why}`
                     : r.kind
             )
             // Re-read through the ordinary door: the card must come from the

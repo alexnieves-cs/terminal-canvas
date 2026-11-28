@@ -180,7 +180,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         {/* M553 (lane J). A sandboxed lane says so, a KIND fact beside the
             engine: what runs here runs in a VM with prompts off. Absent for
             every chat that is not one, so no scene at rest changes. */}
-        {vmLane !== undefined && <span className="pf__kind chat__vm" data-chat-vm={vmLane.runtime} title={`runs in a throwaway ${VM_RUNTIME_NAME[vmLane.runtime]} VM with prompts off — only its folder is shared, the network is an allowlist`}>{VM_LANE_LABEL}</span>}
+        {vmLane !== undefined && <span className="pf__kind chat__vm" data-chat-vm={vmLane.runtime} title={`runs in a throwaway ${VM_RUNTIME_NAME[vmLane.runtime]} VM with prompts off. Only its folder is shared, and the network is an allowlist`}>{VM_LANE_LABEL}</span>}
         <span className={`pf__kind chat__backend${props.teammateName !== undefined && props.teammateName.toLowerCase().startsWith(backend.toLowerCase()) ? ' chat__backend--echo' : ''}`} data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M279. The phase, a SIBLING of the pill: the pill's text is the
@@ -211,7 +211,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           // M403 (B5). Labelled as the ACTION it is: a bare "auto" beside the
           // state pill read as a mode the chat was in (people took it for
           // Claude's own auto permission mode). It opens the Auto rows.
-          <button type="button" className="pf__verb pf__verb--word" data-chat-auto-open title="Run this chat on its own for a bounded number of turns — Complete, Harden, Review, or a task of yours" aria-label="Auto run…"
+          <button type="button" className="pf__verb pf__verb--word" data-chat-auto-open title="Run this chat on its own for a bounded number of turns: Complete, Harden, Review, or a task of yours" aria-label="Auto run…"
             {...shellControl(() => props.onOpenAuto?.(id))}>Auto run…</button>
         )}
         {/* M74. A LABELLED verb after the pill — the terminal's own row shape
@@ -221,9 +221,9 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         {props.readOnly !== true && (() => {
           const busy = snapshot !== null && (snapshot.status === 'streaming' || snapshot.pending.length > 0)
           // M99. The door is the ROW's: a backend with no terminal door names why, from the registry.
-          const reason = !BACKENDS[backend].terminalDoor ? BACKENDS[backend].reasons.noTerminal : busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
+          const reason = !BACKENDS[backend].terminalDoor ? BACKENDS[backend].reasons.noTerminal : busy ? 'the chat is still answering; interrupt it first' : turnCount === 0 ? 'send a message first, because an empty chat has nothing to move' : null
           return <button type="button" className="pf__verb pf__verb--word" data-open-in-terminal disabled={reason !== null}
-            title={reason ?? 'Open in a terminal — claude --resume this session'} aria-label="Open in terminal"
+            title={reason ?? 'Open in a terminal with claude --resume'} aria-label="Open in terminal"
             {...shellControl(() => { if (reason === null) props.onOpenInTerminal(id) })}>Open terminal session</button>
         })()}
       </>}
@@ -233,7 +233,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           second composer behind the page. */}
       {claimed ? (
         <div className="pf__body chat__body" data-chat-claimed onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
-          <p className="pf__note chat__claimed">This conversation is open in its task's focus view — it continues there, and returns here when you go back.</p>
+          <p className="pf__note chat__claimed">This conversation is open in its task's focus view. It continues there, and returns here when you go back.</p>
         </div>
       ) : <ChatConversation id={id} chat={panel.chat} backend={backend} claudeAvailable={props.claudeAvailable}
         {...(props.readOnly === undefined ? {} : { readOnly: props.readOnly })}

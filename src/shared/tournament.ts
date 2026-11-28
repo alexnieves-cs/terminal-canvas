@@ -137,7 +137,7 @@ export interface TournamentScore {
 export function ineligibleBecause(o: EntrantOutcome): string | null {
   switch (o.state) {
     case 'checked': break
-    case 'claimed': return 'only the agent says it is done — no check confirmed it'
+    case 'claimed': return 'only the agent says it is done, and no check confirmed it'
     case 'stuck': return o.checkFailures > 0 ? `its check kept failing (${o.checkFailures} failed)` : 'it stopped before the check passed'
     case 'over-budget': return 'it spent its budget before the check passed'
     case 'over-time': return 'it ran out of time before the check passed'
@@ -203,7 +203,7 @@ export function scoreTournament(outcomes: readonly EntrantOutcome[], otherLaneFi
   const summary = running > 0
     ? `${running} of ${outcomes.length} still running`
     : winner === null
-      ? `no entrant passed the check with a change — nothing to pick`
+      ? `no entrant passed the check with a change, so there is nothing to pick`
       : passed === 1
         ? `1 of ${outcomes.length} passed the check`
         : `${passed} of ${outcomes.length} passed the check; ranked by diff size, overlap, cost and time`
@@ -219,7 +219,7 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
   const r = raw as Record<string, unknown>
   if (typeof r.task !== 'string' || r.task.trim() === '') return { kind: 'refused', reason: 'the tournament says nothing to do' }
   if (typeof r.root !== 'string' || !r.root.startsWith('/')) return { kind: 'refused', reason: 'the tournament names no repository (an absolute path)' }
-  if (r.check === undefined) return { kind: 'refused', reason: 'a tournament needs a check — the check is what picks the winner' }
+  if (r.check === undefined) return { kind: 'refused', reason: 'a tournament needs a check, because the check is what picks the winner' }
   const check = parseAutoCheck(r.check)
   if (check.kind === 'refused') return { kind: 'refused', reason: check.reason }
   if (!Array.isArray(r.entrants)) return { kind: 'refused', reason: 'the tournament has no entrants' }
@@ -244,7 +244,7 @@ export function parseTournament(raw: unknown): { kind: 'ok'; spec: TournamentSpe
     const backend = o.backend as AgentBackend
     // A dollar budget is read from the spend meter; a backend with no meter would run past it silently.
     if (r.budgetUsd !== undefined && r.timeLimitMs === undefined && !BACKENDS[backend].reportsCost) {
-      return { kind: 'refused', reason: `${BACKENDS[backend].label} reports no cost, so a dollar budget cannot stop ${n} — add a time limit` }
+      return { kind: 'refused', reason: `${BACKENDS[backend].label} reports no cost, so a dollar budget cannot stop ${n}; add a time limit` }
     }
     ids.add(o.id)
     const model = typeof o.model === 'string' ? o.model.trim() : undefined
@@ -366,7 +366,7 @@ export function parseField(text: string, available: (b: AgentBackend) => boolean
   const field: FieldEntry[] = []
   for (const w of words) {
     const [name, model, extra] = w.split(':')
-    if (!BACKEND_IDS.includes(name as AgentBackend) || extra !== undefined || model === '') return { kind: 'refused', reason: `${w} is not an agent — name one of ${BACKEND_IDS.join(', ')}, optionally as agent:model` }
+    if (!BACKEND_IDS.includes(name as AgentBackend) || extra !== undefined || model === '') return { kind: 'refused', reason: `${w} is not an agent. Name one of ${BACKEND_IDS.join(', ')}, optionally as agent:model` }
     const backend = name as AgentBackend
     if (!available(backend)) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
     field.push({ backend, ...(model === undefined ? {} : { model }) })
@@ -384,9 +384,9 @@ export function parseField(text: string, available: (b: AgentBackend) => boolean
  * door, so the card can say why before anything is minted.
  */
 export function tournamentFromItem(item: PersistedWorkItem, root: string, field: readonly FieldEntry[]): { kind: 'ok'; spec: Record<string, unknown> } | { kind: 'refused'; reason: string } {
-  if (item.state === 'done' || item.merged !== undefined) return { kind: 'refused', reason: 'this task is done — a tournament needs open work' }
+  if (item.state === 'done' || item.merged !== undefined) return { kind: 'refused', reason: 'this task is done, and a tournament needs open work' }
   const checks = [...(item.checks ?? []), ...(item.checks === undefined || item.checks.length === 0 ? item.recipeUsed?.definition.checks ?? [] : [])].map((c) => c.trim()).filter((c) => c !== '')
-  if (checks.length === 0) return { kind: 'refused', reason: 'this task has no check — add one to the task (or its recipe); the check is what picks the winner' }
+  if (checks.length === 0) return { kind: 'refused', reason: 'this task has no check. Add one to the task (or its recipe); the check is what picks the winner' }
   const what = (item.brief ?? item.description ?? '').trim()
   const criteria = (item.criteria ?? []).filter((c) => c.trim() !== '')
   const task = [what === '' ? item.title : `${item.title}\n\n${what}`, ...(criteria.length === 0 ? [] : [`Done when:\n${criteria.map((c) => `- ${c}`).join('\n')}`])].join('\n\n')
@@ -426,7 +426,7 @@ export function entrantFacts(e: EntrantStatus, nowMs: number): string {
  */
 export function pickRefusal(st: TournamentStatus | null, entrantId: string | undefined): string | null {
   if (st === null) return 'no tournament has run'
-  if (st.score === undefined) return st.state === 'scoring' ? 'the field is still being scored' : 'the tournament is still running — wait, or stop it first'
+  if (st.score === undefined) return st.state === 'scoring' ? 'the field is still being scored' : 'the tournament is still running; wait, or stop it first'
   const id = entrantId ?? st.score.winner ?? undefined
   if (id === undefined) return 'no entrant passed the check, so there is nothing to pick'
   const ranked = st.score.ranking.find((r) => r.id === id)
@@ -440,9 +440,9 @@ export function pickRefusal(st: TournamentStatus | null, entrantId: string | und
 /** The judge compares what passed; with fewer than two there is nothing to compare. Null when it may run. */
 export function judgeRefusal(st: TournamentStatus | null): string | null {
   if (st === null) return 'no tournament has run'
-  if (st.score === undefined) return st.state === 'scoring' ? 'the field is still being scored' : 'the tournament is still running — the judge reads finished work'
+  if (st.score === undefined) return st.state === 'scoring' ? 'the field is still being scored' : 'the tournament is still running, and the judge reads finished work'
   const passed = st.score.ranking.filter((r) => r.eligible).length
-  if (passed < 2) return passed === 1 ? 'only one entrant passed the check — there is nothing to compare; pick it' : 'no entrant passed the check, so there is nothing to compare'
+  if (passed < 2) return passed === 1 ? 'only one entrant passed the check, so there is nothing to compare; pick it' : 'no entrant passed the check, so there is nothing to compare'
   return null
 }
 

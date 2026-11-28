@@ -84,9 +84,9 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
     if (door === undefined) return { kind: 'refused', reason: 'tournaments are not available in this window' }
     if (d.mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const item = itemOf(name)
-    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${name} — name one by its id or key, or select its card` }
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${name}; name one by its id or key, or select its card` }
     const lane = item.panelId === undefined ? undefined : d.panelsRef.current.find((p) => p.rect.id === item.panelId)
-    if (lane === undefined || !isChatPanel(lane)) return { kind: 'refused', reason: 'start this task once so it has a lane — the tournament forks from the repository that lane is in' }
+    if (lane === undefined || !isChatPanel(lane)) return { kind: 'refused', reason: 'start this task once so it has a lane, because the tournament forks from the repository that lane is in' }
     const available = (b: Parameters<typeof backendAvailable>[1]): boolean => backendAvailable(d.presetRowsRef.current, b)
     let field = defaultField(available)
     if (fieldText !== undefined && fieldText.trim() !== '') {
@@ -94,7 +94,7 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
       if (parsed.kind === 'refused') return parsed
       field = parsed.field
     }
-    if (field.length < TOURNAMENT_ENTRANTS_MIN) return { kind: 'refused', reason: 'a tournament needs two agents, and claude was not found — install it, or name a field such as codex copilot' }
+    if (field.length < TOURNAMENT_ENTRANTS_MIN) return { kind: 'refused', reason: 'a tournament needs two agents, and claude was not found; install it, or name a field such as codex copilot' }
     const built = tournamentFromItem(item, lane.chat.cwd, field)
     if (built.kind === 'refused') return built
     // Past every id a lane record still names, not only the ids on the
@@ -149,7 +149,7 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
         // Never the item's OLD lane beside the winner's chat: Review, Open PR
         // and Combine read worktreeId, so an unknown one is cleared, not kept.
         worktreeId: winner.worktreeId,
-        note: `picked ${winner.label} from a tournament of ${st.entrants.length} — its check passed`
+        note: `picked ${winner.label} from a tournament of ${st.entrants.length}. Its check passed`
       })
     }
     const kept = st.entrants.filter((e) => e.id !== id && e.path !== undefined).length
@@ -163,7 +163,7 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
     const st = await door.status()
     const why = judgeRefusal(st)
     if (why !== null || st === null) return { kind: 'refused', reason: why ?? 'no tournament has run' }
-    if (!backendAvailable(d.presetRowsRef.current, 'claude')) return { kind: 'refused', reason: 'the judge is a claude chat, and claude was not found — install it, or compare the lanes in Review' }
+    if (!backendAvailable(d.presetRowsRef.current, 'claude')) return { kind: 'refused', reason: 'the judge is a claude chat, and claude was not found; install it, or compare the lanes in Review' }
     const id = `c${d.nextIdRef.current++}`
     const sessionId = crypto.randomUUID()
     const created = await window.canvas.agentSession.create({ id, cwd: st.root, sessionId, agentOptions: { permissionMode: 'plan' } })
@@ -177,17 +177,17 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
     d.panelsRef.current = next
     d.setPanels(() => { d.commitHistory(next); return next })
     const notSent = sendRefusalSentence(await window.canvas.agentSession.send(id, judgePrompt(st), []))
-    if (notSent !== null) return { kind: 'refused', reason: `the judge's chat is open, but its message was refused — ${notSent}` }
-    return { kind: 'ran', note: `the judge is reading the ${st.score?.ranking.filter((r) => r.eligible).length ?? 0} passing lanes, read-only — the scorer's pick stands until you choose` }
+    if (notSent !== null) return { kind: 'refused', reason: `the judge's chat is open, but its message was refused: ${notSent}` }
+    return { kind: 'ran', note: `the judge is reading the ${st.score?.ranking.filter((r) => r.eligible).length ?? 0} passing lanes, read-only. The scorer's pick stands until you choose` }
   }
 
   const combine = async (): Promise<VerbOutcome> => {
     const st = await window.canvas?.tournament?.status()
     if (st == null || st.itemId === undefined) return { kind: 'refused', reason: 'no tournament on a task has run' }
-    if (st.score === undefined) return { kind: 'refused', reason: 'the tournament is still running — combine finished work' }
+    if (st.score === undefined) return { kind: 'refused', reason: 'the tournament is still running; combine finished work' }
     if (d.focusItem === undefined) return { kind: 'refused', reason: 'the canvas is not ready yet' }
     d.focusItem(st.itemId)
-    return { kind: 'ran', note: 'the task is open — its Combine tab lists every lane, the entrants\' among them, and checks the combined tree before anything lands' }
+    return { kind: 'ran', note: 'the task is open. Its Combine tab lists every lane, the entrants\' among them, and checks the combined tree before anything lands' }
   }
 
   return async (op, value) => {
@@ -197,7 +197,7 @@ export function tournamentVerb(d: TournamentVerbDeps): (op: string, value?: stri
     if (word === 'stop') {
       const door = window.canvas?.tournament
       if (door === undefined) return { kind: 'refused', reason: 'tournaments are not available in this window' }
-      return (await door.stop()) ? { kind: 'ran', note: 'the tournament stopped — the field is scored as it stands' } : { kind: 'refused', reason: 'no tournament is running' }
+      return (await door.stop()) ? { kind: 'ran', note: 'the tournament stopped, and the field is scored as it stands' } : { kind: 'refused', reason: 'no tournament is running' }
     }
     if (word === 'pick') return pick(value === undefined || value.trim() === '' ? undefined : value.trim())
     if (word === '') return { kind: 'refused', reason: 'name the task: tournament <task> [agent:model …], or tournament stop, pick, judge or combine' }

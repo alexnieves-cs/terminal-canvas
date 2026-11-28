@@ -66,7 +66,7 @@ export function repositoryExamples(folder: string): IntentExample[] {
   return [
     { id: 'review', label: 'Review recent changes', intention: `Review the recent changes in ${repo} and tell me what needs attention before they ship` },
     { id: 'fix-test', label: 'Fix a failing test', intention: `Find the failing test in ${repo}, work out why it fails, and make it pass` },
-    { id: 'explain', label: 'Explain this codebase', intention: `Explain how ${repo} is organised — the main parts, how they connect, and where to start reading` }
+    { id: 'explain', label: 'Explain this codebase', intention: `Explain how ${repo} is organised: the main parts, how they connect, and where to start reading` }
   ]
 }
 
@@ -101,12 +101,12 @@ export function runtimeDefaultsLine(engine: string, opts: { effort?: string; mod
  */
 export type CreationKind = 'agent' | 'terminal' | 'supervisor' | 'chat' | 'lineup' | 'template'
 export const KIND_EXPLANATIONS: Readonly<Record<CreationKind, string>> = {
-  agent: 'Agent — a coding agent in its own terminal, working in this folder. It can edit files and run commands; you watch and steer.',
-  terminal: 'Terminal — a plain shell or one command in this folder. Nothing runs on its own; you type.',
-  supervisor: 'Supervisor — a chat that reads this whole canvas and answers questions about it. One per canvas; it changes nothing.',
-  chat: 'Chat — a conversation with an agent in this folder, as messages rather than a terminal. Good for asking, planning and reviewing.',
-  lineup: 'Lineup — several panels at once in a fixed shape, previewed below before anything opens.',
-  template: 'Template — a saved shape of work: the panels and the links between them, filled in from the fields below.'
+  agent: 'Agent: a coding agent in its own terminal, working in this folder. It can edit files and run commands; you watch and steer.',
+  terminal: 'Terminal: a plain shell or one command in this folder. Nothing runs on its own; you type.',
+  supervisor: 'Supervisor: a chat that reads this whole canvas and answers questions about it. One per canvas; it changes nothing.',
+  chat: 'Chat: a conversation with an agent in this folder, as messages rather than a terminal. Good for asking, planning and reviewing.',
+  lineup: 'Lineup: several panels at once in a fixed shape, previewed below before anything opens.',
+  template: 'Template: a saved shape of work: the panels and the links between them, filled in from the fields below.'
 }
 
 /** The engine as a person names it — `Claude Code`, not the registry's `claude` — for the defaults line. Unknown ids pass through. */

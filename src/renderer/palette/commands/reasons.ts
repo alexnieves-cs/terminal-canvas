@@ -17,14 +17,14 @@ export const REASON_NO_FOCUS = 'click into a panel first'
  * "1 selected" and these rows act on the panel the keyboard is in, so the
  * sentence says selecting is not that (commands.ts's closing pass).
  */
-export const REASON_NO_FOCUS_SELECTED = 'selecting a panel is not focusing it — click into it first'
+export const REASON_NO_FOCUS_SELECTED = 'selecting a panel is not focusing it; click into it first'
 export const REASON_NO_SELECTION = 'select some text in a panel first'
 export const REASON_BUILT_IN_RENAME = "built-in presets can't be renamed"
 export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
 export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
 /** M253. A pack preset refused until read — the row beside it is where reading happens. */
-export const REASON_UNREAD_PRESET = 'from a pack, not read yet — choose "I\'ve read this preset" first'
+export const REASON_UNREAD_PRESET = 'from a pack, not read yet; choose "I\'ve read this preset" first'
 /** M49. A font size belongs to a terminal; the other kinds set their own text. */
 export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
 /**
@@ -52,16 +52,16 @@ export const REASON_NOT_TERMINAL_OUTPUT = 'only a terminal panel has output to e
  * this window" is true in both the genuinely-fresh case and the
  * dormant-but-alive one, and the fix named is unchanged either way.
  */
-export const REASON_NOTHING_TO_EXPORT = "this panel hasn't been opened in this window, and scrollback is off — turn on scrollback.persist in Settings, or open the panel first"
+export const REASON_NOTHING_TO_EXPORT = "this panel hasn't been opened in this window, and scrollback is off. Turn on scrollback.persist in Settings, or open the panel first"
 export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
-export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
+export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed; save a panel as a preset first"
 export const REASON_NO_REVIEW_TARGET_ACROSS = 'select a panel inside a repository first'
 export const REASON_NO_GITHUB = notConnectedReason('github')
-export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
-export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
+export const REASON_NO_WORKTREES = 'no worktrees yet; spawn a panel from a preset that asks for one'
+export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it; close that panel first'
 /** M42. Search's two failure states, distinct so the user gets the right fix. */
-export const REASON_SEARCH_OFF = 'terminal output is not being kept — turn on Keep recent output on disk; chats still answer'
+export const REASON_SEARCH_OFF = 'terminal output is not being kept. Turn on Keep recent output on disk; chats still answer'
 export const REASON_SEARCH_NO_MATCHES = 'try another word'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
@@ -97,7 +97,7 @@ export const REASON_NOT_IN_GROUP = 'the focused panel is not in a group'
  * asserts this reason today, and the export is what makes writing one a
  * one-line import rather than a temptation to paste the sentence.
  */
-export const REASON_MERGED_READ_ONLY = 'the merged view is read-only — leave it to move panels'
+export const REASON_MERGED_READ_ONLY = 'the merged view is read-only; leave it to move panels'
 export const REASON_NOTHING_TO_LINK = 'this canvas has only one panel'
 export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal panels'
 /**
@@ -107,25 +107,25 @@ export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal pan
  * Telling a user to click into a panel when what they need is to select one
  * sends them to the wrong gesture.
  */
-export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
+export const REASON_NO_NOTE_ROOT = 'select a panel first, because a note is saved in its directory'
 /** M73. One sentence for the palette row, the launcher line and the composer. */
 export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
 /** M74. The two front-end verbs' refusals, each naming its fix. */
-export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
+export const REASON_TERMINAL_LIVE = 'stop the terminal first, one front-end at a time'
 export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude session can open as chat'
-export const REASON_CHAT_BUSY = 'the chat is still answering — interrupt it first'
-export const REASON_CHAT_EMPTY = 'send a message first — an empty chat has nothing to move'
+export const REASON_CHAT_BUSY = 'the chat is still answering; interrupt it first'
+export const REASON_CHAT_EMPTY = 'send a message first, because an empty chat has nothing to move'
 export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
 /** M77. A chat with no baseline yet: the review row's own reason. */
 export const REASON_NO_SELECTION_TEMPLATE = 'select the panels to save first'
 /** M80. No template is saved yet — the row still says so rather than vanishing. */
 /** M83. Outside a repository there is nothing to remember about. */
-export const REASON_NO_WATCH_ROOT = 'select a panel first — a watcher runs its command in that panel\'s directory'
-export const REASON_NO_REPO_MEMORY = 'open a panel inside a repository first — memory is kept per repository'
+export const REASON_NO_WATCH_ROOT = 'select a panel first, because a watcher runs its command in that panel\'s directory'
+export const REASON_NO_REPO_MEMORY = 'open a panel inside a repository first, because memory is kept per repository'
 /** M80. No template is saved yet — the row still says so rather than vanishing. */
-export const REASON_NO_TEMPLATES = 'no templates yet — select some panels and save them as one'
+export const REASON_NO_TEMPLATES = 'no templates yet; select some panels and save them as one'
 /** M77. A chat with no baseline yet: the review row's own reason. */
-export const REASON_CHAT_NO_BASELINE = 'send a message first — a chat has no baseline until its agent runs'
+export const REASON_CHAT_NO_BASELINE = 'send a message first, because a chat has no baseline until its agent runs'
 /** M76. The one disabled row when nothing pends. */
 export const REASON_NO_APPROVALS = 'no agent is asking for permission'
 /** M73. Whether a claude preset is available — the one fact the three chat doors share. */

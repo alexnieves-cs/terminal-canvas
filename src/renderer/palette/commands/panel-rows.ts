@@ -110,7 +110,7 @@ export function panelRows(ctx: PaletteContext): Command[] {
           run: () => actions.openReplay(ctx.capturedId!)
         },
         ctx.capturedId === null ? REASON_NO_FOCUS
-          : target === undefined || target.kind !== 'chat' ? 'select a conversation first — a replay is read from a chat\'s own transcript'
+          : target === undefined || target.kind !== 'chat' ? 'select a conversation first, because a replay is read from a chat\'s own transcript'
             : undefined
       )
     )
@@ -138,7 +138,7 @@ export function panelRows(ctx: PaletteContext): Command[] {
       const reads = pendingReadBatch(approvals.map((a) => a.id))
       out.push(withReason({
         id: 'approval.allow-reads', title: `Allow every pending read (${reads.length})`, group: 'panel',
-        subtitle: 'reads and searches inside each chat\'s folder, once each — writes and commands still wait for you',
+        subtitle: 'reads and searches inside each chat\'s folder, once each. Writes and commands still wait for you',
         searchText: 'allow all every read reads search batch approve permission needs you',
         // Recomputed at the press: a list from when the palette was built can name a request id a restarted agent reused.
         run: () => { for (const r of pendingReadBatch(approvals.map((a) => a.id))) actions.answerApproval(r.panelId, r.requestId, true) }
@@ -150,12 +150,12 @@ export function panelRows(ctx: PaletteContext): Command[] {
     for (const t of ctx.teamAsks ?? []) {
       const w = teamAskWords(t)
       out.push({
-        id: `team.allow.${t.workspaceId}.${t.askId}`, title: `Allow once — ${w.who}`, subtitle: w.action, mono: true,
+        id: `team.allow.${t.workspaceId}.${t.askId}`, title: `Allow once: ${w.who}`, subtitle: w.action, mono: true,
         searchText: `allow approve team teammate ask needs you ${t.tool} ${w.who}`, group: 'panel',
         run: () => actions.answerTeamAsk(t.workspaceId, t.askId, true)
       })
       out.push({
-        id: `team.deny.${t.workspaceId}.${t.askId}`, title: `Deny — ${w.who}`, subtitle: w.action, mono: true,
+        id: `team.deny.${t.workspaceId}.${t.askId}`, title: `Deny: ${w.who}`, subtitle: w.action, mono: true,
         searchText: `deny refuse team teammate ask needs you ${t.tool} ${w.who}`, group: 'panel',
         run: () => actions.answerTeamAsk(t.workspaceId, t.askId, false)
       })
@@ -172,7 +172,7 @@ export function panelRows(ctx: PaletteContext): Command[] {
       for (const t of (flow?.teammates ?? []).filter((x) => x.workspaceId === h.workspaceId)) {
         out.push({
           id: `team.handoff.${h.workspaceId}.${h.panelId}.${t.userId}`, title: `Hand off ${who} to ${t.name}`, group: 'panel', ...(atRest ? {} : { hiddenAtRest: true }),
-          subtitle: 'they hold it from then on — its questions and review go to them; it keeps running here',
+          subtitle: 'they hold it from then on. Its questions and review go to them; it keeps running here',
           searchText: `hand off handoff pass give teammate team ${t.name} ${who}`,
           run: () => actions.teamFlow({ kind: 'hand-off', workspaceId: h.workspaceId, panelId: h.panelId, to: t.userId, note: '' })
         })
@@ -185,7 +185,7 @@ export function panelRows(ctx: PaletteContext): Command[] {
       })
       out.push({
         id: `team.review.ask.${h.workspaceId}.${h.panelId}`, title: `Ask the team to review ${who}`, group: 'panel', ...(atRest ? {} : { hiddenAtRest: true }),
-        subtitle: 'puts it in the shared review queue — anyone but you can approve it or ask for changes',
+        subtitle: 'puts it in the shared review queue, where anyone but you can approve it or ask for changes',
         searchText: `review ask team queue approve second pair of eyes ${who}`,
         run: () => actions.teamFlow({ kind: 'ask-review', workspaceId: h.workspaceId, panelId: h.panelId, title: who, summary: '' })
       })
@@ -201,12 +201,12 @@ export function panelRows(ctx: PaletteContext): Command[] {
     for (const r of flow?.reviews ?? []) {
       const w = reviewWords(r)
       out.push({
-        id: `team.review.approve.${r.workspaceId}.${r.reviewId}`, title: `Approve — ${r.title}`, subtitle: w.who, group: 'panel',
+        id: `team.review.approve.${r.workspaceId}.${r.reviewId}`, title: `Approve: ${r.title}`, subtitle: w.who, group: 'panel',
         searchText: `approve review team queue needs you ${r.title} ${w.who}`,
         run: () => actions.teamFlow({ kind: 'approve', workspaceId: r.workspaceId, reviewId: r.reviewId })
       })
       out.push({
-        id: `team.review.changes.${r.workspaceId}.${r.reviewId}`, title: `Ask for changes — ${r.title}`, subtitle: w.who, group: 'panel',
+        id: `team.review.changes.${r.workspaceId}.${r.reviewId}`, title: `Ask for changes: ${r.title}`, subtitle: w.who, group: 'panel',
         searchText: `request changes review team queue needs you ${r.title} ${w.who}`,
         run: () => actions.teamFlow({ kind: 'request-changes', workspaceId: r.workspaceId, reviewId: r.reviewId })
       })
@@ -273,11 +273,11 @@ export function panelRows(ctx: PaletteContext): Command[] {
       const pair = (id: string, title: string, run: (pid: string) => void, reason: string | undefined): void => {
         out.push(withReason({ id, title, subtitle: target ? (target.title ?? target.label) : 'no panel', group: 'panel', ...hiddenAtRestIf(ctx.panels.length === 0), run: () => run(ctx.capturedId!) }, need ?? reason))
       }
-      pair('panel.lock', 'Lock panel', actions.lockPanel, target?.locked === true ? 'already locked — Unlock panel is the row' : undefined)
+      pair('panel.lock', 'Lock panel', actions.lockPanel, target?.locked === true ? 'already locked; Unlock panel is the row' : undefined)
       pair('panel.unlock', 'Unlock panel', actions.unlockPanel, target?.locked === true ? undefined : 'not locked')
       pair('panel.pin', 'Pin panel live', actions.pinPanel, target === undefined ? undefined : pinRefusal(target.kind, target.pinned === true, pins))
       pair('panel.unpin', 'Unpin panel', actions.unpinPanel, target?.pinned === true ? undefined : 'not pinned')
-      pair('panel.maximise', 'Maximise panel', actions.maximisePanel, target?.maximised === true ? 'already maximised — Restore panel is the row' : undefined)
+      pair('panel.maximise', 'Maximise panel', actions.maximisePanel, target?.maximised === true ? 'already maximised; Restore panel is the row' : undefined)
       pair('panel.restore', 'Restore panel', actions.restorePanel, target?.maximised === true ? undefined : 'not maximised')
     }
 
@@ -356,7 +356,7 @@ export function panelRows(ctx: PaletteContext): Command[] {
         {
           id: 'panel.toolbox', ...hiddenAtRestIf(ctx.panels.length === 0),
           title: target === undefined ? 'Open toolbox' : `Open toolbox for ${displayLabel(target.label)}`,
-          subtitle: 'its skills, tools and permissions — add a skill so it loads instructions only when they apply',
+          subtitle: 'its skills, tools and permissions. Add a skill so it loads instructions only when they apply',
           searchText: 'toolbox skills mcp hooks commands subagents permissions what can this agent do',
           group: 'panel',
           run: () => { if (target !== undefined) actions.openToolbox(target.id) }

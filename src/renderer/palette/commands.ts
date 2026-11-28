@@ -663,7 +663,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   for (const prompt of ctx.prompts) {
     // The source is on the ROW, and same-named prompts are never merged:
     // pasting the wrong project's context into an agent is silent and costly.
-    const subtitle = prompt.source === 'project' ? 'project — .claude/commands' : 'saved'
+    const subtitle = prompt.source === 'project' ? 'project: .claude/commands' : 'saved'
     out.push(
       withReason(
         {
@@ -763,7 +763,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({
       id: 'panel.tidy', ...hiddenAtRestIf(ctx.panels.length < 2),
       title: useSelection ? `Tidy the selection (${ctx.selectedIds.length} panels)` : 'Tidy everything',
-      subtitle: ctx.merged === true ? REASON_MERGED_READ_ONLY : 'compact without reordering — one undo',
+      subtitle: ctx.merged === true ? REASON_MERGED_READ_ONLY : 'compact without reordering; one undo puts it back',
       group: 'panel',
       searchText: 'tidy arrange compact grid align clean up layout',
       run: () => actions.tidyPanels(ids)
@@ -831,11 +831,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       searchText: 'annotate note label sticky comment margin',
       group: 'canvas',
       run: () => actions.beginAnnotate()
-    }, ctx.merged === true ? 'the merged view is read-only — leave it to annotate' : undefined))
+    }, ctx.merged === true ? 'the merged view is read-only; leave it to annotate' : undefined))
     out.push({
       id: 'canvas.export-png',
       title: 'Export canvas as PNG…',
-      subtitle: 'the window as it is — live terminals and cards alike — to an image',
+      subtitle: 'the window as it is, live terminals and cards alike, as an image',
       searchText: 'export save screenshot png image picture canvas',
       group: 'canvas',
       run: () => actions.exportCanvasPng()
@@ -996,11 +996,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   const trail = ctx.cameraTrail ?? { back: false, forward: false }
   out.push(
     withReason(
-      { id: 'camera.back', ...hiddenAtRestIf(!trail.back), title: 'Camera: back', subtitle: '⌘[ — where the camera was before the last jump', searchText: 'camera back previous view undo', group: 'bookmark', run: () => actions.cameraBack() },
+      { id: 'camera.back', ...hiddenAtRestIf(!trail.back), title: 'Camera: back', subtitle: '⌘[: where the camera was before the last jump', searchText: 'camera back previous view undo', group: 'bookmark', run: () => actions.cameraBack() },
       trail.back ? undefined : 'nothing to go back to'
     ),
     withReason(
-      { id: 'camera.forward', ...hiddenAtRestIf(!trail.forward), title: 'Camera: forward', subtitle: '⌘] — the jump that was undone', searchText: 'camera forward redo view', group: 'bookmark', run: () => actions.cameraForward() },
+      { id: 'camera.forward', ...hiddenAtRestIf(!trail.forward), title: 'Camera: forward', subtitle: '⌘]: the jump that was undone', searchText: 'camera forward redo view', group: 'bookmark', run: () => actions.cameraForward() },
       trail.forward ? undefined : 'nothing to go forward to'
     )
   )
@@ -1040,7 +1040,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({
     id: 'canvas.run-verb',
     title: 'Run a verb…',
-    subtitle: 'e.g. focus n3 · type n3 hello · close n3 — destructive verbs ask first',
+    subtitle: 'e.g. focus n3 · type n3 hello · close n3. Destructive verbs ask first',
     group: 'canvas',
     searchText: 'run verb plan command automate script',
     run: () => actions.beginRunVerb()
@@ -1054,7 +1054,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     const target = ctx.panels.find((p) => p.id === ctx.capturedId)
     const live = target?.auto !== undefined && target.auto.state === 'running'
     const need = ctx.capturedId === null || target === undefined ? REASON_NO_FOCUS
-      : target.kind !== 'chat' ? 'auto runs in a chat panel — open one with New chat…'
+      : target.kind !== 'chat' ? 'auto runs in a chat panel; open one with New chat…'
       : undefined
     for (const modeId of AUTO_MODE_IDS) {
       const mode = AUTO_MODES[modeId]
@@ -1068,7 +1068,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         group: 'canvas',
         searchText: `auto autonomous ${modeId} run bounded ${mode.label}`,
         run: () => actions.startAuto(ctx.capturedId!, modeId)
-      }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}) — stop it first` : undefined)))
+      }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}); stop it first` : undefined)))
     }
     // M553 (lane J). ONE more row, and only while Sandboxed lanes is on: the
     // custom mode in a VM with prompts off. Absent otherwise — not disabled —
@@ -1077,11 +1077,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       out.push(withReason({
         id: 'panel.auto.sandboxed', ...hiddenAtRestIf(need !== undefined),
         title: `Auto, sandboxed: ${AUTO_MODES.custom.label}`,
-        subtitle: 'in a throwaway VM with prompts off — only this chat\'s folder is shared, the network is an allowlist',
+        subtitle: 'in a throwaway VM with prompts off. Only this chat\'s folder is shared, and the network is an allowlist',
         group: 'canvas',
         searchText: 'auto sandboxed sandbox vm container prompts off yolo isolated custom',
         run: () => actions.startAuto(ctx.capturedId!, 'custom', undefined, { sandboxed: true })
-      }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}) — stop it first` : undefined)))
+      }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}); stop it first` : undefined)))
     }
     out.push(withReason({
       id: 'panel.auto.stop', ...hiddenAtRestIf(need !== undefined),
@@ -1107,7 +1107,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({
     id: 'canvas.flip',
     title: 'Flip terminals',
-    subtitle: 'every terminal shows its work title large, agent and role beneath — the far view, on purpose; again to flip back',
+    subtitle: 'every terminal shows its work title large, agent and role beneath. This is the far view; run it again to flip back',
     group: 'canvas',
     searchText: 'flip terminals titles far view overview roles',
     run: () => actions.toggleFlip()

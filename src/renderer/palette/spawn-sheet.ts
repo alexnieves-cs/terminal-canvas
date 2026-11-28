@@ -56,8 +56,8 @@ export function parseTeammateWhatId(value: string): string | null { return value
 export function teammateOptions(teammates: readonly PersistedTeammate[], claudeAvailable: boolean): { id: string; label: string; disabled: boolean; reason?: string }[] {
   return teammates.map((t) => {
     const label = `chat as ${teammateWord(t)}`
-    if (!claudeAvailable) return { id: t.id, label: `${label} — claude not on PATH`, disabled: true, reason: 'claude was not found on the login PATH' }
-    if (t.places.length === 0) return { id: t.id, label: `${label} — no places yet`, disabled: true, reason: `${teammateWord(t)} has no places — add a folder in Agent profiles before it can work anywhere` }
+    if (!claudeAvailable) return { id: t.id, label: `${label} (claude not on PATH)`, disabled: true, reason: 'claude was not found on the login PATH' }
+    if (t.places.length === 0) return { id: t.id, label: `${label} (no places yet)`, disabled: true, reason: `${teammateWord(t)} has no places. Add a folder in Agent profiles before it can work anywhere` }
     return { id: t.id, label, disabled: false }
   })
 }
@@ -117,7 +117,7 @@ export function modelChoices(backend: AgentBackend): readonly string[] | null {
 export function backendOptions(available: Partial<Record<AgentBackend, boolean>>): BackendOption[] {
   return BACKEND_IDS.map((id) => {
     const ok = available[id] === true
-    return { id, label: ok ? `chat with ${BACKENDS[id].label}` : `chat with ${BACKENDS[id].label} — not on PATH`, disabled: !ok }
+    return { id, label: ok ? `chat with ${BACKENDS[id].label}` : `chat with ${BACKENDS[id].label} (not on PATH)`, disabled: !ok }
   })
 }
 
