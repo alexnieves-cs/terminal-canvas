@@ -739,6 +739,22 @@ export const SETTINGS: readonly SettingDef[] = [
     category: TELEMETRY_CATEGORY
   },
   {
+    // M701. A log for the person, on their own machine: when agents needed
+    // them, when they answered, when the app lost focus, which panel kinds
+    // were open (shared/event-log.ts holds the record format, and every field
+    // a record can carry). OFF by default and never planWritable, for
+    // telemetry.crashReports' reason. Read at every record, so it takes
+    // effect at once. The description names what is written and what never
+    // is, and `verify:event-log setting.1` holds it to that.
+    id: 'telemetry.localEventLog',
+    label: 'Keep a usage log on this Mac',
+    description: 'write a private log of when agents need you, when you answer, when the app loses or regains focus and which panel kinds are open, so you can measure how you work; it never leaves this Mac, and commands, output, prompts, paths and titles are never written; files are kept 30 days in the app’s data folder under event-log',
+    keywords: ['usage', 'log', 'event', 'measure', 'metrics', 'focus', 'attention', 'local', 'privacy', 'opt in'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
+  },
+  {
     // M488. Off unless a person turns it on, and never `planWritable`: a plan
     // that could set this would be an agent granting itself the answer to its
     // own permission prompts. The description names who it reaches HONESTLY:

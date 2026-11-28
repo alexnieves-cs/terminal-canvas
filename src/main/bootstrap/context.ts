@@ -13,6 +13,7 @@ import type { ControlServer } from '../control-server'
 import type { PresenceHub } from '../presence/presence-hub'
 import type { CanvasSync } from '../presence/canvas-sync'
 import type { WorldFeedLink } from '../world-feed-link'
+import type { EventLog } from '../event-log'
 import type { TeamAskRouter } from '../team-ask-router'
 
 /**
@@ -106,6 +107,8 @@ export interface MainState {
   teamAsks: TeamAskRouter | null
   /** The real world feed (bootstrap/world-feed-wiring.ts). Read at use by the agent:event fan-out and the PTY manager's agent:state send; never required — an absent feed leaves every agent doing exactly what it did. */
   worldFeed: WorldFeedLink | null
+  /** M701. The opt-in local event log (bootstrap/event-log-wiring.ts). Read at use by the agent:event fan-out, the PTY manager's agent:state hook, layout:save and quit; it writes nothing while telemetry.localEventLog is off. */
+  eventLog: EventLog | null
   /** The signed-in person's user id, or null — what every agent event is stamped with. Replaced in index.ts once the account exists. */
   currentUserId: () => string | null
 }
@@ -136,6 +139,7 @@ export function createMainState(): MainState {
     canvasSync: null,
     teamAsks: null,
     worldFeed: null,
+    eventLog: null,
     currentUserId: () => null
   }
 }

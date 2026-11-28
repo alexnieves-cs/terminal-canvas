@@ -492,6 +492,13 @@ export interface PresenceHandlers {
   canvasView(): CanvasSharedView | null
   /** After layout:save stored the active workspace. */
   canvasSaved(sharedAck: number | undefined): void
+  /**
+   * M701. After layout:save too, with the saved panels, for the local event
+   * log's panel counts (it reads each panel's kind and nothing else).
+   * Optional so a harness that builds its own presence still registers, and
+   * here rather than a new positional parameter, which would shift every one.
+   */
+  layoutSaved?(panels: readonly { kind?: unknown }[]): void
   /** After a workspace switch. */
   canvasActivated(): void
   share(req: { orgId?: string }): Promise<ShareResult>
@@ -1121,6 +1128,7 @@ export function registerIpcHandlers(
     // (restore settings applied), not the renderer's raw state.
     const ack = (meta as { sharedAck?: unknown } | undefined)?.sharedAck
     presence.canvasSaved(typeof ack === 'number' && Number.isSafeInteger(ack) && ack >= 0 ? ack : undefined)
+    presence.layoutSaved?.(Array.isArray(state?.panels) ? state.panels : [])
   })
 
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())

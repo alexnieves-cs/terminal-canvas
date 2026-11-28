@@ -136,7 +136,11 @@ export function sectionOf(def: Pick<SettingDef, 'id' | 'category'>): string {
     if (/^(learn\.|agents\.team|agents\.turnSnapshots)/.test(def.id)) return 'Teams and lessons'
     return 'Attention'
   }
-  if (def.category === TELEMETRY_CATEGORY) return def.id.startsWith('remote.') ? 'Phone alerts and remote clients' : 'Crash reports'
+  if (def.category === TELEMETRY_CATEGORY) {
+    if (def.id.startsWith('remote.')) return 'Phone alerts and remote clients'
+    // M701. Not a crash report: a log that stays on this machine.
+    return def.id === 'telemetry.localEventLog' ? 'Usage log' : 'Crash reports'
+  }
   return def.category
 }
 

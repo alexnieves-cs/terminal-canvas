@@ -879,7 +879,9 @@ const ev = (agentId, seq, type, payload, extra = {}) => ({ agentId, seq, ts: 100
       /if \(target && !target\.isDestroyed\(\)\) target\.send\(channel, payload\)/.test(pty))
   ok('world.wire.3 main builds the feed through MainState (read at use), points the PTY observer at it, and registers the status and retry doors',
     /state\.worldFeed = createWorldFeedWiring\(state, \(\) => stores\.ptyManager\.resendStates\(\)\)/.test(idx) &&
-      /stores\.ptyManager\.onAgentState = \(update, agent\) => state\.worldFeed\?\.terminal\(update, agent\)/.test(idx) &&
+      // M701 re-pin: the observer is one slot and now serves the local event
+      // log too, so it is a block; the feed is still its FIRST reader, read at use.
+      /stores\.ptyManager\.onAgentState = \(update, agent\) => \{\s*state\.worldFeed\?\.terminal\(update, agent\)/.test(idx) &&
       /status: \(\) => state\.worldFeed\?\.status\(\)/.test(idx) && /ipcMain\.handle\(IPC\.WORLD_RETRY/.test(text('src/main/ipc.ts')) && /ipcMain\.handle\(IPC\.WORLD_STATUS/.test(text('src/main/ipc.ts')))
   ok('world.wire.4 SIMULATE_AGENTS still works beside the real feed — the simulator is untouched and still gated on its own flag in main\'s env',
     /SIMULATE_AGENTS !== 'true'/.test(text('src/main/bootstrap/world-sim-wiring.ts')) && /worldSim = startWorldSimWiring\(state\)/.test(idx))
